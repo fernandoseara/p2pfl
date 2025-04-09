@@ -1,7 +1,7 @@
 #
 # This file is part of the federated_learning_p2p (p2pfl) distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# Copyright (c) 2022 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,28 +16,21 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Command interface."""
+"""Wait start Stage."""
 
-import abc
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from p2pfl.stages.stage import Stage
+
+if TYPE_CHECKING:
+    pass
 
 
-class Command(abc.ABC):
-    """Command interface."""
+class WaitingForStartStage(Stage):
+    """Start learning stage."""
 
     @staticmethod
-    def get_name() -> str:
-        """Get the command name."""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def execute(self, source: str, round: int, **kwargs) -> None:
-        """
-        Execute the command.
-
-        Args:
-            source: The source of the command.
-            round: The round of the command.
-            **kwargs: The command arguments.
-
-        """
-        raise NotImplementedError
+    async def execute() -> None:
+        return

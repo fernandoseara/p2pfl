@@ -20,13 +20,13 @@
 import contextlib
 import os
 import random
-import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional
 
-from p2pfl.communication.commands.message.model_initialized_command import ModelInitializedCommand
-from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
+from transitions import MachineError
+
 from p2pfl.communication.commands.message.stop_learning_command import StopLearningCommand
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.communication.protocols.protobuff.grpc import GrpcCommunicationProtocol
@@ -43,6 +43,7 @@ from p2pfl.node_state import NodeState
 from p2pfl.settings import Settings
 from p2pfl.stages.workflow_factory import WorkflowFactoryProducer
 from p2pfl.stages.workflow_type import WorkflowType
+from p2pfl.stages.workflows import TrainingWorkflow
 
 # Disbalbe grpc log (pytorch causes warnings)
 if logger.get_level_name(logger.get_level()) != "DEBUG":
@@ -95,16 +96,17 @@ class Node:
     ) -> None:
         """Initialize a node."""
         # Communication protol
-        self._communication_protocol = GrpcCommunicationProtocol() if protocol is None else protocol
-        self.addr = self._communication_protocol.set_addr(addr)
+        self.communication_protocol = GrpcCommunicationProtocol() if protocol is None else protocol
+        self.addr = self.communication_protocol.set_addr(addr)
 
         # Workflow
         workflow_factory = WorkflowFactoryProducer.get_factory(workflow)
-        self.learning_workflow = workflow_factory.create_workflow()
+        self.learning_workflow_class: type[TrainingWorkflow] = workflow_factory.create_training_workflow()
+        self.learning_workflow: TrainingWorkflow = None
         commands = workflow_factory.create_commands(self)
         model = workflow_factory.create_model(model)
 
-        self._communication_protocol.add_command(commands)
+        self.communication_protocol.add_command(commands)
 
         # Aggregator
         self.aggregator = FedAvg() if aggregator is None else aggregator
@@ -120,8 +122,13 @@ class Node:
         self.learner.indicate_aggregator(self.aggregator)
 
         # State
-        self.__running = False
         self.state = NodeState(self.addr)
+
+        # Simulation
+        self.generator: random.Random = random.Random(Settings.general.SEED)
+
+        self.executor = ThreadPoolExecutor(max_workers=20)
+
 
     #############################
     #  Neighborhood management  #
@@ -142,9 +149,11 @@ class Node:
 
         """
         # Check running
-        self.assert_running(True)
+        if not self.is_running():
+            raise NodeRunningException("Node is not running.")
+
         # Connect
-        return self._communication_protocol.connect(addr)
+        return self.communication_protocol.connect(addr)
 
     def get_neighbors(self, only_direct: bool = False) -> Dict[str, Any]:
         """
@@ -157,7 +166,7 @@ class Node:
             The list of neighbors.
 
         """
-        return self._communication_protocol.get_neighbors(only_direct)
+        return self.communication_protocol.get_neighbors(only_direct)
 
     def disconnect(self, addr: str) -> None:
         """
@@ -168,10 +177,12 @@ class Node:
 
         """
         # Check running
-        self.assert_running(True)
+        if not self.is_running():
+            raise NodeRunningException("Node is not running.")
+
         # Disconnect
         logger.info(self.addr, f"Removing {addr}...")
-        self._communication_protocol.disconnect(addr, disconnect_msg=True)
+        self.communication_protocol.disconnect(addr, disconnect_msg=True)
 
     #######################################
     #   Node Management (servicer loop)   #
@@ -180,24 +191,17 @@ class Node:
     """
     -> reemplazarlo por un decorador (y esto creo que se puede reemplazar por el estado del comm proto -> incluso importarlo de ahí)
     """
-
-    def assert_running(self, running: bool) -> None:
+    def is_running(self) -> bool:
         """
-        Assert that the node is running or not running.
+        Check if the node is running.
 
-        Args:
-            running: True if the node must be running, False otherwise.
-
-        Raises:
-            NodeRunningException: If the node is not running and running is True, or if the node is running and running
-            is False.
+        Returns:
+            True if the node is running, False otherwise.
 
         """
-        running_state = self.__running
-        if running_state != running:
-            raise NodeRunningException(f"Node is {'not ' if running_state else ''}running.")
+        return self.learning_workflow is not None
 
-    def start(self, wait: bool = False) -> None:
+    async def start(self, wait: bool = False) -> None:
         """
         Start the node: server and neighbors(gossip and heartbeat).
 
@@ -209,19 +213,20 @@ class Node:
 
         """
         # Check not running
-        self.assert_running(False)
-        # Set running
-        self.__running = True
+        if self.is_running():
+            raise NodeRunningException("Node already running.")
+
+        self.learning_workflow = self.learning_workflow_class(self)
 
         # P2PFL Web Services
         logger.register_node(self.addr)
         # Communication Protocol
-        self._communication_protocol.start()
+        await self.communication_protocol.start()
         if wait:
-            self._communication_protocol.wait_for_termination()
+            self.communication_protocol.wait_for_termination()
             logger.info(self.addr, "gRPC terminated.")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
         Stop the node: server and neighbors(gossip and heartbeat).
 
@@ -232,9 +237,7 @@ class Node:
         logger.info(self.addr, "Stopping node...")
         try:
             # Stop server
-            self._communication_protocol.stop()
-            # Set not running
-            self.__running = False
+            await self.communication_protocol.stop()
             # State
             self.state.clear()
             # Unregister node
@@ -319,17 +322,7 @@ class Node:
     ###############################################
     #         Network Learning Management         #
     ###############################################
-
-    def start_learning_thread(self, rounds: int, epochs: int, trainset_size: int, experiment_name: str) -> None:
-        learning_thread = threading.Thread(
-            target=self.__start_learning,
-            args=(rounds, epochs, trainset_size, experiment_name),
-            name="learning_thread-" + self.addr,
-        )
-        learning_thread.daemon = True
-        learning_thread.start()
-
-    def set_start_learning(self, rounds: int = 1, epochs: int = 1, trainset_size: int = 4, experiment_name="experiment") -> str:
+    async def set_start_learning(self, rounds: int = 1, epochs: int = 1, trainset_size: int = 4, experiment_name="experiment") -> str:
         """
         Start the learning process in the entire network.
 
@@ -343,38 +336,33 @@ class Node:
             ZeroRoundsException: If rounds is less than 1.
 
         """
-        self.assert_running(True)
+        # Check is running
+        if not self.is_running():
+            raise NodeRunningException("Node is not running.")
 
         if rounds < 1:
             raise ZeroRoundsException("Rounds must be greater than 0.")
 
-        if self.state.round is None:
-            # Broadcast start Learning
-            logger.info(self.addr, "🚀 Broadcasting start learning...")
-            experiment_name = f"{experiment_name}-{time.time()}"
-            self._communication_protocol.broadcast(
-                self._communication_protocol.build_msg(
-                    StartLearningCommand.get_name(), [str(rounds), str(epochs), str(trainset_size), experiment_name]
-                )
-            )
-            # Set model initialized
-            self.state.model_initialized_lock.release()
-            # Broadcast initialize model
-            self._communication_protocol.broadcast(self._communication_protocol.build_msg(ModelInitializedCommand.get_name()))
-            # Learning Thread
-            self.start_learning_thread(rounds, epochs, trainset_size, experiment_name)
-            return experiment_name
-        else:
-            logger.info(self.addr, "Learning already started")
-            return ""
+        experiment_name = f"{experiment_name}-{time.time()}"
 
-    def set_stop_learning(self) -> None:
+        try:
+            await self.learning_workflow.start_training(experiment_name, rounds, epochs, trainset_size)
+
+            return experiment_name
+
+        except MachineError as e:
+            logger.debug(self.addr, f"Learning already started: {e}")
+        except Exception as e:
+            logger.error(self.addr, f"Error {type(e).__name__}: {e}\n{traceback.format_exc()}")
+            raise
+
+    async def set_stop_learning(self) -> None:
         """Stop the learning process in the entire network."""
         if self.state.round is not None:
             # send stop msg
-            self._communication_protocol.broadcast(self._communication_protocol.build_msg(StopLearningCommand.get_name()))
+            await self.communication_protocol.broadcast(self.communication_protocol.build_msg(StopLearningCommand.get_name()))
             # stop learning
-            self.__stop_learning()
+            await self.__stop_learning()
         else:
             logger.info(self.addr, "Learning already stopped")
 
@@ -382,27 +370,10 @@ class Node:
     #         Local Learning         #
     ##################################
 
-    def __start_learning(self, rounds: int, epochs: int, trainset_size: int, experiment_name: str) -> None:
-        # Set seed
-        try:
-            self.learning_workflow.run(
-                rounds=rounds,
-                epochs=epochs,
-                trainset_size=trainset_size,
-                experiment_name=experiment_name,
-                state=self.state,
-                learner=self.learner,
-                communication_protocol=self._communication_protocol,
-                aggregator=self.aggregator,
-                generator=random.Random(Settings.general.SEED),
-            )
-        except Exception as e:
-            logger.error(self.addr, f"Error {type(e).__name__}: {e}\n{traceback.format_exc()}")
-            self.stop()
-
-    def __stop_learning(self) -> None:
+    async def __stop_learning(self) -> None:
         logger.info(self.addr, "Stopping learning")
-        # Leraner
+
+        # Learner
         self.learner.interrupt_fit()
         # Aggregator
         self.aggregator.clear()
@@ -412,3 +383,5 @@ class Node:
         # Try to free wait locks
         with contextlib.suppress(Exception):
             self.state.wait_votes_ready_lock.release()
+
+        self.learning_workflow = None

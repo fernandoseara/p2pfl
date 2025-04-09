@@ -41,7 +41,7 @@ class ModelsReadyCommand(Command):
         """Get the command name."""
         return "models_ready"
 
-    def execute(self, source: str, round: int, **kwargs) -> None:
+    async def execute(self, source: str, round: int, **kwargs) -> None:
         """
         Execute the command.
 

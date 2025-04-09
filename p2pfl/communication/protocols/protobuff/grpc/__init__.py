@@ -35,7 +35,7 @@ class GrpcCommunicationProtocol(ProtobuffCommunicationProtocol):
         super().__init__(commands)
 
     @allow_no_addr_check
-    def bluid_client(self, *args, **kwargs) -> GrpcClient:
+    def build_client(self, *args, **kwargs) -> GrpcClient:
         """Build client function."""
         return GrpcClient(*args, **kwargs)
 

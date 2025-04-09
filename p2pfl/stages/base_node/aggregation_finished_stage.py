@@ -15,34 +15,33 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-
-"""Round Finished Stage."""
+"""Train stage."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from p2pfl.communication.commands.message.models_ready_command import ModelsReadyCommand
 from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
-    from p2pfl.learning.aggregators.aggregator import Aggregator
+    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
     from p2pfl.node_state import NodeState
 
-class RoundFinishedStage(Stage):
-    """Round Finished Stage."""
+class AggregationFinishedStage(Stage):
+    """Aggregation Finished stage."""
 
     @staticmethod
-    async def execute(state: NodeState, aggregator: Aggregator) -> None:
+    async def execute(state: NodeState, communication_protocol: CommunicationProtocol) -> None:
         """Execute the stage."""
-        # Set Next Round
-        aggregator.clear()
-        state.increase_round()
-
-        # Next Step or Finish
-        logger.info(
+        # Get aggregated model
+        logger.debug(
             state.addr,
-            f"🎉 Round {state.round} of {state.total_rounds} finished.",
+            f"Broadcast aggregation done for round {state.round}",
         )
-        if state.round is None or state.total_rounds is None:
-            raise ValueError("Round or total rounds not set.")
+        # Share that aggregation is done
+        await communication_protocol.broadcast(
+            communication_protocol.build_msg(ModelsReadyCommand.get_name(),
+                                                    [],
+                                                    round=state.round))

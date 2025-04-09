@@ -17,6 +17,7 @@
 
 """Protobuff server."""
 
+import asyncio
 import traceback
 from abc import ABC, abstractmethod
 from typing import Optional, Union
@@ -71,7 +72,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
     ####
 
     @abstractmethod
-    def start(self, wait: bool = False) -> None:
+    async def start(self, wait: bool = False) -> None:
         """
         Start the server.
 
@@ -82,12 +83,12 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         pass
 
     @abstractmethod
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the server."""
         pass
 
     @abstractmethod
-    def wait_for_termination(self) -> None:
+    async def wait_for_termination(self) -> None:
         """Wait for termination."""
         pass
 
@@ -106,7 +107,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
     # Service Implementation (server logic on protobuff)
     ####
 
-    def handshake(self, request: node_pb2.HandShakeRequest, _: grpc.ServicerContext) -> node_pb2.ResponseMessage:
+    async def handshake(self, request: node_pb2.HandShakeRequest, _: grpc.aio.ServicerContext) -> node_pb2.ResponseMessage:
         """
         Service. It is called when a node connects to another.
 
@@ -115,12 +116,12 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             _: Context.
 
         """
-        if self._neighbors.add(request.addr, non_direct=False, handshake=False):
+        if await self._neighbors.add(request.addr, non_direct=False, handshake=False):
             return node_pb2.ResponseMessage()
         else:
             return node_pb2.ResponseMessage(error="Cannot add the node (duplicated or wrong direction)")
 
-    def disconnect(self, request: node_pb2.HandShakeRequest, _: grpc.ServicerContext) -> google.protobuf.empty_pb2.Empty:
+    async def disconnect(self, request: node_pb2.HandShakeRequest, _: grpc.aio.ServicerContext) -> google.protobuf.empty_pb2.Empty:
         """
         Service. It is called when a node disconnects from another.
 
@@ -129,10 +130,10 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             _: Context.
 
         """
-        self._neighbors.remove(request.addr, disconnect_msg=False)
+        await self._neighbors.remove(request.addr, disconnect_msg=False)
         return google.protobuf.empty_pb2.Empty()
 
-    def send(self, request: node_pb2.RootMessage, _: grpc.ServicerContext) -> node_pb2.ResponseMessage:
+    async def send(self, request: node_pb2.RootMessage, _: grpc.aio.ServicerContext) -> node_pb2.ResponseMessage:
         """
         Service. Handles both regular messages and model weights.
 
@@ -142,7 +143,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
         """
         # If message already processed, return
-        if request.HasField("message") and not self._gossiper.check_and_set_processed(request):
+        if request.HasField("message") and not await self._gossiper.check_and_set_processed(request):
             """
             if request.cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and request.source == "beat"):
                 logger.debug(self.addr, f"🙅 Message already processed: {request.cmd} (id {request.message.hash})")
@@ -159,9 +160,9 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         if request.cmd in self.__commands:
             try:
                 if request.HasField("message"):
-                    self.__commands[request.cmd].execute(request.source, request.round, *request.message.args)
+                    await self.__commands[request.cmd].execute(request.source, request.round, *request.message.args)
                 elif request.HasField("weights"):
-                    self.__commands[request.cmd].execute(
+                    await self.__commands[request.cmd].execute(
                         request.source,
                         request.round,
                         weights=request.weights.weights,
@@ -185,7 +186,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         if request.HasField("message") and request.message.ttl > 0:
             # Update ttl and gossip
             request.message.ttl -= 1
-            self._gossiper.add_message(request)
+            await self._gossiper.add_message(request)
 
         return node_pb2.ResponseMessage()
 

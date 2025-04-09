@@ -58,7 +58,7 @@ class MemoryClient(ProtobuffClient):
         """
         return self.stub is not None
 
-    def connect(self, handshake_msg: bool = True) -> None:
+    async def connect(self, handshake_msg: bool = True) -> None:
         """Connect to a neighbor."""
         if self.is_connected():
             logger.debug(self.self_addr, f"Trying to connect to {self.nei_addr} an already connected neighbor.")
@@ -70,7 +70,7 @@ class MemoryClient(ProtobuffClient):
 
             # Handshake
             if handshake_msg:
-                res = self.stub.handshake(  # type: ignore
+                res = await self.stub.handshake(  # type: ignore
                     node_pb2.HandShakeRequest(addr=self.self_addr),
                     None,  # type: ignore
                 )
@@ -87,7 +87,7 @@ class MemoryClient(ProtobuffClient):
             # Re-raise exception
             raise e
 
-    def disconnect(self, disconnect_msg: bool = True) -> None:
+    async def disconnect(self, disconnect_msg: bool = True) -> None:
         """Disconnect from a neighbor."""
         # Check if connected
         if not self.is_connected():
@@ -98,7 +98,7 @@ class MemoryClient(ProtobuffClient):
         try:
             # If the other node still connected, disconnect
             if disconnect_msg:
-                self.stub.disconnect(node_pb2.HandShakeRequest(addr=self.self_addr), None)  # type: ignore
+                await self.stub.disconnect(node_pb2.HandShakeRequest(addr=self.self_addr), None)  # type: ignore
         except Exception:
             pass
         self.stub = None
@@ -106,7 +106,7 @@ class MemoryClient(ProtobuffClient):
     ####
     # Message Sending
     ####
-    def send(
+    async def send(
         self,
         msg: node_pb2.RootMessage,
         temporal_connection: bool = False,
@@ -132,14 +132,14 @@ class MemoryClient(ProtobuffClient):
                         logger.debug(
                             self.self_addr, f"💔 Neighbor {self.nei_addr} not connected. Trying to send message with temporal connection"
                         )
-                        self.connect(handshake_msg=False)
+                        await self.connect(handshake_msg=False)
             elif raise_error:
                 raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
             else:
                 return
 
         # Send
-        res = self.stub.send(msg, None)  # type: ignore
+        res = await self.stub.send(msg, None)  # type: ignore
         if res.error:
             logger.info(
                 self.self_addr,

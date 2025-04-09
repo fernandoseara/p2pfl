@@ -41,7 +41,7 @@ class StartLearningCommand(Command):
         """Get the command name."""
         return "start_learning"
 
-    def execute(
+    async def execute(
         self,
         source: str,
         round: int,
@@ -66,4 +66,4 @@ class StartLearningCommand(Command):
         """
         if learning_rounds is None or learning_epochs is None or trainset_size is None or experiment_name is None:
             raise ValueError("Learning rounds and epochs are required")
-        self.__node.start_learning_thread(int(learning_rounds), int(learning_epochs), int(trainset_size), experiment_name)
+        await self.__node.set_start_learning(int(learning_rounds), int(learning_epochs), int(trainset_size), experiment_name)

@@ -24,19 +24,19 @@ import abc
 from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.command import Command
-from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.stages.workflow_type import WorkflowType
-from p2pfl.stages.workflows import StageWorkflow
 
 if TYPE_CHECKING:  # Only imports the below statements during type checking
+    from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
     from p2pfl.node import Node
+    from p2pfl.stages.workflows import TrainingWorkflow
 
 
 class WorkflowFactory(abc.ABC):
     """Command interface."""
 
     @abc.abstractmethod
-    def create_workflow() -> StageWorkflow:
+    def create_training_workflow() -> type[TrainingWorkflow]:
         """Create a workflow."""
         raise NotImplementedError
 

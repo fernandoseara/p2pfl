@@ -17,35 +17,54 @@
 #
 """Workflows."""
 
-from typing import List, Optional, Type
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from transitions.extensions.asyncio import AsyncMachine, AsyncTimeout
+from transitions.extensions.states import add_state_features
 
 from p2pfl.management.logger import logger
-from p2pfl.node_state import NodeState
-from p2pfl.stages.stage import Stage, check_early_stop
 
+if TYPE_CHECKING:
+    from p2pfl.node import Node
 
-class StageWorkflow:
+@add_state_features(AsyncTimeout)
+class TimeoutMachine(AsyncMachine):
+    pass
+
+class TrainingWorkflow(TimeoutMachine):
     """Class to run a workflow of stages."""
 
-    def __init__(self, first_stage: Type[Stage]) -> None:
-        """Initialize the workflow."""
-        self.current_stage = first_stage
-        self.history: List[str] = []
-        self.finished = False
+    @property
+    def finished(self) -> bool:
+        """Return the name of the workflow."""
+        #return self.training_finished.is_active
+        return False
 
-    def run(self, **kwargs) -> None:
-        """Run the workflow."""
-        self.finished = False
-        # get state (need info from state)
-        state: Optional[NodeState] = kwargs.get("state")
-        if state:
-            while True:
-                logger.debug(state.addr, f"🏃 Running stage: {(self.current_stage.name())}")
-                self.history.append(self.current_stage.name())
-                next_stage = self.current_stage.execute(**kwargs)
-                if next_stage is None or check_early_stop(state, raise_exception=False):
-                    self.finished = True
-                    break
-                self.current_stage = next_stage
-        else:
-            raise ValueError("State not found in kwargs")
+    def __init__(self, node: Node, states=None, transitions=None, model=None, *args, **kwargs):
+        """Initialize the workflow."""
+        self.history: list[str] = []
+        self.node = node
+        self.is_running: bool = False
+
+        states = [{'name': "waiting_for_training_start"},
+            {'name': "training_finished", 'final':True}
+        ] if states is None else states
+
+        transitions = [
+            {'trigger': 'start_training', 'source': 'waiting_for_training_start', 'dest': 'training_finished'},
+        ] if transitions is None else transitions
+
+        super().__init__(
+            states=states,
+            transitions=transitions,
+            model=model,
+            initial='waiting_for_training_start',
+            queued=True
+        )
+
+    # def on_transition(self, event_data, event: Event):
+    #     """Handle the transition event."""
+    #     logger.debug(self.node.state.addr, f"🏃 Running stage: {(event_data.transition.target.id)}")
+    #     self.history.append(event_data.transition.target.id)

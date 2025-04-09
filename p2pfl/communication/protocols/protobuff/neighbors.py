@@ -34,10 +34,9 @@ class Neighbors(NodeComponent):
     def __init__(self, build_client_fn: Callable[..., ProtobuffClient]) -> None:
         """Initialize the neighbor management class."""
         self.neis: dict[str, tuple[ProtobuffClient, float]] = {}
-        self.neis_lock = threading.Lock()
         self.build_client_fn = build_client_fn
 
-    def refresh_or_add(self, addr: str, time: float) -> None:
+    async def refresh_or_add(self, addr: str, time: float) -> None:
         """
         Refresh or add a neighbor.
 
@@ -47,19 +46,19 @@ class Neighbors(NodeComponent):
 
         """
         # Update if exists
-        with self.neis_lock:
-            exist_nei = addr in self.neis
-            if exist_nei:
-                # Update time
-                self.neis[addr] = (
-                    self.neis[addr][0],
-                    time,
-                )
+        exist_nei = addr in self.neis
+        if exist_nei:
+            # Update time
+            self.neis[addr] = (
+                self.neis[addr][0],
+                time,
+            )
+
         # Add
         if not exist_nei:
-            self.add(addr, non_direct=True)
+            await self.add(addr, non_direct=True)
 
-    def add(self, addr: str, non_direct: bool = False, handshake: bool = True) -> bool:
+    async def add(self, addr: str, non_direct: bool = False, handshake: bool = True) -> bool:
         """
         Add a neighbor to the neighbors list.
 
@@ -77,27 +76,23 @@ class Neighbors(NodeComponent):
             logger.info(self.addr, "❌ Cannot add itself")
             return False
 
-        # Lock
-        with self.neis_lock:
-            # Cannot add duplicates
-            if self.exists(addr):
-                logger.info(self.addr, f"❌ Cannot add duplicates. {addr} already exists.")
-                return False
+        # Cannot add duplicates
+        if self.exists(addr):
+            logger.info(self.addr, f"❌ Cannot add duplicates. {addr} already exists.")
+            return False
+        # Add
+        try:
+            client = self.build_client_fn(self.addr, addr)
+            if not non_direct:
+                await client.connect(handshake_msg=handshake)
+            self.neis[addr] = (client, time.time())
+        except Exception as e:
+            logger.error(self.addr, f"❌ Cannot add {addr}: {e}")
+            return False
+        # Release
+        return True
 
-            # Add
-            try:
-                client = self.build_client_fn(self.addr, addr)
-                if not non_direct:
-                    client.connect(handshake_msg=handshake)
-                self.neis[addr] = (client, time.time())
-            except Exception as e:
-                logger.error(self.addr, f"❌ Cannot add {addr}: {e}")
-                return False
-
-            # Release
-            return True
-
-    def remove(self, addr: str, disconnect_msg: bool = True) -> None:
+    async def remove(self, addr: str, disconnect_msg: bool = True) -> None:
         """
         Remove a neighbor from the neighbors list.
 
@@ -108,13 +103,12 @@ class Neighbors(NodeComponent):
             disconnect_msg: If a disconnect message is needed.
 
         """
-        with self.neis_lock:
-            if addr in self.neis:
-                # Disconnect
-                if self.neis[addr][0].is_connected() and not self.neis[addr][0].has_temporal_connection():
-                    self.neis[addr][0].disconnect(disconnect_msg=disconnect_msg)
-                # Remove neighbor
-                del self.neis[addr]
+        if addr in self.neis:
+            # Disconnect
+            if self.neis[addr][0].is_connected() and not self.neis[addr][0].has_temporal_connection():
+                await self.neis[addr][0].disconnect(disconnect_msg=disconnect_msg)
+            # Remove neighbor
+            del self.neis[addr]
 
     def get(self, addr: str) -> ProtobuffClient:
         """
@@ -127,11 +121,10 @@ class Neighbors(NodeComponent):
             The neighbor.
 
         """
-        with self.neis_lock:
-            try:
-                return self.neis[addr][0]
-            except KeyError:
-                raise NeighborNotConnectedError(f"Neighbor {addr} not connected") from None
+        try:
+            return self.neis[addr][0]
+        except KeyError:
+            raise NeighborNotConnectedError(f"Neighbor {addr} not connected") from None
 
     def get_all(self, only_direct: bool = False) -> dict[str, tuple[ProtobuffClient, float]]:
         """
@@ -158,7 +151,7 @@ class Neighbors(NodeComponent):
         """
         return addr in self.neis
 
-    def clear_neighbors(self) -> None:
+    async def clear_neighbors(self) -> None:
         """Clear all neighbors."""
         while len(self.neis) > 0:
-            self.remove(list(self.neis.keys())[0])
+            await self.remove(list(self.neis.keys())[0])

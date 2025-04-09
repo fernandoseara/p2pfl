@@ -27,12 +27,7 @@ class Stage:
     """Abstract class for a stage."""
 
     @staticmethod
-    def name() -> str:
-        """Return the name of the stage."""
-        raise NotImplementedError("Stage name not implemented.")
-
-    @staticmethod
-    def execute() -> Union[Type["Stage"], None]:
+    async def execute() -> None:
         """Execute the stage."""
         raise NotImplementedError("Stage execute not implemented.")
 

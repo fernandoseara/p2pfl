@@ -36,7 +36,7 @@ class MemoryCommunicationProtocol(ProtobuffCommunicationProtocol):
         super().__init__(commands)
 
     @allow_no_addr_check
-    def bluid_client(self, *args, **kwargs) -> MemoryClient:
+    def build_client(self, *args, **kwargs) -> MemoryClient:
         """Build client function."""
         return MemoryClient(*args, **kwargs)
 

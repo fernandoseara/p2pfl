@@ -42,7 +42,7 @@ class VoteTrainSetCommand(Command):
         """Get the command name."""
         return "vote_train_set"
 
-    def execute(self, source: str, round: int, *args, **kwargs) -> None:
+    async def execute(self, source: str, round: int, *args, **kwargs) -> None:
         """
         Execute the command. Start learning thread.
 

@@ -41,7 +41,7 @@ class ModelsAggregatedCommand(Command):
         """Get the command name."""
         return "models_aggregated"
 
-    def execute(self, source: str, round: int, *args, **kwargs) -> None:
+    async def execute(self, source: str, round: int, *args, **kwargs) -> None:
         """
         Execute the command.
 

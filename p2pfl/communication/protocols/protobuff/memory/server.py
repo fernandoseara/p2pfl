@@ -95,7 +95,7 @@ class MemoryServer(ProtobuffServer):
     # Management
     ####
 
-    def start(self, wait: bool = False) -> None:
+    async def start(self, wait: bool = False) -> None:
         """
         Start the in-memory server.
 
@@ -109,13 +109,13 @@ class MemoryServer(ProtobuffServer):
         self.__terminated.set()
         logger.info(self.addr, f"InMemoryServer started at {self.addr}")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the in-memory server."""
         del self.__singleton_dict[self.addr]
         self.__terminated.clear()
         logger.info(self.addr, f"InMemoryServer stopped at {self.addr}")
 
-    def wait_for_termination(self) -> None:
+    async def wait_for_termination(self) -> None:
         """Wait for termination."""
         self.__terminated.wait()
 

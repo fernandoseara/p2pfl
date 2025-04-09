@@ -46,7 +46,7 @@ class PartialModelCommand(Command):
         """Get the command name."""
         return "partial_model"
 
-    def execute(
+    async def execute(
         self,
         source: str,
         round: int,
@@ -80,8 +80,8 @@ class PartialModelCommand(Command):
                 models_added = self.__node.aggregator.add_model(model)
                 if models_added != []:
                     # Communicate Aggregation
-                    self.__node._communication_protocol.broadcast(
-                        self.__node._communication_protocol.build_msg(
+                    self.__node.communication_protocol.broadcast(
+                        self.__node.communication_protocol.build_msg(
                             ModelsAggregatedCommand.get_name(),
                             models_added,
                             round=self.__node.state.round,

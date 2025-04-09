@@ -42,7 +42,7 @@ class MetricsCommand(Command):
         """Get the command name."""
         return "metrics"
 
-    def execute(self, source: str, round: int, *args, **kwargs) -> None:
+    async def execute(self, source: str, round: int, *args, **kwargs) -> None:
         """
         Execute the command.
 

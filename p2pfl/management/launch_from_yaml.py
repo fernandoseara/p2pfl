@@ -17,7 +17,9 @@
 #
 """Launch from YAMLs."""
 
+import asyncio
 import importlib
+import logging
 import os
 import time
 import uuid
@@ -49,7 +51,7 @@ def load_by_package_and_name(package_name, class_name) -> Any:
     return getattr(module, class_name)
 
 
-def run_from_yaml(yaml_path: str):
+async def run_from_yaml(yaml_path: str):
     """
     Run a simulation from a YAML file.
 
@@ -57,6 +59,8 @@ def run_from_yaml(yaml_path: str):
         yaml_path: The path to the YAML file.
 
     """
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+
     # Parse YAML configuration
     with open(yaml_path) as file:
         config = yaml.safe_load(file)
@@ -204,7 +208,7 @@ def run_from_yaml(yaml_path: str):
 
     def aggregator_fn() -> Aggregator:
         return aggregator_class(**aggregator.get("params", {}))
-    
+
     ############
     # Workflow #
     ############
@@ -238,7 +242,7 @@ def run_from_yaml(yaml_path: str):
             aggregator=aggregator_fn(),
             workflow=workflow_fn(),
         )
-        node.start()
+        await node.start()
         nodes.append(node)
 
     try:
@@ -252,7 +256,7 @@ def run_from_yaml(yaml_path: str):
                 Some messages will not be delivered depending on the topology."""
             )
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
-        TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+        await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
         wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=False)  # type: ignore
 
         # Additional connections
@@ -269,7 +273,7 @@ def run_from_yaml(yaml_path: str):
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size)
+        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size)
 
         # Wait and check
         wait_to_finish(nodes, timeout=60 * 60)  # 1 hour | TODO: Make this configurable
@@ -279,7 +283,7 @@ def run_from_yaml(yaml_path: str):
     finally:
         # Stop Nodes
         for node in nodes:
-            node.stop()
+            await node.stop()
         # Profiling
         if start_time:
             print(f"Execution time: {time.time() - start_time} seconds")

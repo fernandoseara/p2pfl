@@ -33,11 +33,13 @@ class Experiment:
 
     """
 
-    def __init__(self, exp_name: str, total_rounds: int):
+    def __init__(self, exp_name: str, total_rounds: int, epochs: int = 1, trainset_size: int = 4):
         """Initialize the experiment."""
         self.exp_name = exp_name
         self.total_rounds = total_rounds
         self.round = 0
+        self.epochs = epochs
+        self.trainset_size = trainset_size
 
     def increase_round(self) -> None:
         """
@@ -70,4 +72,8 @@ class Experiment:
 
     def __str__(self):
         """Return the string representation of the experiment."""
-        return f"Experiment(exp_name={self.exp_name}, total_rounds={self.total_rounds}, " f"round={self.round})"
+        return (
+            f"Experiment(exp_name={self.exp_name}, total_rounds={self.total_rounds}, "
+            f"round={self.round}, epochs={self.epochs}, "
+            f"trainset_size={self.trainset_size})"
+        )

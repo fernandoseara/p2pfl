@@ -41,12 +41,12 @@ class CommunicationProtocol(ABC, NodeComponent):
         NodeComponent.__init__(self)
 
     @abstractmethod
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the communication protocol."""
         pass
 
     @abstractmethod
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the communication protocol."""
         pass
 

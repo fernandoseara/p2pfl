@@ -50,24 +50,24 @@ class NodeServicesStub(object):
                 request_serializer=node__pb2.RootMessage.SerializeToString,
                 response_deserializer=node__pb2.ResponseMessage.FromString,
                 _registered_method=True)
-
+        
 
 class NodeServicesServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def handshake(self, request, context):
+    async def handshake(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def disconnect(self, request, context):
+    async def disconnect(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def send(self, request, context):
+    async def send(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

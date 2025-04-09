@@ -73,7 +73,7 @@ experiment:
 # General experiment settings
 settings:
   general:
-    log_level: "INFO" # Logging verbosity: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+    log_level: "DEBUG" # Logging verbosity: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
     grpc_timeout: 2
     disable_ray: False
 

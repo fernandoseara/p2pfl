@@ -19,9 +19,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Type, Union
+from typing import TYPE_CHECKING, Any
 
-from p2pfl.communication.commands.weights.full_model_command import FullModelCommand
+from p2pfl.communication.commands.weights.init_model_command import InitModelCommand
 from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage, check_early_stop
 
@@ -30,8 +30,8 @@ if TYPE_CHECKING:
     from p2pfl.learning.frameworks.learner import Learner
     from p2pfl.node_state import NodeState
 
-class GossipModelStage(Stage):
-    """Gossip model stage."""
+class GossipInitialModelStage(Stage):
+    """Gossip initial model stage."""
 
     @staticmethod
     async def execute(
@@ -39,21 +39,21 @@ class GossipModelStage(Stage):
         communication_protocol: CommunicationProtocol,
         learner: Learner) -> None:
         """Execute the stage."""
-        await GossipModelStage.__gossip_model_difusion(state, communication_protocol, learner)
+        logger.info(state.addr, "🗣️ Gossiping model initialization.")
+        await GossipInitialModelStage.__gossip_model(state, communication_protocol, learner)
 
     @staticmethod
-    async def __gossip_model_difusion(
-        node_state: NodeState,
+    async def __gossip_model(
+        state: NodeState,
         communication_protocol: CommunicationProtocol,
         learner: Learner,
     ) -> None:
-        logger.info(node_state.addr, "🗣️ Gossiping aggregated model.")
-        fixed_round = node_state.round
-        if fixed_round is None:
-            raise Exception("Learner not initialized")
+        def early_stopping_fn():
+            return state.round is None
 
+        # Wait a model (init or aggregated)
         def candidate_condition(node: str) -> bool:
-            return node_state.nei_status[node] < fixed_round
+            return node not in state.nei_status
 
         def get_candidates_fn() -> list[str]:
             return [n for n in communication_protocol.get_neighbors(only_direct=True) if candidate_condition(n)]
@@ -61,15 +61,15 @@ class GossipModelStage(Stage):
         def status_fn() -> Any:
             return get_candidates_fn()
 
-        def model_fn(node: str) -> Any:
-            if node_state.round is None:
-                raise Exception("Round not initialized")
+        def model_fn(_: str) -> Any:
+            if state.round is None:
+                raise Exception("Round not initialized.")
             encoded_model = learner.get_model().encode_parameters()
-            return communication_protocol.build_weights(FullModelCommand.get_name(), node_state.round, encoded_model)
+            return communication_protocol.build_weights(InitModelCommand.get_name(), state.round, encoded_model)
 
         # Gossip
         await communication_protocol.gossip_weights(
-            lambda: check_early_stop(node_state, raise_exception=False),
+            early_stopping_fn,
             get_candidates_fn,
             status_fn,
             model_fn,

@@ -36,7 +36,7 @@ class HeartbeatCommand(Command):
         """Get the command name."""
         return heartbeater_cmd_name
 
-    def execute(self, source: str, round: int, time: Optional[str] = None, **kwargs) -> None:
+    async def execute(self, source: str, round: int, time: Optional[str] = None, **kwargs) -> None:
         """
         Execute the command.
 
@@ -49,4 +49,4 @@ class HeartbeatCommand(Command):
         """
         if time is None:
             raise ValueError("Time is required")
-        self.__heartbeat.beat(source, time=float(time))
+        await self.__heartbeat.beat(source, time=float(time))

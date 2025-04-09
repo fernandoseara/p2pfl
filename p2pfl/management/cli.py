@@ -18,6 +18,8 @@
 
 """CLI for the p2pfl platform."""
 
+import asyncio
+import logging
 import os
 from glob import glob
 from typing import Annotated, Dict, TypedDict
@@ -143,7 +145,7 @@ def run(file_or_example: str) -> None:
     console.print(f":tada: [bold yellow]Running experiment from {yaml_file}...[/bold yellow]\n\n")
     from p2pfl.management.launch_from_yaml import run_from_yaml
 
-    run_from_yaml(yaml_file)
+    asyncio.run(run_from_yaml(yaml_file))
 
 
 @app.command()

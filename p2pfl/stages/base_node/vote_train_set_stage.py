@@ -17,47 +17,41 @@
 #
 """Vote Train Set Stage."""
 
+from __future__ import annotations
+
 import math
 import random
 import time
-from typing import Dict, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Type, Union
 
 from p2pfl.communication.commands.message.vote_train_set_command import VoteTrainSetCommand
-from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.management.logger import logger
-from p2pfl.node_state import NodeState
 from p2pfl.settings import Settings
-from p2pfl.stages.base_node.stage_factory import SynDFLStageFactory
 from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
 
+if TYPE_CHECKING:
+    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
+    from p2pfl.learning.aggregators.aggregator import Aggregator
+    from p2pfl.node_state import NodeState
 
 class VoteTrainSetStage(Stage):
     """Vote Train Set Stage."""
 
     @staticmethod
-    def name():
-        """Return the name of the stage."""
-        return "VoteTrainSetStage"
-
-    @staticmethod
-    def execute(
-        trainset_size: Optional[int] = None,
-        state: Optional[NodeState] = None,
-        communication_protocol: Optional[CommunicationProtocol] = None,
-        generator: Optional[random.Random] = None,
-        **kwargs,
-    ) -> Union[Type["Stage"], None]:
+    async def execute(
+        state: NodeState,
+        communication_protocol: CommunicationProtocol,
+        aggregator: Aggregator,
+        generator: random.Random,
+        ) -> None:
         """Execute the stage."""
-        if state is None or communication_protocol is None or trainset_size is None or generator is None:
-            raise Exception("Invalid parameters on VoteTrainSetStage.")
-
         try:
             # Vote
-            VoteTrainSetStage.__vote(trainset_size, state, communication_protocol, generator)
+            await VoteTrainSetStage.__vote(state, communication_protocol, generator)
 
             # Aggregate votes
             state.train_set = VoteTrainSetStage.__validate_train_set(
-                VoteTrainSetStage.__aggregate_votes(trainset_size, state, communication_protocol),
+                await VoteTrainSetStage.__aggregate_votes(state, communication_protocol),
                 state,
                 communication_protocol,
             )
@@ -66,17 +60,13 @@ class VoteTrainSetStage(Stage):
                 f"🚂 Train set of {len(state.train_set)} nodes: {state.train_set}",
             )
 
-            # Next stage
-            if state.addr in state.train_set:
-                return SynDFLStageFactory.get_stage("TrainStage")
-            else:
-                logger.debug(state.addr, "Node not in train set. Proceeding to WaitAggregatedModelsStage.")
-                return SynDFLStageFactory.get_stage("WaitAggregatedModelsStage")
+            # Set Models To Aggregate
+            aggregator.set_nodes_to_aggregate(state.train_set)
         except EarlyStopException:
-            return None
+            return
 
     @staticmethod
-    def __vote(trainset_size: int, state: NodeState, communication_protocol: CommunicationProtocol, generator: random.Random) -> None:
+    async def __vote(state: NodeState, communication_protocol: CommunicationProtocol, generator: random.Random) -> None:
         # Vote (at least itself)
         candidates = list(communication_protocol.get_neighbors(only_direct=False))
         if state.addr not in candidates:
@@ -87,7 +77,7 @@ class VoteTrainSetStage(Stage):
         candidates.sort()
 
         # Send vote
-        samples = min(trainset_size, len(candidates))
+        samples = min(state.experiment.trainset_size, len(candidates))
         nodes_voted = generator.sample(candidates, samples)
         weights = [math.floor(generator.randint(0, 1000) / (i + 1)) for i in range(samples)]
         votes = list(zip(nodes_voted, weights))
@@ -100,7 +90,7 @@ class VoteTrainSetStage(Stage):
         # Send and wait for votes
         logger.info(state.addr, "🗳️ Sending train set vote.")
         logger.debug(state.addr, f"🪞🗳️ Self Vote: {votes}")
-        communication_protocol.broadcast(
+        await communication_protocol.broadcast(
             communication_protocol.build_msg(
                 VoteTrainSetCommand.get_name(),
                 list(map(str, list(sum(votes, ())))),
@@ -109,7 +99,7 @@ class VoteTrainSetStage(Stage):
         )
 
     @staticmethod
-    def __aggregate_votes(trainset_size: int, state: NodeState, communication_protocol: CommunicationProtocol) -> List[str]:
+    async def __aggregate_votes(state: NodeState, communication_protocol: CommunicationProtocol) -> list[str]:
         logger.debug(state.addr, "⏳ Waiting other node votes.")
 
         # Get time
@@ -146,7 +136,7 @@ class VoteTrainSetStage(Stage):
                         f"Timeout for vote aggregation. Missing votes from {missing_votes}",
                     )
 
-                results: Dict[str, int] = {}
+                results: dict[str, int] = {}
                 for node_vote in list(nc_votes.values()):
                     for i in range(len(node_vote)):
                         k = list(node_vote.keys())[i]
@@ -161,7 +151,7 @@ class VoteTrainSetStage(Stage):
                     results.items(), key=lambda x: x[0], reverse=True
                 )  # to equal solve of draw (node name alphabetical order)
                 results_ordered = sorted(results_ordered, key=lambda x: x[1], reverse=True)
-                top = min(len(results_ordered), trainset_size)
+                top = min(len(results_ordered), state.experiment.trainset_size)
                 results_ordered = results_ordered[0:top]
 
                 # Clear votes
@@ -174,10 +164,10 @@ class VoteTrainSetStage(Stage):
 
     @staticmethod
     def __validate_train_set(
-        train_set: List[str],
+        train_set: list[str],
         state: NodeState,
         communication_protocol: CommunicationProtocol,
-    ) -> List[str]:
+    ) -> list[str]:
         # Verify if node set is valid
         # (can happend that a node was down when the votes were being processed)
         for tsn in train_set:

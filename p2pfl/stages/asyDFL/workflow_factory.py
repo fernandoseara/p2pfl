@@ -22,18 +22,18 @@ from p2pfl.communication.commands.command import Command
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.node import Node
 from p2pfl.stages.workflow_factory import WorkflowFactory
-from p2pfl.stages.workflows import StageWorkflow
+from p2pfl.stages.workflows import TrainingWorkflow
 
 
 class AsyDFLFactory(WorkflowFactory):
     """Factory class to create workflows. Main goal: Avoid cyclic imports."""
 
     @staticmethod
-    def create_workflow() -> StageWorkflow:
+    def create_training_workflow() -> type[TrainingWorkflow]:
         """Create a workflow."""
         from p2pfl.stages.asyDFL.workflow import AsyDFLWorkflow
 
-        return AsyDFLWorkflow()
+        return AsyDFLWorkflow
 
     @staticmethod
     def create_commands(node: Node) -> list[Command]:
@@ -75,6 +75,7 @@ class AsyDFLFactory(WorkflowFactory):
     @staticmethod
     def create_model(model: P2PFLModel) -> P2PFLModel:
         """Create model."""
+        # TODO: Check type asydfl model
         model.set_custom_model("AsyDFL")
 
         return model

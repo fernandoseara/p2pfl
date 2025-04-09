@@ -17,6 +17,7 @@
 #
 """Utils."""
 
+import asyncio
 import time
 from typing import List, Optional, Union
 
@@ -114,7 +115,7 @@ def full_connection(node: Node, nodes: List[Node]) -> None:
         node.connect(n.addr)
 
 
-def wait_to_finish(nodes: List[Node], timeout=60):
+async def wait_to_finish(nodes: List[Node], timeout=60):
     """
     Wait until all nodes have finished the workflow.
 
@@ -128,7 +129,7 @@ def wait_to_finish(nodes: List[Node], timeout=60):
     while True:
         if all(n.learning_workflow.finished for n in nodes):
             break
-        time.sleep(1)
+        await asyncio.sleep(1)
         if time.time() - start > timeout:
             raise TimeoutError("Timeout waiting for nodes to finish")
 

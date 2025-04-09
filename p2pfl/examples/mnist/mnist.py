@@ -22,6 +22,8 @@
 # poetry run gprof2dot -f pstats Gossiper-10.pstat | dot -Tpng -o output.png && open output.png
 
 import argparse
+import asyncio
+import logging
 import time
 import uuid
 
@@ -71,7 +73,7 @@ def __parse_args() -> argparse.Namespace:
     return args
 
 
-def mnist(
+async def mnist(
     n: int,
     r: int,
     e: int,
@@ -102,6 +104,8 @@ def mnist(
         batch_size: The batch size for training.
 
     """
+    logger.set_level(level=logging.DEBUG)
+
     if measure_time:
         start_time = time.time()
 
@@ -145,12 +149,12 @@ def mnist(
             aggregator=Scaffold() if aggregator == "scaffold" else None,
             workflow=WorkflowType.ASYNC if workflow == "async" else WorkflowType.BASIC,
         )
-        node.start()
+        await node.start()
         nodes.append(node)
 
     try:
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
-        TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+        await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
 
         wait_convergence(nodes, n - 1, only_direct=False, wait=60)  # type: ignore
 
@@ -158,10 +162,10 @@ def mnist(
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        nodes[0].set_start_learning(rounds=r, epochs=e)
+        await nodes[0].set_start_learning(rounds=r, epochs=e)
 
         # Wait and check
-        wait_to_finish(nodes, timeout=60 * 60)  # 1 hour
+        await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour
 
         # Local Logs
         if show_metrics:
@@ -203,13 +207,15 @@ def mnist(
     finally:
         # Stop Nodes
         for node in nodes:
-            node.stop()
+            await node.stop()
 
         if measure_time:
             print("--- %s seconds ---" % (time.time() - start_time))
 
 
 if __name__ == "__main__":
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+
     # Parse args
     args = __parse_args()
 
@@ -232,7 +238,7 @@ if __name__ == "__main__":
 
     # Launch experiment
     try:
-        mnist(
+        asyncio.run(mnist(
             args.nodes,
             args.rounds,
             args.epochs,
@@ -245,7 +251,7 @@ if __name__ == "__main__":
             reduced_dataset=args.reduced_dataset,
             topology=args.topology,
             batch_size=args.batch_size,
-        )
+        ))
     finally:
         if args.profiling:
             # Stop profiler

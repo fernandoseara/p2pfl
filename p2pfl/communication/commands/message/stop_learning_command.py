@@ -42,7 +42,7 @@ class StopLearningCommand(Command):
         """Get the command name."""
         return "stop_learning"
 
-    def execute(self, source: str, round: int, **kwargs) -> None:
+    async def execute(self, source: str, round: int, **kwargs) -> None:
         """
         Execute the command. Start learning thread.
 

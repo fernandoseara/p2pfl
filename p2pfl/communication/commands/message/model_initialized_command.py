@@ -41,7 +41,7 @@ class ModelInitializedCommand(Command):
         """Get the command name."""
         return "model_initialized"
 
-    def execute(self, source: str, round: int, **kwargs) -> None:
+    async def execute(self, source: str, round: int, **kwargs) -> None:
         """
         Execute the command.
 

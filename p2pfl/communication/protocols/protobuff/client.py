@@ -55,12 +55,12 @@ class ProtobuffClient(ABC):
         pass
 
     @abstractmethod
-    def connect(self, handshake_msg: bool = True) -> None:
+    async def connect(self, handshake_msg: bool = True) -> None:
         """Connect to a neighbor."""
         pass
 
     @abstractmethod
-    def disconnect(self, disconnect_msg: bool = True) -> None:
+    async def disconnect(self, disconnect_msg: bool = True) -> None:
         """Disconnect from a neighbor."""
         pass
 
@@ -79,7 +79,7 @@ class ProtobuffClient(ABC):
     ####
 
     @abstractmethod
-    def send(
+    async def send(
         self,
         msg: node_pb2.RootMessage,
         temporal_connection: bool = False,

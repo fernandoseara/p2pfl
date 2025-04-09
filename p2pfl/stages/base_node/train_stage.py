@@ -17,108 +17,62 @@
 #
 """Train stage."""
 
-from typing import Any, List, Optional, Set, Type, Union
+from __future__ import annotations
 
-from p2pfl.communication.commands.message.metrics_command import MetricsCommand
+from typing import TYPE_CHECKING, Any, List, Set, Type, Union
+
 from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
-from p2pfl.communication.commands.message.models_ready_command import ModelsReadyCommand
 from p2pfl.communication.commands.weights.partial_model_command import PartialModelCommand
-from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError
-from p2pfl.learning.frameworks.learner import Learner
+from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError
 from p2pfl.management.logger import logger
-from p2pfl.node_state import NodeState
-from p2pfl.stages.base_node.stage_factory import SynDFLStageFactory
 from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
+
+if TYPE_CHECKING:
+    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
+    from p2pfl.learning.aggregators.aggregator import Aggregator
+    from p2pfl.learning.frameworks.learner import Learner
+    from p2pfl.node_state import NodeState
 
 
 class TrainStage(Stage):
     """Train stage."""
 
     @staticmethod
-    def name():
-        """Return the name of the stage."""
-        return "TrainStage"
-
-    @staticmethod
-    def execute(
-        state: Optional[NodeState] = None,
-        communication_protocol: Optional[CommunicationProtocol] = None,
-        learner: Optional[Learner] = None,
-        aggregator: Optional[Aggregator] = None,
-        **kwargs,
-    ) -> Union[Type["Stage"], None]:
+    async def execute(
+        state: NodeState,
+        communication_protocol: CommunicationProtocol,
+        learner: Learner,
+        aggregator: Aggregator
+        ) -> None:
         """Execute the stage."""
-        if state is None or communication_protocol is None or aggregator is None or learner is None:
-            raise Exception("Invalid parameters on TrainStage.")
-
         try:
-            check_early_stop(state)
-
-            # Set Models To Aggregate
-            aggregator.set_nodes_to_aggregate(state.train_set)
-
-            check_early_stop(state)
-
-            # Evaluate and send metrics
-            TrainStage.__evaluate(state, learner, communication_protocol)
-
-            check_early_stop(state)
-
             # Train
             logger.info(state.addr, "🏋️‍♀️ Training...")
-            learner.fit()
+            await learner.fit()
             logger.info(state.addr, "🎓 Training done.")
-
-            check_early_stop(state)
 
             # Aggregate Model
             models_added = aggregator.add_model(learner.get_model())
 
             # send model added msg ---->> redundant (a node always owns its model)
             # TODO: print("Broadcast redundante")
-            communication_protocol.broadcast(
+            await communication_protocol.broadcast(
                 communication_protocol.build_msg(
                     ModelsAggregatedCommand.get_name(),
                     models_added,
                     round=state.round,
                 )
             )
-            TrainStage.__gossip_model_aggregation(state, communication_protocol, aggregator)
-
-            check_early_stop(state)
+            await TrainStage.__gossip_model_aggregation(state, communication_protocol, aggregator)
 
             # Set aggregated model
             agg_model = aggregator.wait_and_get_aggregation()
             learner.set_model(agg_model)
-
-            # Share that aggregation is done
-            communication_protocol.broadcast(communication_protocol.build_msg(ModelsReadyCommand.get_name(), [], round=state.round))
-
-            # Next stage
-            return SynDFLStageFactory.get_stage("GossipModelStage")
         except EarlyStopException:
             return None
 
     @staticmethod
-    def __evaluate(state: NodeState, learner: Learner, communication_protocol: CommunicationProtocol) -> None:
-        logger.info(state.addr, "🔬 Evaluating...")
-        results = learner.evaluate()
-        logger.info(state.addr, f"📈 Evaluated. Results: {results}")
-        # Send metrics
-        if len(results) > 0:
-            logger.info(state.addr, "📢 Broadcasting metrics.")
-            flattened_metrics = [str(item) for pair in results.items() for item in pair]
-            communication_protocol.broadcast(
-                communication_protocol.build_msg(
-                    MetricsCommand.get_name(),
-                    flattened_metrics,
-                    round=state.round,
-                )
-            )
-
-    @staticmethod
-    def __gossip_model_aggregation(
+    async def __gossip_model_aggregation(
         state: NodeState,
         communication_protocol: CommunicationProtocol,
         aggregator: Aggregator,
@@ -137,7 +91,7 @@ class TrainStage(Stage):
         def early_stopping_fn():
             return state.round is None
 
-        def get_candidates_fn() -> List[str]:
+        def get_candidates_fn() -> list[str]:
             candidates = set(state.train_set) - {state.addr}
             return [n for n in candidates if len(TrainStage.__get_remaining_nodes(n, state)) != 0]
 
@@ -168,7 +122,7 @@ class TrainStage(Stage):
             )
 
         # Gossip
-        communication_protocol.gossip_weights(
+        await communication_protocol.gossip_weights(
             early_stopping_fn,
             get_candidates_fn,
             status_fn,

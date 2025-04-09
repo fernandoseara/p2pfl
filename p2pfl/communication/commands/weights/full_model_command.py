@@ -41,7 +41,7 @@ class FullModelCommand(Command):
         """Get the command name."""
         return "add_model"
 
-    def execute(
+    async def execute(
         self,
         source: str,
         round: int,
@@ -50,7 +50,11 @@ class FullModelCommand(Command):
     ) -> None:
         """Execute the command."""
         if weights is None:
-            raise ValueError("Weights, contributors and weight are required")
+            logger.error(self.__node.state.addr, "Invalid FullModelCommand message")
+            return
+
+        logger.info(self.__node.state.addr, "📦 Aggregated model received.")
+        self.__node.learning_workflow.initialize_model(round, weights)
 
         # Check if Learning is running
         if self.__node.state.round is not None:
@@ -68,8 +72,8 @@ class FullModelCommand(Command):
                 logger.info(self.__node.state.addr, "📦 Aggregated model received.")
                 # Decode and set model
                 self.__node.learner.set_model(weights)
-                # Release here caused the simulation to crash before
-                self.__node.state.aggregated_model_event.set()
+                # Send aggregate event to the workflow
+                self.__node.learning_workflow.send("aggregate")
 
             # Warning: these stops can cause a denegation of service attack
             except DecodingParamsError:

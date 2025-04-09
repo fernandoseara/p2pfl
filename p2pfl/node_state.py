@@ -68,10 +68,6 @@ class NodeState:
         self.train_set_votes_lock = threading.Lock()
         self.start_thread_lock = threading.Lock()
         self.wait_votes_ready_lock = threading.Lock()
-        self.model_initialized_lock = threading.Lock()
-        self.model_initialized_lock.acquire()
-        self.aggregated_model_event = threading.Event()
-        self.aggregated_model_event.set()
 
     @property
     def round(self) -> Optional[int]:
@@ -88,22 +84,30 @@ class NodeState:
         """Get the actual experiment name."""
         return self.experiment.exp_name if self.experiment is not None else None
 
-    def set_experiment(self, exp_name: str, total_rounds: int) -> None:
+    def set_experiment(self, exp_name: str, total_rounds: int, epochs: int = 1, trainset_size: int = 4) -> None:
         """
         Start a new experiment.
 
-        Attributes:
+        Args:
             exp_name: The name of the experiment.
             total_rounds: The total rounds of the experiment.
+            epochs: The number of epochs.
+            trainset_size: The size of the train set.
+
+        Raises:
+            ValueError: If the experiment is already initialized.
 
         """
         self.status = "Learning"
-        self.experiment = Experiment(exp_name, total_rounds)
+        self.experiment = Experiment(exp_name, total_rounds, epochs, trainset_size)
         logger.experiment_started(self.addr, self.experiment)  # TODO: Improve changes on the experiment
 
     def increase_round(self) -> None:
         """
         Increase the round number.
+
+        Args:
+            exp_name: The name of the experiment.
 
         Raises:
             ValueError: If the experiment is not initialized.

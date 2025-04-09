@@ -18,21 +18,27 @@
 
 """Stage factory."""
 
-from p2pfl.communication.commands.command import Command
-from p2pfl.node import Node
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from p2pfl.stages.workflow_factory import WorkflowFactory
-from p2pfl.stages.workflows import StageWorkflow
+
+if TYPE_CHECKING:
+    from p2pfl.communication.commands.command import Command
+    from p2pfl.node import Node
+    from p2pfl.stages.workflows import TrainingWorkflow
 
 
 class BasicDFLFactory(WorkflowFactory):
     """Factory class to create workflows. Main goal: Avoid cyclic imports."""
 
     @staticmethod
-    def create_workflow() -> StageWorkflow:
+    def create_training_workflow() -> type[TrainingWorkflow]:
         """Create a workflow."""
         from p2pfl.stages.base_node.workflow import BasicDFLWorkflow
 
-        return BasicDFLWorkflow()
+        return BasicDFLWorkflow
 
     @staticmethod
     def create_commands(node: Node) -> list[Command]:
