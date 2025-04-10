@@ -22,7 +22,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+from transitions import MachineError
+
 from p2pfl.communication.commands.command import Command
+from p2pfl.management.logger import logger
 
 if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.node import Node
@@ -66,4 +69,7 @@ class StartLearningCommand(Command):
         """
         if learning_rounds is None or learning_epochs is None or trainset_size is None or experiment_name is None:
             raise ValueError("Learning rounds and epochs are required")
-        await self.__node.set_start_learning(int(learning_rounds), int(learning_epochs), int(trainset_size), experiment_name)
+        try:
+            await self.__node.learning_workflow.start_learning(experiment_name, int(learning_rounds), int(learning_epochs), int(trainset_size))
+        except MachineError as e:
+            logger.debug(self.__node.state.addr, f"Learning already started: {e}")

@@ -15,46 +15,76 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Gossip model stage."""
+"""Train stage."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, List, Set, Type, Union
 
-from p2pfl.communication.commands.weights.init_model_command import InitModelCommand
+from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
+from p2pfl.communication.commands.weights.partial_model_command import PartialModelCommand
+from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError
 from p2pfl.management.logger import logger
-from p2pfl.stages.stage import Stage, check_early_stop
+from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
 
 if TYPE_CHECKING:
     from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
+    from p2pfl.learning.aggregators.aggregator import Aggregator
     from p2pfl.learning.frameworks.learner import Learner
     from p2pfl.node_state import NodeState
 
-class GossipInitialModelStage(Stage):
-    """Gossip initial model stage."""
+
+class GossipPartialModelStage(Stage):
+    """GossipPartialModel stage."""
 
     @staticmethod
     async def execute(
-        candidates: list[str],
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        learner: Learner) -> None:
-        """Execute the stage."""
-        logger.info(state.addr, "🗣️ Gossiping model initialization.")
-        await GossipInitialModelStage.__gossip_model(candidates, state, communication_protocol, learner)
-
-    @staticmethod
-    async def __gossip_model(
-        candidates: list[str],
         state: NodeState,
         communication_protocol: CommunicationProtocol,
         learner: Learner,
+        aggregator: Aggregator
+        ) -> None:
+        """Execute the stage."""
+        try:
+            await GossipPartialModelStage.__gossip_model_aggregation(state, communication_protocol, aggregator)
+
+            # Set aggregated model
+            agg_model = aggregator.aggregate(state.models)
+            learner.set_model(agg_model)
+        except EarlyStopException:
+            return None
+
+    @staticmethod
+    async def __gossip_model_aggregation(
+        candidates,
+        state: NodeState,
+        communication_protocol: CommunicationProtocol,
     ) -> None:
-        def model_fn(_: str) -> Any:
+        """
+        Gossip model aggregation.
+
+        CAREFULL:
+            - Full connected trainset to increase aggregation speed. On real scenarios, this won't
+            be possible, private networks and firewalls.
+            - Needed because the trainset can split the networks (and neighbors that are not in the
+            trainset won't receive the aggregation).
+        """
+
+        def model_fn(node: str) -> Any:
+            try:
+                model = state.models[node]
+            except NoModelsToAggregateError:
+                logger.info(state.addr, f"❔ No models to aggregate for {node}.")
+                return None
             if state.round is None:
                 raise Exception("Round not initialized.")
-            encoded_model = learner.get_model().encode_parameters()
-            return communication_protocol.build_weights(InitModelCommand.get_name(), state.round, encoded_model)
+            return communication_protocol.build_weights(
+                PartialModelCommand.get_name(),
+                state.round,
+                model.encode_parameters(),
+                model.get_contributors(),
+                model.get_num_samples(),
+            )
 
         # Gossip to eligible neighbors
         logger.debug(state.addr, f"📡 Candidates to gossip to: {candidates}")

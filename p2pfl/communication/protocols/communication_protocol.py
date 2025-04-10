@@ -99,6 +99,7 @@ class CommunicationProtocol(ABC, NodeComponent):
         msg: Any,
         raise_error: bool = False,
         remove_on_error: bool = True,
+        temporal_connection: bool = False,
     ) -> None:
         """
         Send a message to a neighbor.
@@ -172,28 +173,4 @@ class CommunicationProtocol(ABC, NodeComponent):
     @abstractmethod
     def wait_for_termination(self) -> None:
         """Wait for termination."""
-        pass
-
-    @abstractmethod
-    def gossip_weights(
-        self,
-        early_stopping_fn: Callable[[], bool],
-        get_candidates_fn: Callable[[], List[str]],
-        status_fn: Callable[[], Any],
-        model_fn: Callable[[str], Any],
-        period: Optional[float] = None,
-        create_connection: bool = False,
-    ) -> None:
-        """
-        Gossip model weights.
-
-        Args:
-            early_stopping_fn: The early stopping function.
-            get_candidates_fn: The get candidates function.
-            status_fn: The status function.
-            model_fn: The model function.
-            period: The period.
-            create_connection: The create connection flag.
-
-        """
         pass

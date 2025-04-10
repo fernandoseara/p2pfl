@@ -92,7 +92,7 @@ class Heartbeater(NodeComponent):
                             self.addr,
                             f"Heartbeat timeout for {nei} ({t - last_seen}). Removing...",
                         )
-                        self.__neighbors.remove(nei)
+                        await self.__neighbors.remove(nei)
             else:
                 toggle = True
 

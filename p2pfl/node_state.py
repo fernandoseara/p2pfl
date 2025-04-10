@@ -17,12 +17,17 @@
 #
 """Node state."""
 
-import threading
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from typing import Dict, List, Optional
 
 from p2pfl.experiment import Experiment
+from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.logger import logger
 
+if TYPE_CHECKING:
+    from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 class NodeState:
     """
@@ -32,7 +37,6 @@ class NodeState:
         addr: The address of the node.
         status: The status of the node.
         learner: The learner of the node.
-        models_aggregated: The models aggregated by the node.
         nei_status: The status of the neighbors.
         train_set: The train set of the node.
         train_set_votes: The votes of the train set.
@@ -51,9 +55,6 @@ class NodeState:
         self.addr = addr
         self.status = "Idle"
 
-        # Aggregator (move to the aggregator?)
-        self.models_aggregated: Dict[str, List[str]] = {}
-
         # Other neis state (only round)
         self.nei_status: Dict[str, int] = {}
 
@@ -64,10 +65,9 @@ class NodeState:
         # Actual experiment
         self.experiment: Optional[Experiment] = None
 
-        # Locks
-        self.train_set_votes_lock = threading.Lock()
-        self.start_thread_lock = threading.Lock()
-        self.wait_votes_ready_lock = threading.Lock()
+        # Models
+        self.models: dict[P2PFLModel] = {}
+
 
     @property
     def round(self) -> Optional[int]:
@@ -83,6 +83,9 @@ class NodeState:
     def exp_name(self) -> Optional[str]:
         """Get the actual experiment name."""
         return self.experiment.exp_name if self.experiment is not None else None
+
+    def add_model(self, source, model: P2PFLModel):
+        self.models[source] = model
 
     def set_experiment(self, exp_name: str, total_rounds: int, epochs: int = 1, trainset_size: int = 4) -> None:
         """
@@ -117,7 +120,7 @@ class NodeState:
             raise ValueError("Experiment not initialized")
 
         self.experiment.increase_round()
-        self.models_aggregated = {}
+        self.models = {}
         logger.experiment_started(self.addr, self.experiment)  # TODO: Improve changes on the experiment
 
     def clear(self) -> None:
@@ -129,6 +132,6 @@ class NodeState:
         return (
             f"NodeState(addr={self.addr}, status={self.status}, exp_name={self.exp_name}, "
             f"round={self.round}, total_rounds={self.total_rounds}, "
-            f"models_aggregated={self.models_aggregated}, nei_status={self.nei_status}, "
+            f"models={self.models}, nei_status={self.nei_status}, "
             f"train_set={self.train_set}, train_set_votes={self.train_set_votes})"
         )

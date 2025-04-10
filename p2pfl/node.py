@@ -346,14 +346,14 @@ class Node:
         experiment_name = f"{experiment_name}-{time.time()}"
 
         try:
-            await self.learning_workflow.start_training(experiment_name, rounds, epochs, trainset_size)
+            await self.learning_workflow.send_starting_learning(experiment_name, rounds, epochs, trainset_size)
 
             return experiment_name
 
         except MachineError as e:
             logger.debug(self.addr, f"Learning already started: {e}")
         except Exception as e:
-            logger.error(self.addr, f"Error {type(e).__name__}: {e}\n{traceback.format_exc()}")
+            logger.error(self.addr, f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
             raise
 
     async def set_stop_learning(self) -> None:

@@ -48,7 +48,6 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
     def __init__(
         self,
-        gossiper: Gossiper,
         neighbors: Neighbors,
         commands: Optional[list[Command]] = None,
     ) -> None:
@@ -60,9 +59,6 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
         # (addr) Super
         NodeComponent.__init__(self)
-
-        # Gossiper
-        self._gossiper = gossiper
 
         # Neighbors
         self._neighbors = neighbors
@@ -143,12 +139,12 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
         """
         # If message already processed, return
-        if request.HasField("message") and not await self._gossiper.check_and_set_processed(request):
-            """
-            if request.cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and request.source == "beat"):
-                logger.debug(self.addr, f"🙅 Message already processed: {request.cmd} (id {request.message.hash})")
-            """
-            return node_pb2.ResponseMessage()
+        # if request.HasField("message"):
+        #     """
+        #     if request.cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and request.source == "beat"):
+        #         logger.debug(self.addr, f"🙅 Message already processed: {request.cmd} (id {request.message.hash})")
+        #     """
+        #     return node_pb2.ResponseMessage()
 
         # Process message/model
         if request.cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and request.cmd == "beat"):
@@ -186,7 +182,13 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         if request.HasField("message") and request.message.ttl > 0:
             # Update ttl and gossip
             request.message.ttl -= 1
-            await self._gossiper.add_message(request)
+            for addr, _ in self._neighbors.get_all(only_direct=True).items():
+                # Send message to all direct neighbors
+                if addr != request.source and addr != self.addr:
+                    try:
+                        await self._neighbors.get(addr).send(request)
+                    except Exception as e:
+                        logger.error(self.addr, f"Error while sending message to {addr}: {e}")
 
         return node_pb2.ResponseMessage()
 

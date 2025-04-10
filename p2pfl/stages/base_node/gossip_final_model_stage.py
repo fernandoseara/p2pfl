@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from p2pfl.learning.frameworks.learner import Learner
     from p2pfl.node_state import NodeState
 
-class GossipModelStage(Stage):
+class GossipFinalModelStage(Stage):
     """Gossip model stage."""
 
     @staticmethod
@@ -39,38 +39,31 @@ class GossipModelStage(Stage):
         communication_protocol: CommunicationProtocol,
         learner: Learner) -> None:
         """Execute the stage."""
-        await GossipModelStage.__gossip_model_difusion(state, communication_protocol, learner)
+        await GossipFinalModelStage.__gossip_model_difusion(state, communication_protocol, learner)
 
     @staticmethod
     async def __gossip_model_difusion(
-        node_state: NodeState,
+        candidates: list[str],
+        state: NodeState,
         communication_protocol: CommunicationProtocol,
         learner: Learner,
     ) -> None:
-        logger.info(node_state.addr, "🗣️ Gossiping aggregated model.")
-        fixed_round = node_state.round
-        if fixed_round is None:
-            raise Exception("Learner not initialized")
-
-        def candidate_condition(node: str) -> bool:
-            return node_state.nei_status[node] < fixed_round
-
-        def get_candidates_fn() -> list[str]:
-            return [n for n in communication_protocol.get_neighbors(only_direct=True) if candidate_condition(n)]
-
-        def status_fn() -> Any:
-            return get_candidates_fn()
+        logger.info(state.addr, "🗣️ Gossiping aggregated model.")
 
         def model_fn(node: str) -> Any:
-            if node_state.round is None:
+            if state.round is None:
                 raise Exception("Round not initialized")
             encoded_model = learner.get_model().encode_parameters()
-            return communication_protocol.build_weights(FullModelCommand.get_name(), node_state.round, encoded_model)
+            return communication_protocol.build_weights(FullModelCommand.get_name(), state.round, encoded_model)
 
-        # Gossip
-        await communication_protocol.gossip_weights(
-            lambda: check_early_stop(node_state, raise_exception=False),
-            get_candidates_fn,
-            status_fn,
-            model_fn,
-        )
+        # Gossip to eligible neighbors
+        logger.debug(state.addr, f"📡 Candidates to gossip to: {candidates}")
+
+        for neighbor in candidates:
+            payload = model_fn(neighbor)
+            try:
+                logger.debug(state.addr, f"🗣️ Sending model to {neighbor}")
+                await communication_protocol.send(neighbor, payload, temporal_connection=True)
+                logger.debug(state.addr, f"✅ Sent model to {neighbor}")
+            except Exception as e:
+                logger.warning(state.addr, f"⚠️ Failed to send model to {neighbor}: {e}")

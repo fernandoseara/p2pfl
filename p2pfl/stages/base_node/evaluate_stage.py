@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from p2pfl.node_state import NodeState
 
 class EvaluateStage(Stage):
-    """Train stage."""
+    """Evaluate stage."""
 
     @staticmethod
     async def execute(

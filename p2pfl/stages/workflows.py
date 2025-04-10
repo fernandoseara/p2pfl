@@ -61,7 +61,7 @@ class TrainingWorkflow(TimeoutMachine):
             transitions=transitions,
             model=model,
             initial='waiting_for_training_start',
-            queued=True
+            queued='model',
         )
 
     # def on_transition(self, event_data, event: Event):

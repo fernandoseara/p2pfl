@@ -26,7 +26,7 @@ from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
 from p2pfl.stages.base_node.aggregation_finished_stage import AggregationFinishedStage
 from p2pfl.stages.base_node.evaluate_stage import EvaluateStage
-from p2pfl.stages.base_node.gossip_model_stage import GossipModelStage
+from p2pfl.stages.base_node.gossip_final_model_stage import GossipFinalModelStage
 from p2pfl.stages.base_node.initialize_model_stage import InitializeModelStage
 from p2pfl.stages.base_node.round_finished_stage import RoundFinishedStage
 from p2pfl.stages.base_node.start_learning_stage import StartLearningStage
@@ -183,7 +183,7 @@ class BasicDFLWorkflow(TrainingWorkflow):
     @TrainingWorkflow.run_in_executor
     async def on_enter_gossiping(self):
         """Gossip the model."""
-        await GossipModelStage.execute(
+        await GossipFinalModelStage.execute(
             state=self.node.state,
             communication_protocol=self.node.communication_protocol,
             learner=self.node.learner

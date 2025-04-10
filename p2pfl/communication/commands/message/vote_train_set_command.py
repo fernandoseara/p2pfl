@@ -56,24 +56,17 @@ class VoteTrainSetCommand(Command):
         ########################################################
         # try to improve clarity in message moment check
         ########################################################
-        if self._node.state.round is not None:
-            if round in [self._node.state.round, self._node.state.round + 1]:
-                # build vote dict
-                votes = args
-                tmp_votes = {}
-                for i in range(0, len(votes), 2):
-                    tmp_votes[votes[i]] = int(votes[i + 1])
-                # set votes
-                self._node.state.train_set_votes_lock.acquire()
-                self._node.state.train_set_votes[source] = tmp_votes
-                self._node.state.train_set_votes_lock.release()
-                # Communicate to the training process that a vote has been received
-                with contextlib.suppress(Exception):
-                    self._node.state.wait_votes_ready_lock.release()
-            else:
-                logger.error(
-                    self._node.state.addr,
-                    f"Vote received in a late round. Ignored. {round} != {self._node.state.round} / {self._node.state.round+1}",
-                )
+        if round in [self._node.state.round, self._node.state.round + 1]:
+            # build vote dict
+            votes = args
+            tmp_votes = {}
+            for i in range(0, len(votes), 2):
+                tmp_votes[votes[i]] = int(votes[i + 1])
+
+            self._node.learning_workflow.vote(source, tmp_votes)
+
         else:
-            logger.error(self._node.state.addr, "Vote received when learning is not running")
+            logger.error(
+                self._node.state.addr,
+                f"Vote received in a late round. Ignored. {round} != {self._node.state.round} / {self._node.state.round+1}",
+            )

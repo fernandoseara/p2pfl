@@ -43,9 +43,9 @@ class SynDFLStageFactory(StageFactory):
 
             return WaitAggregatedModelsStage
         elif stage_name == "GossipModelStage":
-            from p2pfl.stages.base_node.gossip_model_stage import GossipModelStage
+            from p2pfl.stages.base_node.gossip_final_model_stage import GossipFinalModelStage
 
-            return GossipModelStage
+            return GossipFinalModelStage
         elif stage_name == "TrainStage":
             from p2pfl.stages.base_node.train_stage import TrainStage
 

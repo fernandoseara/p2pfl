@@ -24,7 +24,6 @@ from typing import Optional
 from grpc import aio, ssl_server_credentials
 
 from p2pfl.communication.commands.command import Command
-from p2pfl.communication.protocols.protobuff.gossiper import Gossiper
 from p2pfl.communication.protocols.protobuff.grpc.address import AddressParser
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2_grpc
@@ -46,13 +45,12 @@ class GrpcServer(ProtobuffServer):
 
     def __init__(
         self,
-        gossiper: Gossiper,
         neighbors: Neighbors,
         commands: Optional[list[Command]] = None,
     ) -> None:
         """Initialize the GRPC server."""
         # Super
-        super().__init__(gossiper, neighbors, commands)
+        super().__init__(neighbors, commands)
 
         # Server
         maxMsgLength = 1024 * 1024 * 1024

@@ -29,7 +29,6 @@ from p2pfl.communication.commands.message.heartbeat_command import HeartbeatComm
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.communication.protocols.exceptions import CommunicationError, ProtocolNotStartedError
 from p2pfl.communication.protocols.protobuff.client import ProtobuffClient
-from p2pfl.communication.protocols.protobuff.gossiper import Gossiper
 from p2pfl.communication.protocols.protobuff.heartbeater import Heartbeater
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
@@ -72,10 +71,8 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         CommunicationProtocol.__init__(self)
         # Neighbors
         self._neighbors: Neighbors = Neighbors(self.build_client)
-        # Gossip
-        self._gossiper: Gossiper = Gossiper(self._neighbors)
         # GRPC
-        self._server = self.build_server(self._gossiper, self._neighbors, commands)
+        self._server = self.build_server(self._neighbors, commands)
         # Hearbeat
         self._heartbeater: Heartbeater = Heartbeater(self._neighbors, self.build_msg)
         # Commands
@@ -102,7 +99,6 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         addr = self._server.set_addr(addr)
         # Update components
         self._neighbors.set_addr(addr)
-        self._gossiper.set_addr(addr)
         self._heartbeater.set_addr(addr)
         # Set on super
         return super().set_addr(addr)
@@ -111,14 +107,12 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         """Start the GRPC communication protocol."""
         await self._server.start()
         await self._heartbeater.start()
-        await self._gossiper.start()
 
     @running
     async def stop(self) -> None:
         """Stop the GRPC communication protocol."""
         # Run the stop methods of async tasks, awaiting their completion
         await self._heartbeater.stop()
-        await self._gossiper.stop()
 
         # Clear neighbors and stop the server
         await self._neighbors.clear_neighbors()
@@ -232,6 +226,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         msg: Union[node_pb2.RootMessage],
         raise_error: bool = False,
         remove_on_error: bool = True,
+        temporal_connection: bool = False,
     ) -> None:
         """
         Send a message to a neighbor.
@@ -244,7 +239,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
 
         """
         try:
-            await self._neighbors.get(nei).send(msg, raise_error=raise_error, disconnect_on_error=remove_on_error)
+            await self._neighbors.get(nei).send(msg, temporal_connection=temporal_connection, raise_error=raise_error, disconnect_on_error=remove_on_error)
         except CommunicationError as e:
             if remove_on_error:
                 await self._neighbors.remove(nei)
@@ -287,36 +282,3 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
 
         """
         self._server.wait_for_termination()
-
-    @running
-    async def gossip_weights(
-        self,
-        early_stopping_fn: Callable[[], bool],
-        get_candidates_fn: Callable[[], list[str]],
-        status_fn: Callable[[], Any],
-        model_fn: Callable[[str], Any],
-        period: Optional[float] = None,
-        create_connection: bool = False,
-    ) -> None:
-        """
-        Gossip model weights.
-
-        Args:
-            early_stopping_fn: The early stopping function.
-            get_candidates_fn: The get candidates function.
-            status_fn: The status function.
-            model_fn: The model function.
-            period: The period.
-            create_connection: The create connection flag.
-
-        """
-        if period is None:
-            period = Settings.gossip.MODELS_PERIOD
-        await self._gossiper.gossip_weights(
-            early_stopping_fn,
-            get_candidates_fn,
-            status_fn,
-            model_fn,
-            period,
-            create_connection,
-        )

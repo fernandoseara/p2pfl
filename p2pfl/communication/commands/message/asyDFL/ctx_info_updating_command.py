@@ -124,7 +124,6 @@ class ModelInformationUpdatingCommand(Command):
             try:
                 # Save model
                 model = self.__node.learner.get_model().build_copy(params=weights, num_samples=num_samples, contributors=list(contributors))
-                #self._node.state.models_aggregated[source] = model
                 self.__node.aggregator.add_model(model)
             # Warning: these stops can cause a denegation of service attack
             except DecodingParamsError:

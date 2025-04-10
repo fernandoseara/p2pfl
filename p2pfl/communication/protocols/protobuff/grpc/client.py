@@ -120,7 +120,7 @@ class GrpcClient(ProtobuffClient):
             if disconnect_msg:
                 await self.stub.disconnect(node_pb2.HandShakeRequest(addr=self.self_addr))  # type: ignore
                 # Close channel
-                self.channel.close()  # type: ignore
+                await self.channel.close()  # type: ignore
         except Exception:
             pass
         self.channel = None
@@ -150,13 +150,12 @@ class GrpcClient(ProtobuffClient):
         # Check if connected
         if not self.is_connected():
             if temporal_connection:
-                with self._temporal_connection_lock:
-                    self._temporal_connection_uses += 1
-                    if self._temporal_connection_uses == 1:
-                        logger.debug(
-                            self.self_addr, f"💔 Neighbor {self.nei_addr} not connected. Trying to send message with temporal connection"
-                        )
-                        await self.connect(handshake_msg=False)
+                self._temporal_connection_uses += 1
+                if self._temporal_connection_uses == 1:
+                    logger.debug(
+                        self.self_addr, f"💔 Neighbor {self.nei_addr} not connected. Trying to send message with temporal connection"
+                    )
+                    await self.connect(handshake_msg=False)
             elif raise_error:
                 raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
             else:
@@ -172,10 +171,9 @@ class GrpcClient(ProtobuffClient):
                 f"Cannot send message {msg.cmd} to {self.nei_addr}. Error: {e}",
             )
             if temporal_connection:
-                with self._temporal_connection_lock:
-                    self._temporal_connection_uses -= 1
-                    if self._temporal_connection_uses == 0:
-                        await self.disconnect(disconnect_msg=False)
+                self._temporal_connection_uses -= 1
+                if self._temporal_connection_uses == 0:
+                    await self.disconnect(disconnect_msg=False)
             if raise_error:
                 raise e
             else:
@@ -189,10 +187,9 @@ class GrpcClient(ProtobuffClient):
 
         # Disconnect
         if temporal_connection:
-            with self._temporal_connection_lock:
-                self._temporal_connection_uses -= 1
-                if self._temporal_connection_uses == 0:
-                    await self.disconnect(disconnect_msg=False)
+            self._temporal_connection_uses -= 1
+            if self._temporal_connection_uses == 0:
+                await self.disconnect(disconnect_msg=False)
         elif disconnect_on_error and res.error:
             await self.disconnect(disconnect_msg=True)
 

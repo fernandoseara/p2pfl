@@ -35,38 +35,26 @@ if TYPE_CHECKING:
     from p2pfl.node_state import NodeState
 
 
-class StartLearningStage(Stage):
+class BroadcastStartLearningStage(Stage):
     """Start learning stage."""
 
     @staticmethod
     async def execute(
-        experiment_name: str,
-        rounds: int,
-        epochs: int,
-        trainset_size: int,
         state: NodeState,
         communication_protocol: CommunicationProtocol,
-        learner: Learner,
+        experiment_name: str,
+        total_rounds: int,
+        epochs: int,
+        trainset_size: int,
         ) -> None:
         """Execute the stage."""
-        
-        logger.info(state.addr, "🚀 Broadcasting start learning...")
+        logger.info(state.addr, "🚀 Broadcasting initial start learning...")
         await communication_protocol.broadcast(
             communication_protocol.build_msg(
                 StartLearningCommand.get_name(),
-                [str(rounds),
+                [str(total_rounds),
                  str(epochs),
                  str(trainset_size),
                  experiment_name]
             )
         )
-        
-        # Init
-        state.set_experiment(experiment_name, rounds, epochs, trainset_size)
-        learner.set_epochs(state.experiment.epochs)
-
-        # Wait and gossip model initialization
-        logger.info(state.addr, "⏳ Waiting initialization.")
-
-        # Communicate Initialization
-        await communication_protocol.broadcast(communication_protocol.build_msg(ModelInitializedCommand.get_name()))
