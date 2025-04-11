@@ -61,7 +61,7 @@ class BasicDFLWorkflow(TrainingWorkflow):
         # Define states and events
         states = [{'name': "waiting_for_training_start"},
             {'name': "starting_training"},
-            {'name': "initial_gossiping"},
+            {'name': "gossiping_initial_model"},
             {'name': "initializing_model"},
             {'name': "voting"},
             {'name': "waiting_voting", 'timeout':Settings.training.VOTE_TIMEOUT, 'on_timeout':"voting_timeout"},
@@ -76,10 +76,11 @@ class BasicDFLWorkflow(TrainingWorkflow):
         ]
 
         transitions = [
-            {'trigger': 'start_learning', 'source': 'waiting_for_training_start', 'dest': 'starting_training'},
             {'trigger': 'send_starting_learning', 'source': 'waiting_for_training_start', 'dest': None, 'after': 'broadcast_start_learning'},
-            {'trigger': 'gossip', 'source': 'starting_training', 'dest': 'initial_gossiping', 'prepare': ['get_initial_candidates'], 'conditions': 'candidate_exists'},
-            {'trigger': 'finish_voting', 'source': 'initial_gossiping', 'dest': 'initializing_model'},
+            {'trigger': 'start_learning', 'source': 'waiting_for_training_start', 'dest': 'starting_training'},
+            {'trigger': 'gossip', 'source': 'starting_training', 'dest': 'gossiping_initial_model', 'prepare': ['get_initial_candidates'], 'conditions': 'candidate_exists'},
+            
+            {'trigger': 'finish_voting', 'source': 'gossiping_initial_model', 'dest': 'initializing_model'},
             {'trigger': 'vote', 'source': 'waiting_voting', 'dest': 'aggregating_voting', 'conditions': 'is_all_votes_received'},
             {'trigger': 'vote', 'source': 'waiting_voting', 'dest': None, 'after': 'save_votes'},
             {'trigger': 'voting_timeout', 'source': 'waiting_voting', 'dest': 'aggregating_voting'},
@@ -129,9 +130,7 @@ class BasicDFLWorkflow(TrainingWorkflow):
             rounds=rounds,
             epochs=epochs,
             trainset_size=trainset_size,
-            communication_protocol=self.node.communication_protocol,
-            state=self.node.state,
-            learner=self.node.learner,
+            node=self.node,
         )
         await self.gossip()
 
@@ -140,43 +139,33 @@ class BasicDFLWorkflow(TrainingWorkflow):
         """Start the training."""
         await GossipInitialModelStage.execute(
             candidates=self.candidates,
-            communication_protocol=self.node.communication_protocol,
-            state=self.node.state,
-            learner=self.node.learner,
+            node=self.node,
         )
 
     async def on_enter_voting(self):
         """Vote for the train set."""
         await VoteTrainSetStage.execute(
-            state=self.node.state,
-            communication_protocol=self.node.communication_protocol,
-            aggregator=self.node.aggregator,
-            generator=self.node.generator
+            node=self.node,
         )
         await self.waiting_voting()
 
     async def on_exit_waiting_voting(self):
         """Aggregate the votes."""
         await AggregatingVoteTrainSetStage.execute(
-            state=self.node.state,
-            communication_protocol=self.node.communication_protocol,
-            aggregator=self.node.aggregator,
-            generator=self.node.generator
+            node=self.node,
         )
 
     async def on_enter_evaluating(self):
         """Evaluate the model."""
         await EvaluateStage.execute(
-            state=self.node.state,
-            communication_protocol=self.node.communication_protocol,
-            learner=self.node.learner)
+            node=self.node,
+        )
         await self.train()
 
     async def on_enter_training(self):
         """Train the model."""
         await TrainStage.execute(
-            state=self.node.state,
-            learner=self.node.communication_protocol,
+            node=self.node,
         )
         await self.gossip()
 
@@ -184,43 +173,34 @@ class BasicDFLWorkflow(TrainingWorkflow):
         """Train the model."""
         await GossipPartialModelStage.execute(
             candidates=self.candidates,
-            state=self.node.state,
-            communication_protocol=self.node.communication_protocol,
-            learner=self.node.communication_protocol,
-            aggregator=self.node.aggregator
+            node=self.node,
         )
         await self.aggregate()
 
     async def on_exit_waiting_for_aggregation(self):
         """Finish the aggregation."""
         await AggregationFinishedStage.execute(
-            state=self.node.state,
-            communication_protocol=self.node.communication_protocol
+            node=self.node,
         )
 
     async def on_enter_gossiping_full_model(self):
         """Gossip the model."""
         await GossipFinalModelStage.execute(
-            state=self.node.state,
-            communication_protocol=self.node.communication_protocol,
-            learner=self.node.learner
+            node=self.node,
         )
         await self.finish_round()
 
     async def on_enter_round_finished(self):
         """Finish the round."""
         await RoundFinishedStage.execute(
-            state=self.node.state,
-            aggregator=self.node.aggregator
+            node=self.node,
         )
         await self.step()
 
     async def on_enter_training_finished(self):
         """Finish the training."""
         await TrainingFinishedStage.execute(
-            state=self.node.state,
-            communication_protocol=self.node.communication_protocol,
-            learner=self.node.learner
+            node=self.node,
         )
         self.is_running = False
 
@@ -233,31 +213,31 @@ class BasicDFLWorkflow(TrainingWorkflow):
                                         experiment_name: str,
                                         rounds: int,
                                         epochs: int,
-                                        trainset_size: int):
+                                        trainset_size: int
+                                        ):
         """Broadcast start learning (from local)."""
         await BroadcastStartLearningStage.execute(
-            communication_protocol=self.node.communication_protocol,
-            state=self.node.state,
-            experiment_name= experiment_name,
+            experiment_name=experiment_name,
             epochs=epochs,
             trainset_size=trainset_size,
-            total_rounds=rounds
+            total_rounds=rounds,
+            node=self.node,
         )
 
     async def save_votes(self, source: str, tmp_votes: dict[str, int]):
         """Save the votes."""
-        self.node.state.train_set_votes[source] = tmp_votes
+        self.node.get_network_state().add_vote(source, tmp_votes)
 
     async def save_aggregation(self, model: P2PFLModel):
         """Save the aggregation."""
-        models_added = self.node.aggregator.add_model(model)
+        models_added = self.node.get_aggregator().add_model(model)
         if models_added != []:
             # Communicate Aggregation
-            self.node.communication_protocol.broadcast(
-                self.node.communication_protocol.build_msg(
+            self.node.get_communication_protocol().broadcast(
+                self.node.get_communication_protocol().build_msg(
                     ModelsAggregatedCommand.get_name(),
                     models_added,
-                    round=self.node.state.round,
+                    round=self.node.get_local_state().round,
                 )
             )
 
@@ -267,27 +247,27 @@ class BasicDFLWorkflow(TrainingWorkflow):
     def get_initial_candidates(self):
         """Get the candidates for the initial gossiping."""
         def candidate_condition(node: str) -> bool:
-            return node not in self.node.state.nei_status
+            return node not in self.node.local_state.nei_status
 
         self.candidates = [n for n in self.node.communication_protocol.get_neighbors(only_direct=True) if candidate_condition(n)]
-        logger.debug(self.node.state.addr, f"📡 Candidates to gossip to: {self.candidates}")
+        logger.debug(self.node.local_state.addr, f"📡 Candidates to gossip to: {self.candidates}")
 
     def get_partial_gossiping_candidates(self):
         """Get the candidates from the train set to gossip the partial model."""
         def candidate_condition(node: str) -> bool:
-            return set(self.node.state.train_set) - set(self.node.state.models[node].get_contributors())
-        candidates = set(self.node.state.train_set) - {self.node.state.addr}
+            return set(self.node.local_state.train_set) - set(self.node.local_state.models[node].get_contributors())
+        candidates = set(self.node.local_state.train_set) - {self.node.local_state.addr}
         self.candidates = [n for n in candidates if len(candidate_condition(n)) != 0]
-        logger.debug(self.node.state.addr, f"📡 Candidates to gossip to: {self.candidates}")
+        logger.debug(self.node.local_state.addr, f"📡 Candidates to gossip to: {self.candidates}")
 
     def get_full_gossiping_candidates(self):
         """Get the candidates from the train set to gossip the full model."""
-        fixed_round = self.node.state.round
+        fixed_round = self.node.local_state.round
         def candidate_condition(node: str) -> bool:
-            return self.node.state.nei_status[node] < fixed_round
+            return self.node.local_state.nei_status[node] < fixed_round
 
         self.candidates = [n for n in self.node.communication_protocol.get_neighbors(only_direct=True) if candidate_condition(n)]
-        logger.debug(self.node.state.addr, f"📡 Candidates to gossip to: {self.candidates}")
+        logger.debug(self.node.local_state.addr, f"📡 Candidates to gossip to: {self.candidates}")
 
     ##############
     # CONDITIONS #
@@ -300,21 +280,26 @@ class BasicDFLWorkflow(TrainingWorkflow):
         """Check if all votes from neis have been received."""
         nc_votes = {
                 k: v
-                for k, v in self.node.state.train_set_votes.items()
-                if k in list(self.node.communication_protocol.get_neighbors(only_direct=False)) or k == self.node.state.addr
+                for k, v in self.node.get_network_state().get_all_votes().items()
+                if k in list(self.node.communication_protocol.get_neighbors(only_direct=False)) or k == self.node.address
             }
 
-        needed_votes = set(list(self.node.communication_protocol.get_neighbors(only_direct=False)) + [self.node.state.addr])
+        needed_votes = set(list(self.node.communication_protocol.get_neighbors(only_direct=False)) + [self.node.address])
         return needed_votes == set(nc_votes.keys())
 
     def in_train_set(self):
         """Check if the node is in the train set."""
-        return self.node.state.addr in self.node.state.train_set
+        return self.node.address in self.node.get_local_state().train_set
 
     def is_total_rounds_reached(self):
         """Check if the total rounds have been reached."""
-        return self.node.state.round >= self.node.state.total_rounds
+        return self.node.get_local_state().round >= self.node.get_local_state().total_rounds
 
     def is_missing_models(self):
         """Check if there are missing models."""
-        return len(self.node.aggregator.train_set) > len(self.node.aggregator.get_aggregated_models())
+        return len(self.node.get_local_state().train_set) > len(self.node.aggregator.get_aggregated_models())
+
+if __name__ == "__main__":
+    m = BasicDFLWorkflow(None)
+
+    m.get_graph().draw('my_state_diagram.png', prog='dot')

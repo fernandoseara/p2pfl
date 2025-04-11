@@ -26,22 +26,21 @@ from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
 
 class AggregationFinishedStage(Stage):
     """Aggregation Finished stage."""
 
     @staticmethod
-    async def execute(state: NodeState, communication_protocol: CommunicationProtocol) -> None:
+    async def execute(node: Node) -> None:
         """Execute the stage."""
         # Get aggregated model
         logger.debug(
-            state.addr,
-            f"Broadcast aggregation done for round {state.round}",
+            node.address,
+            f"Broadcast aggregation done for round {node.get_local_state().get_experiment().round}",
         )
         # Share that aggregation is done
-        await communication_protocol.broadcast(
-            communication_protocol.build_msg(ModelsReadyCommand.get_name(),
+        await node.get_communication_protocol().broadcast(
+            node.get_communication_protocol.build_msg(ModelsReadyCommand.get_name(),
                                                     [],
-                                                    round=state.round))
+                                                    round=node.get_local_state().get_experiment().round))

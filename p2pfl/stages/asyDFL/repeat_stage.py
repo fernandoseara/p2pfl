@@ -20,7 +20,7 @@
 from typing import Optional, Type, Union
 
 from p2pfl.management.logger import logger
-from p2pfl.node_state import NodeState
+from p2pfl.node_state import LocalNodeState
 from p2pfl.stages.asyDFL.stage_factory import AsyDFLStageFactory
 from p2pfl.stages.stage import Stage
 
@@ -35,7 +35,7 @@ class RepeatStage(Stage): # TODO: Implement better graph structure
 
     @staticmethod
     def execute(
-        state: Optional[NodeState] = None,
+        state: Optional[LocalNodeState] = None,
         **kwargs,
     ) -> Union[Type["Stage"], None]:
         """Execute the stage."""

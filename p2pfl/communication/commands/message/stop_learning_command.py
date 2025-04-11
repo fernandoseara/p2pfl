@@ -52,14 +52,14 @@ class StopLearningCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        logger.info(self._node.state.addr, "Stopping learning received")
+        logger.info(self._node.local_state.addr, "Stopping learning received")
         # Leraner
         self._node.learner.interrupt_fit()
         # Aggregator
         self._node.aggregator.clear()
         # State
-        self._node.state.clear()
-        logger.experiment_finished(self._node.state.addr)
+        self._node.local_state.clear()
+        logger.experiment_finished(self._node.local_state.addr)
         # Try to free wait locks
         with contextlib.suppress(Exception):
-            self._node.state.wait_votes_ready_lock.release()
+            self._node.local_state.wait_votes_ready_lock.release()

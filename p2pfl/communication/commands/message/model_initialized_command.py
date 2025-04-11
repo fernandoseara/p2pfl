@@ -51,4 +51,4 @@ class ModelInitializedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        self._node.state.nei_status[source] = -1
+        self._node.local_state.nei_status[source] = -1

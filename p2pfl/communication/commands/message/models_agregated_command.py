@@ -52,11 +52,11 @@ class ModelsAggregatedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        if round == self._node.state.round:
+        if round == self._node.local_state.round:
             # esto meterlo en estado o agg
-            self._node.state.models_aggregated[source] = list(args)
+            self._node.local_state.models_aggregated[source] = list(args)
         else:
             logger.debug(
-                self._node.state.addr,
-                f"Models Aggregated message from {source} in a late round. Ignored. {round} != {self._node.state.round}",
+                self._node.local_state.addr,
+                f"Models Aggregated message from {source} in a late round. Ignored. {round} != {self._node.local_state.round}",
             )

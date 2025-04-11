@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from transitions.extensions.asyncio import AsyncMachine, AsyncTimeout
+from transitions.extensions import AsyncGraphMachine
+from transitions.extensions.asyncio import AsyncTimeout
 from transitions.extensions.states import add_state_features
 
 from p2pfl.management.logger import logger
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
     from p2pfl.node import Node
 
 @add_state_features(AsyncTimeout)
-class TimeoutMachine(AsyncMachine):
+class TimeoutMachine(AsyncGraphMachine):
     pass
 
 class TrainingWorkflow(TimeoutMachine):

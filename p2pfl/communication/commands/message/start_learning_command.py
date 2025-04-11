@@ -72,4 +72,4 @@ class StartLearningCommand(Command):
         try:
             await self.__node.learning_workflow.start_learning(experiment_name, int(learning_rounds), int(learning_epochs), int(trainset_size))
         except MachineError as e:
-            logger.debug(self.__node.state.addr, f"Learning already started: {e}")
+            logger.debug(self.__node.local_state.addr, f"Learning already started: {e}")

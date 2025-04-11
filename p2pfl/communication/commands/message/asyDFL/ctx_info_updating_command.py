@@ -51,8 +51,8 @@ class LossInformationUpdatingCommand(Command):
         """
         # Save loss
         if loss is not None:
-            logger.info(self.__node.state.addr, "📉 Neighbour training loss received.")
-            self.__node.state.losses[source] = (float(loss), round)
+            logger.info(self.__node.local_state.addr, "📉 Neighbour training loss received.")
+            self.__node.local_state.losses[source] = (float(loss), round)
 
 
 class IndexInformationUpdatingCommand(Command):
@@ -81,8 +81,8 @@ class IndexInformationUpdatingCommand(Command):
         """
         # Save index of local iteration about model updating
         if index is not None:
-            logger.info(self.__node.state.addr, "🔄 Index of local iteration received.")
-            self.__node.state.reception_times[source] = int(index)
+            logger.info(self.__node.local_state.addr, "🔄 Index of local iteration received.")
+            self.__node.local_state.reception_times[source] = int(index)
 
 
 class ModelInformationUpdatingCommand(Command):
@@ -117,29 +117,29 @@ class ModelInformationUpdatingCommand(Command):
         if weights is None or contributors is None or num_samples is None:
             raise ValueError("Weights, contributors and weight are required")
 
-        logger.info(self.__node.state.addr, "Model received.")
+        logger.info(self.__node.local_state.addr, "Model received.")
 
         # Check if Learning is running
-        if self.__node.state.round is not None:
+        if self.__node.local_state.round is not None:
             try:
                 # Save model
                 model = self.__node.learner.get_model().build_copy(params=weights, num_samples=num_samples, contributors=list(contributors))
                 self.__node.aggregator.add_model(model)
             # Warning: these stops can cause a denegation of service attack
             except DecodingParamsError:
-                logger.error(self.__node.state.addr, "Error decoding parameters.")
+                logger.error(self.__node.local_state.addr, "Error decoding parameters.")
                 self.__node.stop()
 
             except ModelNotMatchingError:
-                logger.error(self.__node.state.addr, "Models not matching.")
+                logger.error(self.__node.local_state.addr, "Models not matching.")
                 self.__node.stop()
 
             except Exception as e:
-                logger.error(self.__node.state.addr, f"Unknown error adding model: {e}")
+                logger.error(self.__node.local_state.addr, f"Unknown error adding model: {e}")
                 self.__node.stop()
 
         else:
-            logger.debug(self.__node.state.addr, "Tried to add a model while learning is not running")
+            logger.debug(self.__node.local_state.addr, "Tried to add a model while learning is not running")
 
 
 class PushSumWeightInformationUpdatingCommand(Command):
@@ -168,5 +168,5 @@ class PushSumWeightInformationUpdatingCommand(Command):
         """
         # Save push-sum weight
         if push_sum_weight is not None:
-            logger.info(self.__node.state.addr, "Push-sum weight received.")
-            self.__node.state.push_sum_weights[source] = float(push_sum_weight)
+            logger.info(self.__node.local_state.addr, "Push-sum weight received.")
+            self.__node.local_state.push_sum_weights[source] = float(push_sum_weight)

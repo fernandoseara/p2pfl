@@ -23,13 +23,13 @@ from typing import TYPE_CHECKING
 from typing import Dict, List, Optional
 
 from p2pfl.experiment import Experiment
-from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.logger import logger
 
 if TYPE_CHECKING:
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
+    
 
-class NodeState:
+class LocalNodeState: # A
     """
     Class to store the main state of a learning node.
 
@@ -40,10 +40,6 @@ class NodeState:
         nei_status: The status of the neighbors.
         train_set: The train set of the node.
         train_set_votes: The votes of the train set.
-        train_set_votes_lock: The lock for the train set votes.
-        start_thread_lock: The lock for the start thread.
-        wait_votes_ready_lock: The lock for the wait votes ready.
-        model_initialized_lock: The lock for the model initialized.
 
     Args:
         addr: The address of the node.
@@ -55,37 +51,45 @@ class NodeState:
         self.addr = addr
         self.status = "Idle"
 
-        # Other neis state (only round)
-        self.nei_status: Dict[str, int] = {}
-
         # Train Set
-        self.train_set: List[str] = []
-        self.train_set_votes: Dict[str, Dict[str, int]] = {}
+        self.train_set: list[str] = []
 
         # Actual experiment
-        self.experiment: Optional[Experiment] = None
+        self.experiment: Experiment | None = None
 
         # Models
         self.models: dict[P2PFLModel] = {}
 
 
     @property
-    def round(self) -> Optional[int]:
+    def round(self) -> int | None:
         """Get the round."""
         return self.experiment.round if self.experiment is not None else None
 
     @property
-    def total_rounds(self) -> Optional[int]:
+    def total_rounds(self) -> int | None:
         """Get the total rounds."""
         return self.experiment.total_rounds if self.experiment is not None else None
 
     @property
-    def exp_name(self) -> Optional[str]:
+    def exp_name(self) -> str | None:
         """Get the actual experiment name."""
         return self.experiment.exp_name if self.experiment is not None else None
 
-    def add_model(self, source, model: P2PFLModel):
+    def add_model(self, source: str, model: P2PFLModel):
+        """
+        Add a model to the node state.
+
+        Args:
+            source: The source of the model.
+            model: The model to add.
+
+        """
         self.models[source] = model
+
+    def get_experiment(self) -> Experiment | None:
+        """Get the actual experiment."""
+        return self.experiment
 
     def set_experiment(self, exp_name: str, total_rounds: int, epochs: int = 1, trainset_size: int = 4) -> None:
         """
@@ -120,7 +124,6 @@ class NodeState:
             raise ValueError("Experiment not initialized")
 
         self.experiment.increase_round()
-        self.models = {}
         logger.experiment_started(self.addr, self.experiment)  # TODO: Improve changes on the experiment
 
     def clear(self) -> None:

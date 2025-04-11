@@ -19,51 +19,48 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Type, Union
+from typing import TYPE_CHECKING, Any
 
 from p2pfl.communication.commands.weights.full_model_command import FullModelCommand
 from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage, check_early_stop
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.learning.frameworks.learner import Learner
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
 
 class GossipFinalModelStage(Stage):
     """Gossip model stage."""
 
     @staticmethod
-    async def execute(
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        learner: Learner) -> None:
+    async def execute(node: Node) -> None:
         """Execute the stage."""
-        await GossipFinalModelStage.__gossip_model_difusion(state, communication_protocol, learner)
+        await GossipFinalModelStage.__gossip_model_difusion(node)
 
     @staticmethod
     async def __gossip_model_difusion(
         candidates: list[str],
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        learner: Learner,
+        node: Node,
     ) -> None:
-        logger.info(state.addr, "🗣️ Gossiping aggregated model.")
+        logger.info(node.address, "🗣️ Gossiping aggregated model.")
 
-        def model_fn(node: str) -> Any:
-            if state.round is None:
+        def model_fn(_: str) -> Any:
+            if node.get_local_state().get_experiment().round is None:
                 raise Exception("Round not initialized")
-            encoded_model = learner.get_model().encode_parameters()
-            return communication_protocol.build_weights(FullModelCommand.get_name(), state.round, encoded_model)
+            encoded_model = node.get_learner().get_model().encode_parameters()
+            return node.get_communication_protocol().build_weights(
+                FullModelCommand.get_name(), 
+                node.get_local_state().get_experiment(), 
+                encoded_model
+            )
 
         # Gossip to eligible neighbors
-        logger.debug(state.addr, f"📡 Candidates to gossip to: {candidates}")
+        logger.debug(node.address, f"📡 Candidates to gossip to: {candidates}")
 
         for neighbor in candidates:
             payload = model_fn(neighbor)
             try:
-                logger.debug(state.addr, f"🗣️ Sending model to {neighbor}")
-                await communication_protocol.send(neighbor, payload, temporal_connection=True)
-                logger.debug(state.addr, f"✅ Sent model to {neighbor}")
+                logger.debug(node.address, f"🗣️ Sending model to {neighbor}")
+                await node.get_communication_protocol().send(neighbor, payload, temporal_connection=True)
+                logger.debug(node.address, f"✅ Sent model to {neighbor}")
             except Exception as e:
-                logger.warning(state.addr, f"⚠️ Failed to send model to {neighbor}: {e}")
+                logger.warning(node.address, f"⚠️ Failed to send model to {neighbor}: {e}")

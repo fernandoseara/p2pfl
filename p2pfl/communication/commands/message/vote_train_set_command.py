@@ -56,7 +56,7 @@ class VoteTrainSetCommand(Command):
         ########################################################
         # try to improve clarity in message moment check
         ########################################################
-        if round in [self._node.state.round, self._node.state.round + 1]:
+        if round in [self._node.local_state.round, self._node.local_state.round + 1]:
             # build vote dict
             votes = args
             tmp_votes = {}
@@ -67,6 +67,6 @@ class VoteTrainSetCommand(Command):
 
         else:
             logger.error(
-                self._node.state.addr,
-                f"Vote received in a late round. Ignored. {round} != {self._node.state.round} / {self._node.state.round+1}",
+                self._node.local_state.addr,
+                f"Vote received in a late round. Ignored. {round} != {self._node.local_state.round} / {self._node.local_state.round+1}",
             )

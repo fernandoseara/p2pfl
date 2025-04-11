@@ -19,15 +19,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Type, Union
+from typing import TYPE_CHECKING
 
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
-    from p2pfl.learning.frameworks.learner import Learner
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
 
 
 class InitializeModelStage(Stage):
@@ -37,29 +36,28 @@ class InitializeModelStage(Stage):
     async def execute(
         round: int,
         weights: bytes,
-        state: NodeState,
-        learner: Learner,
+        node: Node
         ) -> None:
         """Execute the stage."""
         # Check source
-        if round != state.round:
+        if round != node.get_local_state().round:
             logger.debug(
-                state.addr,
-                f"Model initialization in a late round ({round} != {state.round}).",
+                node.address,
+                f"Model initialization in a late round ({round} != {node.get_local_state().round}).",
             )
             return
 
         try:
             # Set new weights
-            learner.set_model(weights)
+            node.get_learner().set_model(weights)
 
-            logger.info(state.addr, "🤖 Model Weights Initialized")
+            logger.info(node.address, "🤖 Model Weights Initialized")
 
         except DecodingParamsError:
-            logger.error(state.addr, "Error decoding parameters.")
+            logger.error(node.address, "Error decoding parameters.")
 
         except ModelNotMatchingError:
-            logger.error(state.addr, "Models not matching.")
+            logger.error(node.address, "Models not matching.")
 
         except Exception as e:
-            logger.error(state.addr, f"Unknown error adding model: {e}")
+            logger.error(node.address, f"Unknown error adding model: {e}")

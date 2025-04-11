@@ -50,26 +50,26 @@ class FullModelCommand(Command):
     ) -> None:
         """Execute the command."""
         if weights is None:
-            logger.error(self.__node.state.addr, "Invalid FullModelCommand message")
+            logger.error(self.__node.local_state.addr, "Invalid FullModelCommand message")
             return
 
-        logger.info(self.__node.state.addr, "📦 Aggregated model received.")
+        logger.info(self.__node.local_state.addr, "📦 Aggregated model received.")
         self.__node.learning_workflow.initialize_model(round, weights)
 
         # Check if Learning is running
-        if self.__node.state.round is not None:
+        if self.__node.local_state.round is not None:
             # Check source
-            if round != self.__node.state.round:
+            if round != self.__node.local_state.round:
                 logger.debug(
-                    self.__node.state.addr,
-                    f"Model reception in a late round ({round} != {self.__node.state.round}).",
+                    self.__node.local_state.addr,
+                    f"Model reception in a late round ({round} != {self.__node.local_state.round}).",
                 )
                 return
-            if self.__node.state.aggregated_model_event.is_set():
-                logger.debug(self.__node.state.addr, "😲 Aggregated model not expected.")
+            if self.__node.local_state.aggregated_model_event.is_set():
+                logger.debug(self.__node.local_state.addr, "😲 Aggregated model not expected.")
                 return
             try:
-                logger.info(self.__node.state.addr, "📦 Aggregated model received.")
+                logger.info(self.__node.local_state.addr, "📦 Aggregated model received.")
                 # Decode and set model
                 self.__node.learner.set_model(weights)
                 # Send aggregate event to the workflow
@@ -77,15 +77,15 @@ class FullModelCommand(Command):
 
             # Warning: these stops can cause a denegation of service attack
             except DecodingParamsError:
-                logger.error(self.__node.state.addr, "❌ Error decoding parameters.")
+                logger.error(self.__node.local_state.addr, "❌ Error decoding parameters.")
                 self.__node.stop()
 
             except ModelNotMatchingError:
-                logger.error(self.__node.state.addr, "❌ Models not matching.")
+                logger.error(self.__node.local_state.addr, "❌ Models not matching.")
                 self.__node.stop()
 
             except Exception as e:
-                logger.error(self.__node.state.addr, f"❌ Unknown error adding model: {e}")
+                logger.error(self.__node.local_state.addr, f"❌ Unknown error adding model: {e}")
                 self.__node.stop()
         else:
-            logger.debug(self.__node.state.addr, "❌ Tried to add a model while learning is not running")
+            logger.debug(self.__node.local_state.addr, "❌ Tried to add a model while learning is not running")

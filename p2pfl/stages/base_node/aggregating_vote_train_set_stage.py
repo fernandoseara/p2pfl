@@ -26,41 +26,33 @@ from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.learning.aggregators.aggregator import Aggregator
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
 
 class AggregatingVoteTrainSetStage(Stage):
     """Vote Train Set Stage."""
 
     @staticmethod
     async def execute(
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        aggregator: Aggregator,
-        generator: random.Random,
+        node: Node,
         ) -> None:
         """Execute the stage."""
-
         # Aggregate votes
-        state.train_set = AggregatingVoteTrainSetStage.__validate_train_set(
-            await AggregatingVoteTrainSetStage.__aggregate_votes(state, communication_protocol),
-            state,
-            communication_protocol,
+        node.get_local_state().train_set = AggregatingVoteTrainSetStage.__validate_train_set(
+            await AggregatingVoteTrainSetStage.__aggregate_votes(node),
         )
         logger.info(
-            state.addr,
-            f"🚂 Train set of {len(state.train_set)} nodes: {state.train_set}",
+            node.address,
+            f"🚂 Train set of {len(node.get_local_state().train_set)} nodes: {node.get_local_state().train_set}",
         )
         # Set Models To Aggregate
-        aggregator.set_nodes_to_aggregate(state.train_set)
+        #aggregator.set_nodes_to_aggregate(state.train_set)
 
 
     @staticmethod
-    async def __aggregate_votes(state: NodeState, communication_protocol: CommunicationProtocol) -> list[str]:
-        logger.debug(state.addr, "⏳ Waiting other node votes.")
+    async def __aggregate_votes(node: Node) -> list[str]:
+        logger.debug(node.address, "⏳ Waiting other node votes.")
         results: dict[str, int] = {}
-        for node_vote in list(state.train_set_votes.values()):
+        for node_vote in list(node.get_network_state().train_set_votes.values()):
             for i in range(len(node_vote)):
                 k = list(node_vote.keys())[i]
                 v = list(node_vote.values())[i]
@@ -74,23 +66,19 @@ class AggregatingVoteTrainSetStage(Stage):
             results.items(), key=lambda x: x[0], reverse=True
         )  # to equal solve of draw (node name alphabetical order)
         results_ordered = sorted(results_ordered, key=lambda x: x[1], reverse=True)
-        top = min(len(results_ordered), state.experiment.trainset_size)
+        top = min(len(results_ordered), node.get_local_state().experiment.trainset_size)
         results_ordered = results_ordered[0:top]
         # Clear votes
-        state.train_set_votes = {}
-        logger.info(state.addr, f"🔢 Computed {len(state.train_set_votes)} votes.")
+        node.get_network_state().clear_all_votes()
+        logger.info(node.address, f"🔢 Computed {len(node.train_set_votes)} votes.")
         return [i[0] for i in results_ordered]
 
 
     @staticmethod
-    def __validate_train_set(
-        train_set: list[str],
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-    ) -> list[str]:
+    def __validate_train_set(train_set: list[str], node: Node) -> list[str]:
         # Verify if node set is valid
         # (can happend that a node was down when the votes were being processed)
         for tsn in train_set:
-            if tsn not in list(communication_protocol.get_neighbors(only_direct=False)) and (tsn != state.addr):
+            if tsn not in list(node.get_communication_protocol().get_neighbors(only_direct=False)) and (tsn != node.address):
                 train_set.remove(tsn)
         return train_set

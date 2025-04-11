@@ -20,9 +20,7 @@
 from __future__ import annotations
 
 import math
-import random
-import time
-from typing import TYPE_CHECKING, Type, Union
+from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.message.vote_train_set_command import VoteTrainSetCommand
 from p2pfl.management.logger import logger
@@ -30,50 +28,39 @@ from p2pfl.settings import Settings
 from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.learning.aggregators.aggregator import Aggregator
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
 
 class VoteTrainSetStage(Stage):
     """Vote Train Set Stage."""
 
     @staticmethod
-    async def execute(
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        aggregator: Aggregator,
-        generator: random.Random,
-        ) -> None:
+    async def execute(node: Node) -> None:
         """Execute the stage."""
-        try:
-            # Vote
-            await VoteTrainSetStage.__vote(state, communication_protocol, generator)
-        except EarlyStopException:
-            return
+        communication_protocol = node.get_communication_protocol()
+        state = node.get_local_state()
+        generator = node.get_generator()
 
-    @staticmethod
-    async def __vote(state: NodeState, communication_protocol: CommunicationProtocol, generator: random.Random) -> None:
         # Vote (at least itself)
         candidates = list(communication_protocol.get_neighbors(only_direct=False))
-        if state.addr not in candidates:
-            candidates.append(state.addr)
-        logger.debug(state.addr, f"👨‍🏫 {len(candidates)} candidates to train set")
+        if node.address not in candidates:
+            candidates.append(node.address)
+        logger.debug(node.address, f"👨‍🏫 {len(candidates)} candidates to train set")
 
         # Order candidates to make a deterministic vote (based on the random seed)
         candidates.sort()
 
-        # Send vote 
-        samples = min(state.experiment.trainset_size, len(candidates))
+        # Send vote
+        samples = min(state.get_experiment().trainset_size, len(candidates))
         nodes_voted = generator.sample(candidates, samples)
         weights = [math.floor(generator.randint(0, 1000) / (i + 1)) for i in range(samples)]
         votes = list(zip(nodes_voted, weights))
 
-        # Adding votes
-        state.train_set_votes[state.addr] = dict(votes)
+        # Adding votes # TODO
+        node.get_network_state().add_vote(node.address, dict(votes))
 
         # Send and wait for votes
-        logger.info(state.addr, "🗳️ Sending train set vote.")
-        logger.debug(state.addr, f"🪞🗳️ Self Vote: {votes}")
+        logger.info(node.address, "🗳️ Sending train set vote.")
+        logger.debug(node.address, f"🪞🗳️ Self Vote: {votes}")
         await communication_protocol.broadcast(
             communication_protocol.build_msg(
                 VoteTrainSetCommand.get_name(),

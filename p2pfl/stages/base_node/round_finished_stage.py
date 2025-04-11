@@ -26,22 +26,23 @@ from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
-    from p2pfl.learning.aggregators.aggregator import Aggregator
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
 
 class RoundFinishedStage(Stage):
     """Round Finished Stage."""
 
     @staticmethod
-    async def execute(state: NodeState, aggregator: Aggregator) -> None:
+    async def execute(node: Node) -> None:
         """Execute the stage."""
         # Set Next Round
-        aggregator.clear()
-        state.increase_round()
+        node.get_network_state().reset_round()
+        node.get_local_state().increase_round()
+
+        state = node.get_local_state()
 
         # Next Step or Finish
         logger.info(
-            state.addr,
+            node.address,
             f"🎉 Round {state.round} of {state.total_rounds} finished.",
         )
         if state.round is None or state.total_rounds is None:

@@ -60,7 +60,7 @@ def node2(port: int) -> None:
     while True:
         time.sleep(1)
 
-        if node.state.round is None:
+        if node.local_state.round is None:
             break
 
     node.stop()

@@ -23,7 +23,7 @@ from p2pfl.communication.commands.message.asyDFL.ctx_info_updating_command impor
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.management.logger import logger
-from p2pfl.node_state import NodeState
+from p2pfl.node_state import LocalNodeState
 from p2pfl.stages.asyDFL.stage_factory import AsyDFLStageFactory
 from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
 
@@ -38,7 +38,7 @@ class LocalUpdateStage(Stage):
 
     @staticmethod
     def execute(
-        state: Optional[NodeState] = None,
+        state: Optional[LocalNodeState] = None,
         communication_protocol: Optional[CommunicationProtocol] = None,
         learner: Optional[Learner] = None,
         **kwargs,
@@ -77,7 +77,7 @@ class LocalUpdateStage(Stage):
             return None
 
     @staticmethod
-    def __train(state: NodeState, learner: Learner, communication_protocol: CommunicationProtocol) -> None:
+    def __train(state: LocalNodeState, learner: Learner, communication_protocol: CommunicationProtocol) -> None:
         logger.info(state.addr, "🏋️‍♀️ Updating local model...")
         learner.fit()
 

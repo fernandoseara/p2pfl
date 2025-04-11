@@ -64,14 +64,14 @@ class PartialModelCommand(Command):
         try:
             # Add model to aggregator
             model = self.__node.learner.get_model().build_copy(params=weights, num_samples=num_samples, contributors=list(contributors))
-            self.__node.state.add_model(model, source)
+            self.__node.get_network_state().add_model(model, source)
             await self.__node.learning_workflow.aggregate(model)
 
         except MachineError:
-            logger.debug(self.__node.state.addr, "Invalid state.")
+            logger.debug(self.__node.local_state.addr, "Invalid state.")
         except DecodingParamsError:
-            logger.error(self.__node.state.addr, "Error decoding parameters.")
+            logger.error(self.__node.local_state.addr, "Error decoding parameters.")
         except ModelNotMatchingError:
-            logger.error(self.__node.state.addr, "Models not matching.")
+            logger.error(self.__node.local_state.addr, "Models not matching.")
         except Exception as e:
-            logger.error(self.__node.state.addr, f"Unknown error adding model: {e}")
+            logger.error(self.__node.local_state.addr, f"Unknown error adding model: {e}")

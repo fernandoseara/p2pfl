@@ -39,7 +39,7 @@ from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.simulation import try_init_learner_with_ray
 from p2pfl.management.logger import logger
-from p2pfl.node_state import NodeState
+from p2pfl.node_state import LocalNodeState
 from p2pfl.settings import Settings
 from p2pfl.stages.workflow_factory import WorkflowFactoryProducer
 from p2pfl.stages.workflow_type import WorkflowType
@@ -49,6 +49,7 @@ from p2pfl.stages.workflows import TrainingWorkflow
 if logger.get_level_name(logger.get_level()) != "DEBUG":
     os.environ["GRPC_VERBOSITY"] = "NONE"
 
+from p2pfl.network_state import NetworkState, PeerNodeState
 
 class Node:
     """
@@ -122,7 +123,9 @@ class Node:
         self.learner.indicate_aggregator(self.aggregator)
 
         # State
-        self.state = NodeState(self.addr)
+        self.local_state = LocalNodeState(self.addr)
+        self.network_state = NetworkState()
+
 
         # Simulation
         self.generator: random.Random = random.Random(Settings.general.SEED)
@@ -239,7 +242,7 @@ class Node:
             # Stop server
             await self.communication_protocol.stop()
             # State
-            self.state.clear()
+            self.local_state.clear()
             # Unregister node
             logger.unregister_node(self.addr)
         except Exception:
@@ -260,7 +263,7 @@ class Node:
             LearnerRunningException: If the learner is already set.
 
         """
-        if self.state.round is not None:
+        if self.local_state.round is not None:
             raise LearnerRunningException("Learner cannot be set after learning is started.")
         self.learner = learner
 
@@ -275,7 +278,7 @@ class Node:
             LearnerRunningException: If the learner is already set.
 
         """
-        if self.state.round is not None:
+        if self.local_state.round is not None:
             raise LearnerRunningException("Data cannot be set after learner is set.")
         self.learner.set_model(model)
 
@@ -291,7 +294,7 @@ class Node:
 
         """
         # Cannot change during training (raise)
-        if self.state.round is not None:
+        if self.local_state.round is not None:
             raise LearnerRunningException("Data cannot be set after learner is set.")
         self.learner.set_data(data)
 
@@ -318,6 +321,75 @@ class Node:
 
         """
         return self.learner.get_data()
+
+    def get_aggregator(self) -> Aggregator:
+        """
+        Get the node aggregator.
+
+        Returns:
+            The node aggregator.
+
+        """
+        return self.aggregator
+
+    def get_communication_protocol(self) -> CommunicationProtocol:
+        """
+        Get the communication protocol.
+
+        Returns:
+            The node communication protocol.
+
+        """
+        return self.communication_protocol
+
+    def get_learner(self) -> Learner:
+        """
+        Get the learner.
+
+        Returns:
+            The current learner of the node.
+
+        """
+        return self.learner
+
+    #######################
+    #    State Getters    #
+    #######################
+
+    def get_local_state(self) -> LocalNodeState:
+        """
+        Get the local state.
+
+        Returns:
+            The current local state of the node.
+
+        """
+        return self.local_state
+
+    def get_network_state(self) -> NetworkState:
+        """
+        Get the network state.
+
+        Returns:
+            The current network state of the node.
+
+        """
+        return self.network_state
+
+    def get_generator(self) -> random.Random:
+        """
+        Get the generator.
+
+        Returns:
+            The current generator of the node.
+
+        """
+        return self.generator
+
+    @property
+    def address(self) -> str:
+        """The node address."""
+        return self.state.addr
 
     ###############################################
     #         Network Learning Management         #
@@ -358,7 +430,7 @@ class Node:
 
     async def set_stop_learning(self) -> None:
         """Stop the learning process in the entire network."""
-        if self.state.round is not None:
+        if self.local_state.round is not None:
             # send stop msg
             await self.communication_protocol.broadcast(self.communication_protocol.build_msg(StopLearningCommand.get_name()))
             # stop learning
@@ -378,10 +450,10 @@ class Node:
         # Aggregator
         self.aggregator.clear()
         # State
-        self.state.clear()
+        self.local_state.clear()
         logger.experiment_finished(self.addr)
         # Try to free wait locks
         with contextlib.suppress(Exception):
-            self.state.wait_votes_ready_lock.release()
+            self.local_state.wait_votes_ready_lock.release()
 
         self.learning_workflow = None

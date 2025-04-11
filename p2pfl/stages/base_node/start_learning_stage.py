@@ -30,9 +30,7 @@ from p2pfl.settings import Settings
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.learning.frameworks.learner import Learner
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
 
 
 class StartLearningStage(Stage):
@@ -44,13 +42,14 @@ class StartLearningStage(Stage):
         rounds: int,
         epochs: int,
         trainset_size: int,
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        learner: Learner,
+        node: Node,
         ) -> None:
         """Execute the stage."""
-        
-        logger.info(state.addr, "🚀 Broadcasting start learning...")
+        state = node.get_local_state()
+        communication_protocol = node.get_communication_protocol()
+        learner = node.get_learner()
+
+        logger.info(node.address, "🚀 Broadcasting start learning...")
         await communication_protocol.broadcast(
             communication_protocol.build_msg(
                 StartLearningCommand.get_name(),
@@ -60,13 +59,13 @@ class StartLearningStage(Stage):
                  experiment_name]
             )
         )
-        
+
         # Init
         state.set_experiment(experiment_name, rounds, epochs, trainset_size)
-        learner.set_epochs(state.experiment.epochs)
+        learner.set_epochs(state.get_experiment().epochs)
 
         # Wait and gossip model initialization
-        logger.info(state.addr, "⏳ Waiting initialization.")
+        logger.info(node.address, "⏳ Waiting initialization.")
 
         # Communicate Initialization
         await communication_protocol.broadcast(communication_protocol.build_msg(ModelInitializedCommand.get_name()))

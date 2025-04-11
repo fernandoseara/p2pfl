@@ -23,46 +23,41 @@ from typing import TYPE_CHECKING, Type, Union
 
 from p2pfl.communication.commands.message.metrics_command import MetricsCommand
 from p2pfl.management.logger import logger
-from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
+from p2pfl.stages.stage import EarlyStopException, Stage
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.learning.frameworks.learner import Learner
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
+
 
 class EvaluateStage(Stage):
     """Evaluate stage."""
 
     @staticmethod
     async def execute(
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        learner: Learner) -> None:
+        node: Node) -> None:
         """Execute the stage."""
         try:
             # Evaluate and send metrics
-            await EvaluateStage.__evaluate(state, learner, communication_protocol)
+            await EvaluateStage.__evaluate(node)
 
         except EarlyStopException:
             return None
 
     @staticmethod
     async def __evaluate(
-        state: NodeState,
-        learner: Learner,
-        communication_protocol: CommunicationProtocol
+        node: Node
         ) -> None:
-        logger.info(state.addr, "🔬 Evaluating...")
-        results = await learner.evaluate()
-        logger.info(state.addr, f"📈 Evaluated. Results: {results}")
+        logger.info(node.address, "🔬 Evaluating...")
+        results = await node.learner.evaluate()
+        logger.info(node.address, f"📈 Evaluated. Results: {results}")
         # Send metrics
         if len(results) > 0:
-            logger.info(state.addr, "📢 Broadcasting metrics.")
+            logger.info(node.address, "📢 Broadcasting metrics.")
             flattened_metrics = [str(item) for pair in results.items() for item in pair]
-            await communication_protocol.broadcast(
-                communication_protocol.build_msg(
+            await node.get_communication_protocol().broadcast(
+                node.get_communication_protocol().build_msg(
                     MetricsCommand.get_name(),
                     flattened_metrics,
-                    round=state.round,
+                    round=node.get_local_state().get_experiment().round,
                 )
             )

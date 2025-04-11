@@ -19,34 +19,24 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Set, Type, Union
+from typing import TYPE_CHECKING
 
-from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
-from p2pfl.communication.commands.weights.partial_model_command import PartialModelCommand
-from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError
 from p2pfl.management.logger import logger
-from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
+from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.learning.aggregators.aggregator import Aggregator
-    from p2pfl.learning.frameworks.learner import Learner
-    from p2pfl.node_state import NodeState
-
+    from p2pfl.node import Node
 
 class TrainStage(Stage):
     """Train stage."""
 
     @staticmethod
-    async def execute(
-        state: NodeState,
-        learner: Learner,
-        ) -> None:
+    async def execute(node: Node) -> None:
         """Execute the stage."""
         # Train
-        logger.info(state.addr, "🏋️‍♀️ Training...")
-        await learner.fit()
-        logger.info(state.addr, "🎓 Training done.")
+        logger.info(node.address, "🏋️‍♀️ Training...")
+        await node.get_learner().fit()
+        logger.info(node.address, "🎓 Training done.")
 
         # Add model to the state
-        state.add_model(learner.get_model(), source=state.addr)
+        node.get_network_state().add_model(node.get_learner().get_model(), source=node.address)

@@ -20,7 +20,7 @@
 from typing import Type, Union
 
 from p2pfl.management.logger import logger
-from p2pfl.node_state import NodeState
+from p2pfl.node_state import LocalNodeState
 
 
 class Stage:
@@ -38,7 +38,7 @@ class EarlyStopException(Exception):
     pass
 
 
-def check_early_stop(state: NodeState, raise_exception: bool = True) -> bool:
+def check_early_stop(state: LocalNodeState, raise_exception: bool = True) -> bool:
     """
     Check if early stopping is required.
 

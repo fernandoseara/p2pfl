@@ -28,37 +28,30 @@ from p2pfl.management.logger import logger
 from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.learning.aggregators.aggregator import Aggregator
-    from p2pfl.learning.frameworks.learner import Learner
-    from p2pfl.node_state import NodeState
-
+    from p2pfl.node import Node
 
 class GossipPartialModelStage(Stage):
     """GossipPartialModel stage."""
 
     @staticmethod
     async def execute(
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        learner: Learner,
-        aggregator: Aggregator
+        node: Node,
+        candidates: list[str]
         ) -> None:
         """Execute the stage."""
         try:
-            await GossipPartialModelStage.__gossip_model_aggregation(state, communication_protocol, aggregator)
+            await GossipPartialModelStage.__gossip_model_aggregation(node=node, candidates=candidates)
 
             # Set aggregated model
-            agg_model = aggregator.aggregate(state.models)
-            learner.set_model(agg_model)
+            agg_model = node.get_aggregator().aggregate(node.get_local_state().models)
+            node.get_learner().set_model(agg_model)
         except EarlyStopException:
             return None
 
     @staticmethod
     async def __gossip_model_aggregation(
-        candidates,
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
+        node: Node,
+        candidates: list[str],
     ) -> None:
         """
         Gossip model aggregation.
@@ -70,30 +63,29 @@ class GossipPartialModelStage(Stage):
             trainset won't receive the aggregation).
         """
 
-        def model_fn(node: str) -> Any:
+        def model_fn(n: str) -> Any:
             try:
-                model = state.models[node]
+                model = node.get_network_state().get_model(n)
             except NoModelsToAggregateError:
-                logger.info(state.addr, f"❔ No models to aggregate for {node}.")
+                logger.info(node.address, f"❔ No models to aggregate for {node}.")
                 return None
-            if state.round is None:
-                raise Exception("Round not initialized.")
-            return communication_protocol.build_weights(
+
+            return node.get_communication_protocol().build_weights(
                 PartialModelCommand.get_name(),
-                state.round,
+                node.get_local_state().get_experiment().round,
                 model.encode_parameters(),
                 model.get_contributors(),
                 model.get_num_samples(),
             )
 
         # Gossip to eligible neighbors
-        logger.debug(state.addr, f"📡 Candidates to gossip to: {candidates}")
+        logger.debug(node.address, f"📡 Candidates to gossip to: {candidates}")
 
         for neighbor in candidates:
             payload = model_fn(neighbor)
             try:
-                logger.debug(state.addr, f"🗣️ Sending model to {neighbor}")
-                await communication_protocol.send(neighbor, payload, temporal_connection=True)
-                logger.debug(state.addr, f"✅ Sent model to {neighbor}")
+                logger.debug(node.address, f"🗣️ Sending model to {neighbor}")
+                await node.get_communication_protocol().send(neighbor, payload, temporal_connection=True)
+                logger.debug(node.address, f"✅ Sent model to {neighbor}")
             except Exception as e:
-                logger.warning(state.addr, f"⚠️ Failed to send model to {neighbor}: {e}")
+                logger.warning(node.address, f"⚠️ Failed to send model to {neighbor}: {e}")

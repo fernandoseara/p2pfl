@@ -19,20 +19,14 @@
 
 from __future__ import annotations
 
-import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from p2pfl.communication.commands.message.model_initialized_command import ModelInitializedCommand
 from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
-from p2pfl.communication.commands.weights.init_model_command import InitModelCommand
 from p2pfl.management.logger import logger
-from p2pfl.settings import Settings
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
-    from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
-    from p2pfl.learning.frameworks.learner import Learner
-    from p2pfl.node_state import NodeState
+    from p2pfl.node import Node
 
 
 class BroadcastStartLearningStage(Stage):
@@ -40,21 +34,16 @@ class BroadcastStartLearningStage(Stage):
 
     @staticmethod
     async def execute(
-        state: NodeState,
-        communication_protocol: CommunicationProtocol,
-        experiment_name: str,
-        total_rounds: int,
-        epochs: int,
-        trainset_size: int,
+        node: Node
         ) -> None:
         """Execute the stage."""
-        logger.info(state.addr, "🚀 Broadcasting initial start learning...")
-        await communication_protocol.broadcast(
-            communication_protocol.build_msg(
+        logger.info(node.address, "🚀 Broadcasting initial start learning...")
+        await node.get_communication_protocol().broadcast(
+            node.get_communication_protocol().build_msg(
                 StartLearningCommand.get_name(),
-                [str(total_rounds),
-                 str(epochs),
-                 str(trainset_size),
-                 experiment_name]
+                [str(node.get_local_state().get_experiment().total_rounds),
+                 str(node.get_local_state().get_experiment().epochs),
+                 str(node.get_local_state().get_experiment().trainset_size),
+                 node.get_local_state().exp_name]
             )
         )

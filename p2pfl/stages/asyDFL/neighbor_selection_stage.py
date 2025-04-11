@@ -30,7 +30,7 @@ from p2pfl.learning.aggregators.aggregator import Aggregator
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.logger import logger
-from p2pfl.node_state import NodeState
+from p2pfl.node_state import LocalNodeState
 from p2pfl.settings import Settings
 from p2pfl.stages.asyDFL.stage_factory import AsyDFLStageFactory
 from p2pfl.stages.stage import Stage, check_early_stop
@@ -46,7 +46,7 @@ class NeighborSelectionStage(Stage):
 
     @staticmethod
     def execute(
-        state: Optional[NodeState] = None, communication_protocol: Optional[CommunicationProtocol] = None,
+        state: Optional[LocalNodeState] = None, communication_protocol: Optional[CommunicationProtocol] = None,
         learner: Optional[Learner] = None,
         aggregator: Optional[Aggregator] = None,
         **kwargs
@@ -173,7 +173,7 @@ class NeighborSelectionStage(Stage):
         return min(priority, 1.0)  # Ensure priority does not exceed 1
 
     @staticmethod
-    def __send_local_iteration_index(state: NodeState, communication_protocol: CommunicationProtocol, neighbor: str, index: int) -> None:
+    def __send_local_iteration_index(state: LocalNodeState, communication_protocol: CommunicationProtocol, neighbor: str, index: int) -> None:
         """
         Send the local iteration index to the neighbors.
 
@@ -193,7 +193,7 @@ class NeighborSelectionStage(Stage):
         )
 
     @staticmethod
-    def __send_model(state: NodeState, communication_protocol: CommunicationProtocol, neighbor: str, model: P2PFLModel) -> None:
+    def __send_model(state: LocalNodeState, communication_protocol: CommunicationProtocol, neighbor: str, model: P2PFLModel) -> None:
         """
         Send the local iteration index to the neighbors.
 
@@ -216,7 +216,7 @@ class NeighborSelectionStage(Stage):
         )
 
     @staticmethod
-    def __send_push_sum_weight(state: NodeState, communication_protocol: CommunicationProtocol, neighbor: str, push_sum_weight: float) -> None:
+    def __send_push_sum_weight(state: LocalNodeState, communication_protocol: CommunicationProtocol, neighbor: str, push_sum_weight: float) -> None:
         """
         Send the local iteration index to the neighbors.
 
