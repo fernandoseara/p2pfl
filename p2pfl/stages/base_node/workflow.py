@@ -61,16 +61,14 @@ class BasicDFLWorkflow(TrainingWorkflow):
         # Define states and events
         states = [{'name': "waiting_for_training_start"},
             {'name': "starting_training"},
-            {'name': "gossiping_initial_model"},
-            {'name': "initializing_model"},
-            {'name': "voting"},
+            {'name': "waiting_initial_model"},
             {'name': "waiting_voting", 'timeout':Settings.training.VOTE_TIMEOUT, 'on_timeout':"voting_timeout"},
+            {'name': 'voting_finished'},
             {'name': "evaluating"},
             {'name': "training"},
-            {'name': "gossiping_partial_model"},
-            {'name': "aggregating"},
-            {'name': "waiting_for_aggregation",'timeout':Settings.training.AGGREGATION_TIMEOUT, 'on_timeout':"aggregation_timeout"},
-            {'name': "gossiping_full_model"},
+            {'name': "waiting_for_partial_aggregation", 'timeout':Settings.training.AGGREGATION_TIMEOUT, 'on_timeout':"aggregation_timeout"},
+            {'name': 'waiting_for_full_aggregation'},
+            {'name': "aggregation_finished"},
             {'name': "round_finished"},
             {'name': "training_finished", 'final':True}
         ]
@@ -78,25 +76,31 @@ class BasicDFLWorkflow(TrainingWorkflow):
         transitions = [
             {'trigger': 'send_starting_learning', 'source': 'waiting_for_training_start', 'dest': None, 'after': 'broadcast_start_learning'},
             {'trigger': 'start_learning', 'source': 'waiting_for_training_start', 'dest': 'starting_training'},
-            {'trigger': 'gossip', 'source': 'starting_training', 'dest': 'gossiping_initial_model', 'prepare': ['get_initial_candidates'], 'conditions': 'candidate_exists'},
-            
-            {'trigger': 'finish_voting', 'source': 'gossiping_initial_model', 'dest': 'initializing_model'},
-            {'trigger': 'vote', 'source': 'waiting_voting', 'dest': 'aggregating_voting', 'conditions': 'is_all_votes_received'},
-            {'trigger': 'vote', 'source': 'waiting_voting', 'dest': None, 'after': 'save_votes'},
-            {'trigger': 'voting_timeout', 'source': 'waiting_voting', 'dest': 'aggregating_voting'},
-            {'trigger': 'train', 'source': 'aggregating_voting', 'dest': 'evaluating',  'conditions': 'in_train_set'},
-            {'trigger': 'train', 'source': 'aggregating_voting', 'dest': 'aggregating', 'conditions': '!in_train_set'},
-            {'trigger': 'train', 'source': 'evaluating', 'dest': 'training'},
-            
-            {'trigger': 'gossip', 'source': 'gossiping_partial_model', 'dest': None,  'prepare': ['get_partial_gossiping_candidates'], 'conditions': 'candidate_exists'},
-            {'trigger': 'gossip', 'source': 'training', 'dest': 'gossiping_partial_model'},
+            {'trigger': 'gossip', 'source': 'starting_training', 'dest': 'waiting_initial_model', 'prepare': ['get_initial_gossipping_candidates']},
 
-            {'trigger': 'aggregate', 'source': 'waiting_for_aggregation', 'dest': None, 'conditions': 'is_missing_models', 'after': 'save_aggregation'},
-            {'trigger': 'aggregate', 'source': 'waiting_for_aggregation', 'dest': 'gossiping_full_model'},
-            {'trigger': 'aggregation_timeout', 'source': 'waiting_for_aggregation', 'dest': 'gossiping_full_model'},
+            {'trigger': 'initialize_model', 'source': 'waiting_initial_model', 'dest': 'initializing_model'},
+        
+            {'trigger': 'wait_voting', 'source': 'initializing_model', 'dest': 'waiting_voting'},
+            {'trigger': 'vote', 'source': 'waiting_voting', 'dest': 'voting_finished', 'conditions': 'is_all_votes_received'},
+            {'trigger': 'vote', 'source': 'waiting_voting', 'dest': None, 'after': 'save_votes'},
+            {'trigger': 'voting_timeout', 'source': 'waiting_voting', 'dest': 'voting_finished'},
             
-            {'trigger': 'gossip', 'source': 'gossiping_full_model', 'dest': None,  'prepare': ['get_full_gossiping_candidates'], 'conditions': 'candidate_exists'},
-            {'trigger': 'finish_round', 'source': 'gossiping_full_model', 'dest': 'round_finished'},
+            # ----- 
+            {'trigger': 'train', 'source': 'voting_finished', 'dest': 'evaluating',  'conditions': 'in_train_set'},
+            {'trigger': 'train', 'source': 'voting_finished', 'dest': 'waiting_for_full_aggregation', 'conditions': '!in_train_set'},
+            {'trigger': 'train', 'source': 'evaluating', 'dest': 'training'},
+
+            {'trigger': 'gossip', 'source': 'training', 'dest': 'waiting_for_partial_aggregation', 'prepare': ['get_partial_gossipping_candidates']},
+            
+            {'trigger': 'aggregate', 'source': 'waiting_for_partial_aggregation', 'dest': None, 'conditions': 'is_missing_models', 'after': 'save_aggregation'},
+            {'trigger': 'aggregate', 'source': 'waiting_for_partial_aggregation', 'dest': 'aggregation_finished'},
+            {'trigger': 'aggregation_timeout', 'source': 'waiting_for_partial_aggregation', 'dest': 'aggregation_finished'},
+            {'trigger': 'gossip', 'source': ''},
+
+            {'trigger': 'full_aggregated_model_received', 'source': 'waiting_for_partial_aggregation', 'dest': 'aggregation_finished'},
+            
+            {'trigger': 'gossip', 'source': 'aggregation_finished', 'dest': None,  'prepare': ['get_full_gossipping_candidates']},
+            {'trigger': 'finish_round', 'source': 'aggregation_finished', 'dest': 'round_finished'},
             {'trigger': 'step', 'source': 'round_finished', 'dest': 'voting', 'conditions': '!is_total_rounds_reached'},
             {'trigger': 'step', 'source': 'round_finished', 'dest': 'training_finished', 'conditions': 'is_total_rounds_reached'}
         ]
@@ -135,25 +139,36 @@ class BasicDFLWorkflow(TrainingWorkflow):
         await self.gossip()
 
 
-    async def on_enter_initial_gossiping(self):
+    async def on_enter_waiting_initial_model(self):
         """Start the training."""
-        await GossipInitialModelStage.execute(
-            candidates=self.candidates,
+        if self.candidates > 0:
+            await GossipInitialModelStage.execute(
+                candidates=self.candidates,
+                node=self.node,
+            )
+
+    async def on_enter_initializing_model(self):
+        """Initialize model."""
+        await InitializeModelStage.execute(
             node=self.node,
         )
+        await self.wait_voting()
 
-    async def on_enter_voting(self):
+    async def on_enter_waiting_voting(self):
         """Vote for the train set."""
         await VoteTrainSetStage.execute(
             node=self.node,
         )
-        await self.waiting_voting()
 
     async def on_exit_waiting_voting(self):
         """Aggregate the votes."""
         await AggregatingVoteTrainSetStage.execute(
             node=self.node,
         )
+
+    async def on_enter_voting_finished(self):
+        """Finish the voting."""
+        await self.train()
 
     async def on_enter_evaluating(self):
         """Evaluate the model."""
@@ -169,21 +184,25 @@ class BasicDFLWorkflow(TrainingWorkflow):
         )
         await self.gossip()
 
-    async def on_enter_gossipping_partial_model(self):
-        """Train the model."""
+    async def on_enter_waiting_for_partial_aggregation(self):
+        """Gossip the partial model."""
         await GossipPartialModelStage.execute(
             candidates=self.candidates,
             node=self.node,
         )
-        await self.aggregate()
 
-    async def on_exit_waiting_for_aggregation(self):
+    async def on_exit_waiting_for_partial_aggregation(self):
         """Finish the aggregation."""
         await AggregationFinishedStage.execute(
             node=self.node,
         )
+        await self.gossip()
 
-    async def on_enter_gossiping_full_model(self):
+    async def on_enter_aggregation_finished(self):
+        """Finish the aggregation."""
+        await self.gossip()
+
+    async def on_enter_gossipping_full_model(self):
         """Gossip the model."""
         await GossipFinalModelStage.execute(
             node=self.node,
@@ -247,20 +266,23 @@ class BasicDFLWorkflow(TrainingWorkflow):
     def get_initial_candidates(self):
         """Get the candidates for the initial gossiping."""
         def candidate_condition(node: str) -> bool:
-            return node not in self.node.local_state.nei_status
+            peer_state = self.node.get_network_state().get_peer_state(node)
+            return peer_state.round_number < 0 if peer_state else False
 
         self.candidates = [n for n in self.node.communication_protocol.get_neighbors(only_direct=True) if candidate_condition(n)]
         logger.debug(self.node.local_state.addr, f"📡 Candidates to gossip to: {self.candidates}")
 
-    def get_partial_gossiping_candidates(self):
+    def get_partial_gossipping_candidates(self):
         """Get the candidates from the train set to gossip the partial model."""
         def candidate_condition(node: str) -> bool:
-            return set(self.node.local_state.train_set) - set(self.node.local_state.models[node].get_contributors())
-        candidates = set(self.node.local_state.train_set) - {self.node.local_state.addr}
+            local_state = self.node.get_local_state()
+            network_state = self.node.get_network_state()
+            return set(local_state.train_set) - set(network_state.get_model(node).get_contributors())
+        candidates = set(self.node.get_local_state().train_set) - set(self.node.address)
         self.candidates = [n for n in candidates if len(candidate_condition(n)) != 0]
-        logger.debug(self.node.local_state.addr, f"📡 Candidates to gossip to: {self.candidates}")
+        logger.debug(self.node.address, f"📡 Candidates to gossip to: {self.candidates}")
 
-    def get_full_gossiping_candidates(self):
+    def get_full_gossipping_candidates(self):
         """Get the candidates from the train set to gossip the full model."""
         fixed_round = self.node.local_state.round
         def candidate_condition(node: str) -> bool:
@@ -272,9 +294,9 @@ class BasicDFLWorkflow(TrainingWorkflow):
     ##############
     # CONDITIONS #
     ##############
-    def candidate_exists(self):
-        """Check if there are candidates."""
-        return len(self.candidates) > 0
+    # def candidate_exists(self):
+    #     """Check if there are candidates."""
+    #     return len(self.candidates) > 0
 
     def is_all_votes_received(self):
         """Check if all votes from neis have been received."""

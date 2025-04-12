@@ -57,9 +57,6 @@ class LocalNodeState: # A
         # Actual experiment
         self.experiment: Experiment | None = None
 
-        # Models
-        self.models: dict[P2PFLModel] = {}
-
 
     @property
     def round(self) -> int | None:
@@ -75,17 +72,6 @@ class LocalNodeState: # A
     def exp_name(self) -> str | None:
         """Get the actual experiment name."""
         return self.experiment.exp_name if self.experiment is not None else None
-
-    def add_model(self, source: str, model: P2PFLModel):
-        """
-        Add a model to the node state.
-
-        Args:
-            source: The source of the model.
-            model: The model to add.
-
-        """
-        self.models[source] = model
 
     def get_experiment(self) -> Experiment | None:
         """Get the actual experiment."""
