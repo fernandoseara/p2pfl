@@ -153,9 +153,9 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         """
         await self._neighbors.remove(nei, disconnect_msg=disconnect_msg)
 
-    def build_msg(self, cmd: str, args: Optional[list[str]] = None, round: Optional[int] = None) -> node_pb2.RootMessage:
+    def _build_node_pb2_message(self, cmd: str, args: Optional[list[str]] = None, round: Optional[int] = None) -> node_pb2.Message:
         """
-        Build a RootMessage to send to the neighbors.
+        Build a Message to send to the neighbors.
 
         Args:
             cmd: Command of the message.
@@ -163,8 +163,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
             round: Round of the message.
 
         Returns:
-            RootMessage to send.
-
+            Message to send.
         """
         if round is None:
             round = -1
@@ -173,15 +172,34 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         hs = hash(str(cmd) + str(args) + str(datetime.now()) + str(random.randint(0, 100000)))
         args = [str(a) for a in args]
 
-        return node_pb2.RootMessage(
-            source=self.addr,
-            round=round,
-            cmd=cmd,
-            message=node_pb2.Message(
+        return node_pb2.Message(
                 ttl=Settings.gossip.TTL,
                 hash=hs,
                 args=args,
-            ),
+            )
+
+    def build_msg(self, command_name: str, content: Optional[list[Any]] = None, round: Optional[int] = None) -> node_pb2.RootMessage:
+        """
+        Build a RootMessage to send to the neighbors.
+
+        Args:
+            command_name: Command of the message.
+            content: Content of the message.
+            round: Round of the message.
+
+        Returns:
+            RootMessage to send.
+
+        """
+        # Convert content to string
+        if content is not None:
+            content = [str(item) for item in content]
+
+        return node_pb2.RootMessage(
+            source=self.addr,
+            round=round,
+            cmd=command_name,
+            message=self._build_node_pb2_message(command_name, content, round),
         )
 
     def build_weights(

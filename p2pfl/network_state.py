@@ -42,6 +42,18 @@ class NetworkState:
         # peer_id -> PeerNodeState
         self._peer_states: dict[str, PeerNodeState] = {}
 
+    def add_peer(self, peer_id: str):
+        """Add a new peer to the network state."""
+        if peer_id not in self._peer_states:
+            self._peer_states[peer_id] = PeerNodeState(
+                round_number=0,
+                model_updated=None,
+                aggregated_from=[],
+                train_set_votes={},
+            )
+        else:
+            raise ValueError(f"Peer ID {peer_id} already exists in network state.")
+
     def add_peer_state(self, peer_id: str, state: PeerNodeState):
         """Add or update a peer's state."""
         self._peer_states[peer_id] = state
@@ -50,7 +62,6 @@ class NetworkState:
         """Add a model to a peer's state."""
         if source in self._peer_states:
             self._peer_states[source].model_updated = model
-            self._peer_states[source].aggregated_from.append(source)
         else:
             raise ValueError(f"Peer ID {source} not found in network state.")
 
@@ -60,6 +71,13 @@ class NetworkState:
             if train_set_id not in self._peer_states[peer_id].train_set_votes:
                 self._peer_states[peer_id].train_set_votes[train_set_id] = 0
             self._peer_states[peer_id].train_set_votes[train_set_id] += vote
+        else:
+            raise ValueError(f"Peer ID {peer_id} not found in network state.")
+
+    def add_aggregated_from(self, peer_id: str, source: str):
+        """Add a source to the aggregated_from list of a peer's state."""
+        if peer_id in self._peer_states:
+            self._peer_states[peer_id].aggregated_from.append(source)
         else:
             raise ValueError(f"Peer ID {peer_id} not found in network state.")
 
@@ -79,7 +97,7 @@ class NetworkState:
     def clear_aggregated_from(self, peer_id):
         """Reset the aggregated model from for all peers' states."""
         if peer_id in self._peer_states:
-            self._peer_states[peer_id].aggregated_from = None
+            self._peer_states[peer_id].aggregated_from.clear()
         else:
             raise ValueError(f"Peer ID {peer_id} not found in network state.")
 
@@ -118,18 +136,44 @@ class NetworkState:
         else:
             raise ValueError(f"Peer ID {peer_id} not found in network state.")
 
+    def get_votes(self, peer_id: str) -> dict[str, int] | None:
+        """Retrieve all votes for a specific peer."""
+        state = self.get_peer_state(peer_id)
+        return state.train_set_votes if state else None
+
+    def get_round(self, peer_id: str) -> int | None:
+        """Retrieve the peer round number."""
+        state = self.get_peer_state(peer_id)
+        return state.round_number if state else None
 
     def get_all_models(self) -> list[P2PFLModel]:
         """Get all models currently stored."""
         return [state.model_updated for state in self._peer_states.values()]
 
+    def get_all_contributors(self) -> list[str]:
+        """Get all contributors for the models."""
+        contributors = []
+        for state in self._peer_states.values():
+            if state.model_updated:
+                contributors.extend(state.model_updated.get_contributors())
+        return list(set(contributors)) # Remove duplicates
+
     def get_all_votes(self) -> dict[str, dict[str, int]]:
         """Return all votes by peer, per training set."""
         return {peer_id: state.train_set_votes for peer_id, state in self._peer_states.items()}
 
+    def get_all_rounds(self) -> dict[str, int]:
+        """Return all rounds by peer."""
+        return {peer_id: state.round_number for peer_id, state in self._peer_states.items()}
+
+    def get_all_peers(self) -> dict[str, PeerNodeState]:
+        """Return all peers and their states."""
+        return self._peer_states
+
     def get_aggregation_sources(self, peer_id: str) -> list[str] | None:
         """List addresses that contributed to a peer's aggregated model."""
         state = self.get_peer_state(peer_id)
+        print("HEY",state.aggregated_from)
         return state.aggregated_from if state else None
 
     def get_peers_by_round(self, round_number: int) -> list[str]:

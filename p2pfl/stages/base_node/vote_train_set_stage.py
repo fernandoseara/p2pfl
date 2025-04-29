@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 from p2pfl.communication.commands.message.vote_train_set_command import VoteTrainSetCommand
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
-from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
+from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
@@ -53,18 +53,24 @@ class VoteTrainSetStage(Stage):
         samples = min(state.get_experiment().trainset_size, len(candidates))
         nodes_voted = generator.sample(candidates, samples)
         weights = [math.floor(generator.randint(0, 1000) / (i + 1)) for i in range(samples)]
-        votes = list(zip(nodes_voted, weights))
 
-        # Adding votes # TODO
-        node.get_network_state().add_vote(node.address, dict(votes))
+        # Add self vote (send it to itself)
+        self_vote = list(zip(nodes_voted, weights))
+        logger.debug(node.address, f"🪞🗳️ Self Vote: {self_vote}")
+        await node.learning_workflow.vote(node.address, self_vote)
+
+        # Convert self vote to a plain list
+        votes_list = []
+        for peer_voted, weight in self_vote:
+            votes_list.append(peer_voted)
+            votes_list.append(weight)
 
         # Send and wait for votes
         logger.info(node.address, "🗳️ Sending train set vote.")
-        logger.debug(node.address, f"🪞🗳️ Self Vote: {votes}")
         await communication_protocol.broadcast(
             communication_protocol.build_msg(
                 VoteTrainSetCommand.get_name(),
-                list(map(str, list(sum(votes, ())))),
+                votes_list,
                 round=state.round,
             )
         )

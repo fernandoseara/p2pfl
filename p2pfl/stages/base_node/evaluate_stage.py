@@ -48,7 +48,8 @@ class EvaluateStage(Stage):
         node: Node
         ) -> None:
         logger.info(node.address, "🔬 Evaluating...")
-        results = await node.learner.evaluate()
+        results = node.learner.evaluate()
+        #results = await node.learner.evaluate()
         logger.info(node.address, f"📈 Evaluated. Results: {results}")
         # Send metrics
         if len(results) > 0:

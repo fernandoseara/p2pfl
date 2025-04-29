@@ -92,6 +92,16 @@ class VirtualNodeLearner(Learner):
         """
         return self.learner.indicate_aggregator(aggregator)
 
+    def get_epochs(self) -> int:
+        """
+        Get the number of epochs of the model.
+
+        Returns:
+            The number of epochs of the model.
+
+        """
+        return self.learner.get_epochs()
+
     def set_epochs(self, epochs: int) -> None:
         """
         Set the number of epochs of the model.

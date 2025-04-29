@@ -19,14 +19,11 @@
 
 from __future__ import annotations
 
-import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from p2pfl.communication.commands.message.model_initialized_command import ModelInitializedCommand
+from p2pfl.communication.commands.message.node_initialized_command import NodeInitializedCommand
 from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
-from p2pfl.communication.commands.weights.init_model_command import InitModelCommand
 from p2pfl.management.logger import logger
-from p2pfl.settings import Settings
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
@@ -46,26 +43,8 @@ class StartLearningStage(Stage):
         ) -> None:
         """Execute the stage."""
         state = node.get_local_state()
-        communication_protocol = node.get_communication_protocol()
         learner = node.get_learner()
 
-        logger.info(node.address, "🚀 Broadcasting start learning...")
-        await communication_protocol.broadcast(
-            communication_protocol.build_msg(
-                StartLearningCommand.get_name(),
-                [str(rounds),
-                 str(epochs),
-                 str(trainset_size),
-                 experiment_name]
-            )
-        )
-
-        # Init
+        node.get_network_state().add_peer(node.address)
         state.set_experiment(experiment_name, rounds, epochs, trainset_size)
         learner.set_epochs(state.get_experiment().epochs)
-
-        # Wait and gossip model initialization
-        logger.info(node.address, "⏳ Waiting initialization.")
-
-        # Communicate Initialization
-        await communication_protocol.broadcast(communication_protocol.build_msg(ModelInitializedCommand.get_name()))

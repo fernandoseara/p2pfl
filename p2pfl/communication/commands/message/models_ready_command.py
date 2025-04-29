@@ -55,14 +55,11 @@ class ModelsReadyCommand(Command):
         ########################################################
         # try to improve clarity in message moment check
         ########################################################
-        if self._node.local_state.round is not None:
-            if round in [self._node.local_state.round - 1, self._node.local_state.round]:
-                self._node.local_state.nei_status[source] = self._node.local_state.round
-            else:
-                # Ignored
-                logger.error(
-                    self._node.local_state.addr,
-                    f"Models ready from {source} in a late round. Ignored. {round} " + f"!= {self._node.local_state.round} / {self._node.local_state.round-1}",
-                )
+        if round in [self._node.local_state.round - 1, self._node.local_state.round]:
+            self._node.get_network_state().update_round(source, self._node.local_state.round)
         else:
-            logger.warning(self._node.local_state.addr, "Models ready received when learning is not running")
+            # Ignored
+            logger.error(
+                self._node.local_state.addr,
+                f"Models ready from {source} in a late round. Ignored. {round} " + f"!= {self._node.local_state.round} / {self._node.local_state.round-1}",
+                )

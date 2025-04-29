@@ -40,11 +40,15 @@ class GossipPartialModelStage(Stage):
         ) -> None:
         """Execute the stage."""
         try:
+            # Communicate Aggregation
+            await node.get_communication_protocol().broadcast(
+                node.get_communication_protocol().build_msg(
+                    ModelsAggregatedCommand.get_name(),
+                    node.get_network_state().get_all_contributors(),
+                    round=node.get_local_state().round,
+                )
+            )
             await GossipPartialModelStage.__gossip_model_aggregation(node=node, candidates=candidates)
-
-            # Set aggregated model
-            agg_model = node.get_aggregator().aggregate(node.get_local_state().models)
-            node.get_learner().set_model(agg_model)
         except EarlyStopException:
             return None
 
@@ -64,9 +68,9 @@ class GossipPartialModelStage(Stage):
         """
 
         def model_fn(n: str) -> Any:
-            try:
-                model = node.get_network_state().get_model(n)
-            except NoModelsToAggregateError:
+            model = node.get_network_state().get_model(n)
+
+            if model is None:
                 logger.info(node.address, f"❔ No models to aggregate for {node}.")
                 return None
 

@@ -130,6 +130,17 @@ class Learner(ABC, NodeComponent):
             self.callbacks = self.callbacks + CallbackFactory.create_callbacks(framework=self.get_framework(), aggregator=aggregator)
 
     @allow_no_addr_check
+    def get_epochs(self) -> int:
+        """
+        Get the number of epochs of the model.
+
+        Returns:
+            The number of epochs of the model.
+
+        """
+        return self.epochs
+
+    @allow_no_addr_check
     def set_epochs(self, epochs: int) -> None:
         """
         Set the number of epochs of the model.

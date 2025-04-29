@@ -17,6 +17,7 @@
 
 """P2PFL Node."""
 
+import asyncio
 import contextlib
 import os
 import random
@@ -389,11 +390,26 @@ class Node:
     @property
     def address(self) -> str:
         """The node address."""
-        return self.state.addr
+        return self.get_local_state().addr
 
     ###############################################
     #         Network Learning Management         #
     ###############################################
+    async def run_workflow_loop(self):
+        """
+        Continuously checks and steps through the workflow.
+        """
+        logger.info(self.address, "🚀 Workflow loop started.")
+        try:
+            while not self.learning_workflow.finished:
+                stepped = await self.learning_workflow.next_stage()
+                if not stepped:
+                    await asyncio.sleep(1)  # Prevent tight loop on no transition
+        except asyncio.CancelledError:
+            logger.info(self.address, "⛔ Workflow loop cancelled.")
+        except Exception as e:
+            logger.error(self.address, f"🔥 Unexpected error in workflow loop: {type(e).__name__}: {e}")
+
     async def set_start_learning(self, rounds: int = 1, epochs: int = 1, trainset_size: int = 4, experiment_name="experiment") -> str:
         """
         Start the learning process in the entire network.
@@ -418,7 +434,14 @@ class Node:
         experiment_name = f"{experiment_name}-{time.time()}"
 
         try:
-            await self.learning_workflow.send_starting_learning(experiment_name, rounds, epochs, trainset_size)
+            await self.learning_workflow.start_learning(experiment_name=experiment_name,
+                                                        rounds=rounds,
+                                                        epochs=epochs,
+                                                        trainset_size=trainset_size
+                                                        )
+
+            # Start automatic workflow loop
+            #self._workflow_task = asyncio.create_task(self.run_workflow_loop())
 
             return experiment_name
 

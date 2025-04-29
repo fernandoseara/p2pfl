@@ -58,15 +58,25 @@ class VoteTrainSetCommand(Command):
         ########################################################
         if round in [self._node.local_state.round, self._node.local_state.round + 1]:
             # build vote dict
-            votes = args
-            tmp_votes = {}
-            for i in range(0, len(votes), 2):
-                tmp_votes[votes[i]] = int(votes[i + 1])
+            votes = VoteTrainSetCommand.parse_votes_list(args)
 
-            self._node.learning_workflow.vote(source, tmp_votes)
+            await self._node.learning_workflow.vote(source, votes)
 
         else:
             logger.error(
                 self._node.local_state.addr,
                 f"Vote received in a late round. Ignored. {round} != {self._node.local_state.round} / {self._node.local_state.round+1}",
             )
+
+    @staticmethod
+    def parse_votes_list(votes_list: list[str]) -> list[tuple[str, int]]:
+        """Parse a flat list [peer_voted, weight, peer_voted, weight, ...] into (peer_voted, weight) tuples."""
+        if len(votes_list) % 2 != 0:
+            raise ValueError("Votes list must contain an even number of elements (peer, weight pairs).")
+
+        parsed_votes = []
+        for i in range(0, len(votes_list), 2):
+            peer_voted = votes_list[i]
+            weight = int(votes_list[i + 1])
+            parsed_votes.append((peer_voted, weight))
+        return parsed_votes

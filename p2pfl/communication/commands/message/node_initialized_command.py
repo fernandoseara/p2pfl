@@ -16,11 +16,13 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""ModelsAggregated command."""
+"""NodeInitialized command."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from transitions import MachineError
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
@@ -29,34 +31,33 @@ if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.node import Node
 
 
-class ModelsAggregatedCommand(Command):
-    """ModelsAggregated command."""
+class NodeInitializedCommand(Command):
+    """NodeInitialized command."""
 
     def __init__(self, node: Node) -> None:
         """Initialize the command."""
+        super().__init__()
         self._node = node
 
     @staticmethod
     def get_name() -> str:
         """Get the command name."""
-        return "models_aggregated"
+        return "node_initialized"
 
-    async def execute(self, source: str, round: int, *args, **kwargs) -> None:
+    async def execute(self, source: str, round: int, **kwargs) -> None:
         """
         Execute the command.
 
         Args:
             source: The source of the command.
             round: The round of the command.
-            *args: List of models that contribute to the aggregated model.
             **kwargs: The command keyword arguments.
 
         """
-        if round == self._node.local_state.round:
-            for aggregated_model in list(args):
-                self._node.get_network_state().add_aggregated_from(source, aggregated_model)
-        else:
-            logger.debug(
-                self._node.local_state.addr,
-                f"Models Aggregated message from {source} in a late round. Ignored. {round} != {self._node.local_state.round}",
+        try:
+            await self._node.learning_workflow.node_started(
+                source
             )
+
+        except MachineError as e:
+            logger.debug(self._node.address, f"Unexpected message: {e}")

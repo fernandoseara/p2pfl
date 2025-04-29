@@ -50,7 +50,7 @@ class InitModelCommand(Command):
     ) -> None:
         """Execute the command."""
         if weights is None:
-            logger.error(self.__node.local_state.addr, "Invalid InitModelCommand message")
+            logger.error(self.__node.address, "Invalid InitModelCommand message")
             return
 
-        await self.__node.learning_workflow.initialize_model(round, weights)
+        await self.__node.learning_workflow.initial_model_received(source, weights)

@@ -22,8 +22,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from transitions import MachineError
-
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
 
@@ -69,7 +67,10 @@ class StartLearningCommand(Command):
         """
         if learning_rounds is None or learning_epochs is None or trainset_size is None or experiment_name is None:
             raise ValueError("Learning rounds and epochs are required")
-        try:
-            await self.__node.learning_workflow.start_learning(experiment_name, int(learning_rounds), int(learning_epochs), int(trainset_size))
-        except MachineError as e:
-            logger.debug(self.__node.local_state.addr, f"Learning already started: {e}")
+
+        await self.__node.learning_workflow.peer_learning_initiated(experiment_name,
+                                                                    rounds=int(learning_rounds),
+                                                                    epochs=int(learning_epochs),
+                                                                    trainset_size=int(trainset_size),
+                                                                    source=source)
+

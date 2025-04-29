@@ -19,10 +19,12 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
-from transitions.extensions import AsyncGraphMachine
+from transitions.extensions import HierarchicalAsyncGraphMachine
 from transitions.extensions.asyncio import AsyncTimeout
+from transitions.extensions.nesting import NestedState
 from transitions.extensions.states import add_state_features
 
 from p2pfl.management.logger import logger
@@ -30,9 +32,14 @@ from p2pfl.management.logger import logger
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
+NestedState.separator = '↦'
+
 @add_state_features(AsyncTimeout)
-class TimeoutMachine(AsyncGraphMachine):
+class TimeoutMachine(HierarchicalAsyncGraphMachine):
+    """State machine with timeout support."""
+
     pass
+
 
 class TrainingWorkflow(TimeoutMachine):
     """Class to run a workflow of stages."""
@@ -45,7 +52,8 @@ class TrainingWorkflow(TimeoutMachine):
 
     def __init__(self, node: Node, states=None, transitions=None, model=None, *args, **kwargs):
         """Initialize the workflow."""
-        self.history: list[str] = []
+        self.event_log: list[str] = []
+        self.state_log: list[str] = []
         self.node = node
         self.is_running: bool = False
 
@@ -63,9 +71,13 @@ class TrainingWorkflow(TimeoutMachine):
             model=model,
             initial='waiting_for_training_start',
             queued='model',
+            ignore_invalid_triggers=True,
+            finalize_event=self._log_trigger,
+            #on_final=partial(final_event_raised, 'TrainingWorkflow'),
+            #ignore_invalid_triggers=True
         )
 
-    # def on_transition(self, event_data, event: Event):
-    #     """Handle the transition event."""
-    #     logger.debug(self.node.state.addr, f"🏃 Running stage: {(event_data.transition.target.id)}")
-    #     self.history.append(event_data.transition.target.id)
+    def _log_trigger(self, *args, **kwargs):
+        logger.debug(self.node.address, f"🏃 Running stage: {(self.state)}")
+        #self.event_log.append(self.event)
+        self.state_log.append(self.state)

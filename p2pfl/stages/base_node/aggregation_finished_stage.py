@@ -34,12 +34,11 @@ class AggregationFinishedStage(Stage):
     @staticmethod
     async def execute(node: Node) -> None:
         """Execute the stage."""
-        # Get aggregated model
+        # Share that aggregation is done
         logger.debug(
             node.address,
             f"Broadcast aggregation done for round {node.get_local_state().get_experiment().round}",
         )
-        # Share that aggregation is done
         await node.get_communication_protocol().broadcast(
             node.get_communication_protocol.build_msg(ModelsReadyCommand.get_name(),
                                                     [],

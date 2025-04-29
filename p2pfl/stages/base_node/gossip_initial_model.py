@@ -39,25 +39,23 @@ class GossipInitialModelStage(Stage):
         """Execute the stage."""
         logger.info(node.address, "🗣️ Gossiping model initialization.")
         await GossipInitialModelStage.__gossip_model(
-            candidates,
-            node.get_local_state(),
-            node.get_communication_protocol(),
-            node.get_learner()
+            candidates=candidates,
+            node=node,
         )
 
     @staticmethod
     async def __gossip_model(
         candidates: list[str],
-        node: Node
+        node: Node,
     ) -> None:
         def model_fn(_: str) -> Any:
             if node.get_local_state().get_experiment().round is None:
                 raise Exception("Round not initialized.")
             encoded_model = node.get_learner().get_model().encode_parameters()
             return node.get_communication_protocol().build_weights(
-                InitModelCommand.get_name(), 
-                node.get_local_state().get_experiment().round, 
-                encoded_model
+                InitModelCommand.get_name(),
+                node.get_local_state().get_experiment().round,
+                encoded_model,
             )
 
         # Gossip to eligible neighbors

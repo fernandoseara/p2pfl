@@ -20,16 +20,15 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from typing import Dict, List, Optional
 
 from p2pfl.experiment import Experiment
 from p2pfl.management.logger import logger
 
 if TYPE_CHECKING:
-    from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
-    
+    pass
 
-class LocalNodeState: # A
+
+class LocalNodeState:
     """
     Class to store the main state of a learning node.
 
@@ -121,6 +120,5 @@ class LocalNodeState: # A
         return (
             f"NodeState(addr={self.addr}, status={self.status}, exp_name={self.exp_name}, "
             f"round={self.round}, total_rounds={self.total_rounds}, "
-            f"models={self.models}, nei_status={self.nei_status}, "
-            f"train_set={self.train_set}, train_set_votes={self.train_set_votes})"
+            f"train_set={self.train_set})"
         )

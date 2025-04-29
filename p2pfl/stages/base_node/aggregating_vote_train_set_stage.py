@@ -39,6 +39,7 @@ class AggregatingVoteTrainSetStage(Stage):
         # Aggregate votes
         node.get_local_state().train_set = AggregatingVoteTrainSetStage.__validate_train_set(
             await AggregatingVoteTrainSetStage.__aggregate_votes(node),
+            node,
         )
         logger.info(
             node.address,
@@ -50,9 +51,11 @@ class AggregatingVoteTrainSetStage(Stage):
 
     @staticmethod
     async def __aggregate_votes(node: Node) -> list[str]:
-        logger.debug(node.address, "⏳ Waiting other node votes.")
+        network_state = node.get_network_state()
+
+        # Get all votes
         results: dict[str, int] = {}
-        for node_vote in list(node.get_network_state().train_set_votes.values()):
+        for node_vote in list(network_state.get_all_votes().values()):
             for i in range(len(node_vote)):
                 k = list(node_vote.keys())[i]
                 v = list(node_vote.values())[i]
@@ -69,8 +72,8 @@ class AggregatingVoteTrainSetStage(Stage):
         top = min(len(results_ordered), node.get_local_state().experiment.trainset_size)
         results_ordered = results_ordered[0:top]
         # Clear votes
-        node.get_network_state().clear_all_votes()
-        logger.info(node.address, f"🔢 Computed {len(node.train_set_votes)} votes.")
+        network_state.clear_all_votes()
+        logger.info(node.address, f"🔢 Computed {len(network_state.get_all_votes())} votes.")
         return [i[0] for i in results_ordered]
 
 
