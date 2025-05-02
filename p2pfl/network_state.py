@@ -89,10 +89,15 @@ class NetworkState:
             raise ValueError(f"Peer ID {peer_id} not found in network state.")
 
     def reset_round(self, peer_id): 
-        """Reset the round number to 0 for all peers' states."""
+        """Reset the round number for a peer's state."""
         self.remove_model(peer_id=peer_id)
         self.clear_votes(peer_id=peer_id)
         self.clear_aggregated_from(peer_id=peer_id)
+
+    def reset_all_rounds(self):
+        """Reset the round number to 0 for all peers' states."""
+        for peer_id in self._peer_states:
+            self.reset_round(peer_id=peer_id)
 
     def clear_aggregated_from(self, peer_id):
         """Reset the aggregated model from for all peers' states."""
@@ -173,7 +178,6 @@ class NetworkState:
     def get_aggregation_sources(self, peer_id: str) -> list[str] | None:
         """List addresses that contributed to a peer's aggregated model."""
         state = self.get_peer_state(peer_id)
-        print("HEY",state.aggregated_from)
         return state.aggregated_from if state else None
 
     def get_peers_by_round(self, round_number: int) -> list[str]:

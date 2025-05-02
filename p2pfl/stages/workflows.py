@@ -32,38 +32,51 @@ from p2pfl.management.logger import logger
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
-NestedState.separator = '↦'
-
-@add_state_features(AsyncTimeout)
-class TimeoutMachine(HierarchicalAsyncGraphMachine):
-    """State machine with timeout support."""
-
-    pass
 
 
-class TrainingWorkflow(TimeoutMachine):
+
+def _log_trigger(self, *args, **kwargs):
+    """Log the trigger event."""
+    logger.debug(self.node.address, f"🏃 Running stage: {(self.state)}")
+    #self.event_log.append(self.event)
+    self.state_log.append(self.state)
+
+
+class TrainingWorkflow(object):
     """Class to run a workflow of stages."""
 
     @property
     def finished(self) -> bool:
-        """Return the name of the workflow."""
-        #return self.training_finished.is_active
-        return False
+        """
+        Check if the workflow is finished.
 
-    def __init__(self, node: Node, states=None, transitions=None, model=None, *args, **kwargs):
+        Returns:
+            bool: True if the workflow is finished, False otherwise.
+
+        """
+        return self.is_training_finished()
+
+    def __init__(self, node: Node, *args, **kwargs):
         """Initialize the workflow."""
         self.event_log: list[str] = []
         self.state_log: list[str] = []
         self.node = node
-        self.is_running: bool = False
 
-        states = [{'name': "waiting_for_training_start"},
-            {'name': "training_finished", 'final':True}
-        ] if states is None else states
+        training_workflow_states = 
+
+        states = [
+            {'name': "waiting_for_training_start"},
+            {'name': "training", 'parallel': [
+                {'name': 'workflow', 'initial': 'starting_training', 'children': training_workflow_states},
+                {'name': 'event_handler', 'initial': 'waiting_network_start', 'children': event_handler_states}
+            ]},
+            {'name': "training_finished", 'on_enter': 'on_enter_training_finished', 'final': True}
+        ]
 
         transitions = [
-            {'trigger': 'start_training', 'source': 'waiting_for_training_start', 'dest': 'training_finished'},
-        ] if transitions is None else transitions
+            {'trigger': 'start_learning', 'source': 'waiting_for_training_start', 'dest': 'training', 'after': 'set_model_initialized'},
+            {'trigger': 'peer_learning_initiated', 'source': 'waiting_for_training_start', 'dest': 'training'},
+        ]
 
         super().__init__(
             states=states,

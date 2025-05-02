@@ -352,6 +352,16 @@ class Node:
 
         """
         return self.learner
+    
+    def get_learning_workflow(self) -> TrainingWorkflow:
+        """
+        Get the learning workflow.
+
+        Returns:
+            The current learning workflow of the node.
+
+        """
+        return self.learning_workflow
 
     #######################
     #    State Getters    #

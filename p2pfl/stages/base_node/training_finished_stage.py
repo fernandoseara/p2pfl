@@ -42,7 +42,6 @@ class TrainingFinishedStage(Stage):
         node.get_local_state().clear()
         node.get_network_state().clear()
 
-        logger.info(node.address, "😋 Training finished!!")
         return None
 
     @staticmethod

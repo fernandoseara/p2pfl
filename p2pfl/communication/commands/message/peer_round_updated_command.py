@@ -16,7 +16,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""ModelsReady command."""
+"""PeerRoundUpdated command."""
 
 from __future__ import annotations
 
@@ -29,17 +29,18 @@ if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.node import Node
 
 
-class ModelsReadyCommand(Command):
-    """ModelsReady command."""
+class PeerRoundUpdatedCommand(Command):
+    """PeerRoundUpdated command."""
 
     def __init__(self, node: Node) -> None:
         """Initialize the command."""
+        super().__init__()
         self._node = node
 
     @staticmethod
     def get_name() -> str:
         """Get the command name."""
-        return "models_ready"
+        return "peer_round_updated"
 
     async def execute(self, source: str, round: int, **kwargs) -> None:
         """
@@ -51,15 +52,6 @@ class ModelsReadyCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        # revisar validación al igual que en VoteTrainSetCommand
-        ########################################################
-        # try to improve clarity in message moment check
-        ########################################################
-        if round in [self._node.local_state.round - 1, self._node.local_state.round]:
-            self._node.get_network_state().update_round(source, self._node.local_state.round)
-        else:
-            # Ignored
-            logger.error(
-                self._node.local_state.addr,
-                f"Models ready from {source} in a late round. Ignored. {round} " + f"!= {self._node.local_state.round} / {self._node.local_state.round-1}",
-                )
+        await self._node.learning_workflow.peer_round_updated(
+            source, round
+        )

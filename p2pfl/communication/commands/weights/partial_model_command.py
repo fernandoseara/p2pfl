@@ -64,8 +64,8 @@ class PartialModelCommand(Command):
         try:
             # Add model to aggregator
             model = self.__node.learner.get_model().build_copy(params=weights, num_samples=num_samples, contributors=list(contributors))
-            self.__node.get_network_state().add_model(model, source)
-            await self.__node.learning_workflow.aggregate(model)
+
+            await self.__node.learning_workflow.aggregate(model, source)
 
         except MachineError:
             logger.debug(self.__node.local_state.addr, "Invalid state.")

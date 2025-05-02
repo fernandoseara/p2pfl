@@ -21,8 +21,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from p2pfl.communication.commands.message.node_initialized_command import NodeInitializedCommand
-from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
 from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
@@ -45,6 +43,5 @@ class StartLearningStage(Stage):
         state = node.get_local_state()
         learner = node.get_learner()
 
-        node.get_network_state().add_peer(node.address)
         state.set_experiment(experiment_name, rounds, epochs, trainset_size)
         learner.set_epochs(state.get_experiment().epochs)

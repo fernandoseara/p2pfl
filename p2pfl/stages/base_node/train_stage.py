@@ -39,5 +39,5 @@ class TrainStage(Stage):
         #await node.get_learner().fit()
         logger.info(node.address, "🎓 Training done.")
 
-        # Add model to the state
-        node.get_network_state().add_model(node.get_learner().get_model(), source=node.address)
+        # Send aggregated model to the workflow
+        await node.get_learning_workflow().aggregate(node.get_learner().get_model(), node.address)

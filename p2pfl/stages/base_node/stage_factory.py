@@ -33,9 +33,9 @@ class SynDFLStageFactory(StageFactory):
 
             return StartLearningStage
         elif stage_name == "RoundFinishedStage":
-            from p2pfl.stages.base_node.round_finished_stage import RoundFinishedStage
+            from p2pfl.stages.base_node.update_round_stage import UpdateRoundStage
 
-            return RoundFinishedStage
+            return UpdateRoundStage
         elif stage_name == "WaitAggregatedModelsStage":
             from p2pfl.stages.base_node.wait_agg_models_stage import (
                 WaitAggregatedModelsStage,
@@ -43,9 +43,9 @@ class SynDFLStageFactory(StageFactory):
 
             return WaitAggregatedModelsStage
         elif stage_name == "GossipModelStage":
-            from p2pfl.stages.base_node.gossip_final_model_stage import GossipFinalModelStage
+            from p2pfl.stages.base_node.gossip_full_model_stage import GossipFullModelStage
 
-            return GossipFinalModelStage
+            return GossipFullModelStage
         elif stage_name == "TrainStage":
             from p2pfl.stages.base_node.train_stage import TrainStage
 

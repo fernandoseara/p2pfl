@@ -77,7 +77,12 @@ class CommunicationProtocol(ABC, NodeComponent):
 
     @abstractmethod
     def build_weights(
-        self, cmd: str, round: int, serialized_model: bytes, contributors: Optional[List[str]] = None, weight: int = 1, args: Optional[List[str]] = None
+        self,
+        cmd: str,
+        round: int,
+        serialized_model: bytes,
+        contributors: Optional[list[str]] = None,
+        weight: int = 1,
     ) -> Any:
         """
         Build weights.

@@ -52,18 +52,16 @@ class FullModelCommand(Command):
     ) -> None:
         """Execute the command."""
         if weights is None:
-            logger.error(self.__node.local_state.addr, "Invalid FullModelCommand message")
+            logger.error(self.__node.address, "Invalid FullModelCommand message")
             return
 
         try:
-            logger.info(self.__node.local_state.addr, "📦 Aggregated model received.")
-            self.__node.learning_workflow.full_aggregated_model_received(round, weights)
+            logger.info(self.__node.address, "📦 Full model received.")
+            await self.__node.learning_workflow.full_model_received(source, round, weights)
 
-        except MachineError:
-            logger.debug(self.__node.local_state.addr, "😲 Aggregated model not expected.")
         except DecodingParamsError:
-            logger.error(self.__node.local_state.addr, "❌ Error decoding parameters.")
+            logger.error(self.__node.address, "❌ Error decoding parameters.")
         except ModelNotMatchingError:
-            logger.error(self.__node.local_state.addr, "❌ Models not matching.")
+            logger.error(self.__node.address, "❌ Models not matching.")
         except Exception as e:
-            logger.error(self.__node.local_state.addr, f"❌ Unknown error adding model: {e}")
+            logger.error(self.__node.address, f"❌ Unknown error adding model: {e}")

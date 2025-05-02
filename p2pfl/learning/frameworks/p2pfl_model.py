@@ -50,6 +50,7 @@ class P2PFLModel:
         contributors: Optional[list[str]] = None,
         additional_info: Optional[dict[str, Any]] = None,
         compression: Optional[dict[str, dict[str, Any]]] = None,
+        round: Optional[int] = None,
     ) -> None:
         """Initialize the model."""
         self.model = model
@@ -68,6 +69,8 @@ class P2PFLModel:
             self.compression = compression
         else:
             self.compression = {}
+
+        self.round = round
 
     def get_model(self) -> Any:
         """Get the model."""
@@ -202,3 +205,36 @@ class P2PFLModel:
 
         """
         pass
+
+    def get_round(self) -> Optional[int]:
+        """
+        Get the round of the model.
+
+        Returns:
+            The round of the model.
+
+        """
+        return self.round
+
+    def set_round(self, round: int) -> None:
+        """
+        Set the round of the model.
+
+        Args:
+            round: The round of the model.
+
+        """
+        self.round = round
+
+    def increment_round(self) -> None:
+        """
+        Increment the round of the model.
+
+        Raises:
+            ValueError: If the round is not set.
+
+        """
+        if self.round is not None:
+            self.round += 1
+
+        raise ValueError("Round not set. Cannot increment round.")

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from p2pfl.communication.commands.message.model_initialized_command import ModelInitializedCommand
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
@@ -37,18 +36,16 @@ class InitializeModelStage(Stage):
     async def execute(
         source: str,
         weights: bytes,
-        node: Node
+        node: Node,
+        round: int,
         ) -> None:
         """Execute the stage."""
         # Set self model round
-        node.get_network_state().update_round(node.address, 0)
+        node.get_network_state().update_round(node.address, round)
 
         # Check source
         # Wait and gossip model initialization
         logger.info(node.address, "⏳ Waiting initialization.")
-
-        # Communicate Initialization
-        await node.get_communication_protocol().send(source, node.get_communication_protocol().build_msg(ModelInitializedCommand.get_name()))
 
         try:
             # Set new weights

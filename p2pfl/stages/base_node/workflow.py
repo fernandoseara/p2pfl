@@ -23,24 +23,23 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from p2pfl.communication.commands.message.model_initialized_command import ModelInitializedCommand
 from p2pfl.communication.commands.message.node_initialized_command import NodeInitializedCommand
+from p2pfl.communication.commands.message.peer_round_updated_command import PeerRoundUpdatedCommand
 from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
+from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
 from p2pfl.stages.base_node.aggregating_vote_train_set_stage import AggregatingVoteTrainSetStage
-from p2pfl.stages.base_node.aggregation_finished_stage import AggregationFinishedStage
 from p2pfl.stages.base_node.broadcast_start_learning_stage import BroadcastStartLearningStage
 from p2pfl.stages.base_node.evaluate_stage import EvaluateStage
-from p2pfl.stages.base_node.gossip_final_model_stage import GossipFinalModelStage
+from p2pfl.stages.base_node.gossip_full_model_stage import GossipFullModelStage
 from p2pfl.stages.base_node.gossip_initial_model import GossipInitialModelStage
 from p2pfl.stages.base_node.gossip_partial_model_stage import GossipPartialModelStage
-from p2pfl.stages.base_node.initialize_model_stage import InitializeModelStage
-from p2pfl.stages.base_node.round_finished_stage import RoundFinishedStage
 from p2pfl.stages.base_node.start_learning_stage import StartLearningStage
 from p2pfl.stages.base_node.train_stage import TrainStage
 from p2pfl.stages.base_node.training_finished_stage import TrainingFinishedStage
+from p2pfl.stages.base_node.update_round_stage import UpdateRoundStage
 from p2pfl.stages.base_node.vote_train_set_stage import VoteTrainSetStage
 from p2pfl.stages.workflows import TrainingWorkflow
 
@@ -51,99 +50,147 @@ if TYPE_CHECKING:  # Only imports the below statements during type checking
 class BasicDFLWorkflow(TrainingWorkflow):
     """
     Class to run a federated learning workflow with transitions library.
+
+    This class is used to define the states and transitions of the workflow.
     """
 
     def __init__(self, node: Node):
         """Initialize the workflow."""
-
-        self.initial_node = False
         self.candidates: list[str] = []
 
         # Define states and events
         states = [
             {'name': "waiting_for_training_start"},
-            {'name': "starting_training", 'on_enter': 'on_enter_starting_training'},
-            {'name': "waiting_for_synchronization", 'on_enter': 'on_enter_waiting_for_synchronization'},
-            {'name': "nodes_synchronized", 'on_enter': 'on_enter_nodes_synchronized'},
-            {'name': "gossipping_initial_model", 'on_enter': 'on_enter_gossipping_initial_model'},
-            {'name': "waiting_for_initial_model"},
-            {'name': "initial_model_received", 'on_enter': 'on_enter_initial_model_received'},
-            {'name': "waiting_for_network_start"},
-            {'name': 'p2p_voting', 'initial': 'starting_voting', 'on_final': 'on_final_p2p_voting', 'children':
-             [
-                {'name': "starting_voting", 'on_enter': 'on_enter_starting_voting'},
-                {'name': "waiting_voting", 'timeout':Settings.training.VOTE_TIMEOUT, 'on_timeout':"voting_timeout", 'on_enter': 'on_enter_waiting_voting'},
-                {'name': 'voting_finished', 'on_enter': 'on_enter_voting_finished', 'final':True},
+            {'name': 'training', 'parallel':
+            [
+                {'name': 'workflow', 'initial': 'starting_training', 'children':
+                [
+                    {'name': "starting_training", 'on_enter': 'on_enter_starting_training'},
+                    {'name': "waiting_for_synchronization", 'on_enter': 'on_enter_waiting_for_synchronization'},
+                    {'name': "nodes_synchronized", 'on_enter': 'on_enter_nodes_synchronized'},
+                    {'name': "waiting_for_full_model"},
+                    {'name': "updating_round", 'on_enter': 'on_enter_updating_round'},
+                    {'name': "gossiping_full_model", 'on_enter': 'on_enter_gossipping_full_model'},
+                    {'name': "waiting_for_network_start", 'on_timeout':"gossip_timeout"},
+                    {'name': "round_initialized", 'on_enter': 'on_enter_round_initialized'},
+                    {'name': 'p2p_voting', 'initial': 'starting_voting', 'on_final': 'on_final_p2p_voting', 'children':
+                    [
+                        {'name': "starting_voting", 'on_enter': 'on_enter_starting_voting'},
+                        {'name': "voting", 'on_enter': 'on_enter_voting'},
+                        {'name': "waiting_voting", 'timeout':Settings.training.VOTE_TIMEOUT, 'on_timeout':"voting_timeout"},
+                        {'name': 'voting_finished', 'on_enter': 'on_enter_voting_finished', 'final':True},
+                    ]},
+                    {'name': 'p2p_learning', 'initial': 'evaluating', 'children':
+                    [
+                        {'name': 'evaluating', 'on_enter': 'on_enter_evaluating'},
+                        {'name': 'training', 'on_enter': 'on_enter_training'},
+                        {'name': 'gossipping_partial_aggregation', 'on_enter': 'on_enter_gossipping_partial_aggregation'},
+                        {'name': "waiting_for_partial_aggregation", 'timeout':Settings.training.AGGREGATION_TIMEOUT, 'on_timeout':"aggregation_timeout"},
+                        {'name': 'aggregating', 'on_enter': 'on_enter_aggregating'},
+                        {'name': "aggregation_finished", 'on_enter': 'on_enter_aggregation_finished', 'final':True}
+                    ]},
+                    {'name': "round_finished", 'on_enter': 'on_enter_round_finished'},
+                ]},
+                {'name': 'event_handler', 'initial': 'waiting_network_start', 'children':
+                [
+                    {'name': "waiting_network_start", 'on_enter': 'on_enter_waiting_network_start'},
+                    {'name': 'waiting_model_update', 'parallel':
+                    [
+                        {'name': 'waiting_round', 'initial': 'round', 'children':
+                        [
+                            {'name': "round", 'on_enter': 'on_enter_waiting_round_update'},
+                            {'name': "rounds_updated" , 'final':True},
+                        ]},
+                        {'name': 'waiting_full_model', 'initial': 'full_model', 'children':
+                        [
+                            {'name': "full_model", 'on_enter': 'on_enter_waiting_full_model'},
+                            {'name': "full_models_updated" , 'final':True},
+                        ]},
+                    ], 'on_final': "send_models_ready"},
+                    {'name': "waiting_vote", 'on_enter': 'on_enter_waiting_vote'},
+                    {'name': "waiting_partial_model", 'on_enter': 'on_enter_waiting_partial_model'},
+                ]},
             ]},
-            {'name': 'p2p_learning', 'initial': 'evaluating', 'children':
-             [
-                {'name': 'evaluating', 'on_enter': 'on_enter_evaluating'},
-                {'name': 'training', 'on_enter': 'on_enter_training'},
-                {'name': 'gossipping_partial_aggregation', 'on_enter': 'on_enter_gossipping_partial_aggregation', 'on_exit': 'on_exit_waiting_for_partial_aggregation'},
-                {'name': "waiting_for_partial_aggregation", 'timeout':Settings.training.AGGREGATION_TIMEOUT, 'on_timeout':"aggregation_timeout"},
-                'aggregating', {'name': "aggregation_finished", 'on_enter': 'on_enter_aggregation_finished', 'final':True}
-            ]},
-            {'name': 'waiting_for_full_aggregation'},
-            {'name': "gossiping_full_model", 'on_enter': 'on_enter_gossipping_full_model'},
-            {'name': "round_finished", 'on_enter': 'on_enter_round_finished'},
             {'name': "training_finished", 'on_enter': 'on_enter_training_finished' , 'final':True}
         ]
 
         transitions = [
-            # Setup
-            {'trigger': 'start_learning', 'source': 'waiting_for_training_start', 'dest': 'starting_training', 'after': 'set_model_initialized'},
-            {'trigger': 'peer_learning_initiated', 'source': 'waiting_for_training_start', 'dest': 'starting_training'},
-            {'trigger': 'next_stage', 'source': 'starting_training', 'dest': 'waiting_for_synchronization'},
+            # Event handlers
+            {'trigger': 'node_started', 'source': 'training↦event_handler↦waiting_network_start', \
+                'dest': 'training↦event_handler↦waiting_model_update', 'prepare': 'create_peer', \
+                'conditions': 'is_all_nodes_started', 'after': 'send_network_ready'},
 
-            # Initial synchronization
-            {'trigger': 'node_started', 'source': 'waiting_for_synchronization', 'dest': 'nodes_synchronized', 'prepare': 'create_peer', 'conditions': 'is_all_nodes_started'},
+            {'trigger': 'peer_round_updated', 'source': 'round', \
+                'dest': 'rounds_updated', 'prepare': 'save_peer_round_updated', \
+                'conditions': 'is_all_models_initialized', 'after': 'send_peers_ready'},
+            {'trigger': 'full_model_received', 'source': 'full_model', \
+                'dest': 'full_models_updated', 'prepare': 'save_full_model', \
+                'after': 'send_full_model_ready'},
 
-            # Initial gossip
-            {'trigger': 'next_stage', 'source': 'nodes_synchronized', 'dest': 'gossipping_initial_model', 'conditions': 'is_model_initialized'},
-            {'trigger': 'next_stage', 'source': 'nodes_synchronized', 'dest': 'waiting_for_initial_model'},
-            {'trigger': 'initial_model_received', 'source': 'waiting_for_initial_model', 'dest': 'initial_model_received', 'prepare': 'initialize_model', 'conditions': 'is_model_initialized'},
-            {'trigger': 'next_stage', 'source': 'initial_model_received', 'dest': 'gossipping_initial_model'},
+            {'trigger': 'models_ready', 'source': 'training↦event_handler↦waiting_model_update', \
+                'dest': 'training↦event_handler↦waiting_vote', \
+                'conditions': 'in_train_set'},
+            {'trigger': 'models_ready', 'source': 'training↦event_handler↦waiting_model_update', \
+                'dest': None},
 
-            # Initial gossip
-            {'trigger': 'next_stage', 'source': 'gossipping_initial_model', 'dest': 'p2p_voting↦starting_voting', 'conditions': 'is_all_nodes_started'},
-            {'trigger': 'next_stage', 'source': 'gossipping_initial_model', 'dest': 'waiting_for_network_start'},
+            {'trigger': 'vote', 'source': 'training↦event_handler↦waiting_vote', \
+                'dest': 'training↦event_handler↦waiting_partial_model', 'prepare': 'save_votes', \
+                'conditions': 'is_all_votes_received', 'after': 'send_votes_ready'},
 
-            {'trigger': 'model_initialized', 'source': ['gossipping_initial_model','waiting_for_network_start'], 'dest': 'p2p_voting↦starting_voting', 'prepare': 'save_peer_model_initialized', 'conditions': 'is_all_models_initialized'},
+            {'trigger': 'aggregate', 'source': 'training↦event_handler↦waiting_partial_model', \
+                'dest': 'training↦event_handler↦waiting_model_update', 'prepare': 'save_aggregation', \
+                'conditions': 'is_all_models_received', 'after': 'send_aggregation_ready'},
 
-            # Voting process
-            {'trigger': 'continue_p2p_voting', 'source': 'p2p_voting↦starting_voting', 'dest': 'p2p_voting↦waiting_voting'},
+            # Setup & Initial synchronization
+            {'trigger': 'start_learning', 'source': 'waiting_for_training_start', 'dest': 'training', 'after': 'set_model_initialized'},
+            {'trigger': 'peer_learning_initiated', 'source': 'waiting_for_training_start', 'dest': 'training'},
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦starting_training', 'dest': 'training↦workflow↦waiting_for_synchronization'},
+            {'trigger': 'network_ready', 'source': 'training↦workflow↦waiting_for_synchronization', 'dest': 'training↦workflow↦nodes_synchronized'},
 
-            {'trigger': 'vote', 'source': 'p2p_voting', 'dest': 'p2p_voting↦voting_finished', 'prepare': 'save_votes', 'conditions': 'is_all_votes_received'},
-            {'trigger': 'voting_timeout', 'source': 'p2p_voting↦waiting_voting', 'dest': 'p2p_voting↦voting_finished'},
+            # Model initialization
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦nodes_synchronized', 'dest': 'training↦workflow↦updating_round', 'conditions': 'is_model_initialized'},
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦nodes_synchronized', 'dest': 'training↦workflow↦waiting_for_full_model'},
+            {'trigger': 'full_model_ready', 'source': 'training↦workflow↦waiting_for_full_model', 'dest': 'training↦workflow↦updating_round'},
 
-            # Training decision
-            {'trigger': 'next_stage', 'source': 'p2p_voting↦voting_finished', 'dest': 'p2p_learning',  'conditions': 'in_train_set'},
-            {'trigger': 'next_stage', 'source': 'p2p_voting↦voting_finished', 'dest': 'waiting_for_full_aggregation'},
-
-            # P2P learning flow
-            {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦evaluating', 'dest': 'p2p_learning↦training'},
-
-            {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦training', 'dest': 'p2p_learning↦gossipping_partial_aggregation', 'prepare': ['get_partial_gossipping_candidates'], 'conditions': 'candidate_exists'},
-            {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦training', 'dest': 'p2p_learning↦waiting_for_partial_aggregation'},
-            {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦gossipping_partial_aggregation', 'dest': 'p2p_learning↦waiting_for_partial_aggregation'},
-
-            {'trigger': 'aggregate', 'source': 'p2p_learning↦waiting_for_partial_aggregation', 'dest': 'p2p_learning↦aggregating', 'conditions': 'is_all_models_received', 'prepare': 'save_aggregation'},
-            {'trigger': 'aggregation_timeout', 'source': 'p2p_learning↦waiting_for_partial_aggregation', 'dest': 'p2p_learning↦aggregating'},
-
-            {'trigger': 'next_stage', 'source': 'p2p_learning↦aggregating', 'dest': 'aggregation_finished'},
-
-            # Receiving model externally
-            {'trigger': 'full_aggregated_model_received', 'source': 'p2p_learning', 'dest': 'aggregation_finished'},
-            {'trigger': 'full_aggregated_model_received', 'source': 'waiting_for_full_aggregation', 'dest': 'gossiping_full_model', 'prepare': ['get_full_gossipping_candidates'], 'conditions': 'candidate_exists'},
+            # Update round
+            {'trigger': 'continue_p2p_round_initialization', 'source': 'training↦workflow↦updating_round', 'dest': 'training↦workflow↦gossiping_full_model', 'prepare': ['get_full_gossipping_candidates'], 'conditions': 'candidate_exists'},
+            {'trigger': 'continue_p2p_round_initialization', 'source': 'training↦workflow↦updating_round', 'dest': 'training↦workflow↦waiting_for_network_start'},
 
             # Gossip full model
-            {'trigger': 'next_stage', 'source': 'aggregation_finished', 'dest': 'gossiping_full_model', 'prepare': ['get_full_gossipping_candidates'], 'conditions': 'candidate_exists'},
-            {'trigger': 'next_stage', 'source': 'gossiping_full_model', 'dest': None,  'prepare': ['get_full_gossipping_candidates'], 'conditions': 'candidate_exists'},
-            {'trigger': 'next_stage', 'source': 'gossiping_full_model', 'dest': 'round_finished'},
-            {'trigger': 'next_stage', 'source': 'round_finished', 'dest': 'training_finished', 'conditions': 'is_total_rounds_reached'},
+            {'trigger': 'continue_p2p_round_initialization', 'source': 'training↦workflow↦gossiping_full_model', 'dest': 'training↦workflow↦round_initialized', 'conditions': 'is_all_models_initialized'},
+            {'trigger': 'continue_p2p_round_initialization', 'source': 'training↦workflow↦gossiping_full_model', 'dest': 'training↦workflow↦waiting_for_network_start'},
+            {'trigger': 'peers_ready', 'source': 'training↦workflow↦waiting_for_network_start', 'dest': 'training↦workflow↦round_initialized'},
 
-            # Next round / finish
-            {'trigger': 'next_stage', 'source': 'round_finished', 'dest': 'waiting_voting'},
+            # Checking workflow finished
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦round_initialized', 'dest': 'training_finished', 'conditions': 'is_total_rounds_reached'},
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦round_initialized', 'dest': 'training↦workflow↦p2p_voting'},
+
+            # Voting process
+            {'trigger': 'continue_p2p_voting', 'source': 'training↦workflow↦p2p_voting↦starting_voting', 'dest': 'training↦workflow↦p2p_voting↦voting'},
+            {'trigger': 'continue_p2p_voting', 'source': 'training↦workflow↦p2p_voting↦voting', 'dest': 'training↦workflow↦p2p_voting↦waiting_voting'},
+
+            {'trigger': 'votes_ready', 'source': 'training↦workflow↦p2p_voting', 'dest': 'training↦workflow↦p2p_voting↦voting_finished'},
+            {'trigger': 'voting_timeout', 'source': 'training↦workflow↦p2p_voting↦waiting_voting', 'dest': 'training↦workflow↦p2p_voting↦voting_finished'},
+
+            # Training decision
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦p2p_voting', 'dest': 'training↦workflow↦p2p_learning',  'conditions': 'in_train_set'},
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦p2p_voting', 'dest': 'training↦workflow↦waiting_for_full_model'},
+
+            # P2P learning flow
+            {'trigger': 'continue_p2p_learning', 'source': 'training↦workflow↦p2p_learning↦evaluating', 'dest': 'training↦workflow↦p2p_learning↦training'},
+
+            {'trigger': 'continue_p2p_learning', 'source': 'training↦workflow↦p2p_learning↦training', 'dest': 'training↦workflow↦p2p_learning↦gossipping_partial_aggregation', 'prepare': ['get_partial_gossipping_candidates'], 'conditions': 'candidate_exists'},
+            {'trigger': 'continue_p2p_learning', 'source': 'training↦workflow↦p2p_learning↦training', 'dest': 'training↦workflow↦p2p_learning↦waiting_for_partial_aggregation'},
+            {'trigger': 'continue_p2p_learning', 'source': 'training↦workflow↦p2p_learning↦gossipping_partial_aggregation', 'dest': 'training↦workflow↦p2p_learning↦waiting_for_partial_aggregation'},
+
+            {'trigger': 'aggregation_ready', 'source': 'training↦workflow↦p2p_learning', 'dest': 'training↦workflow↦p2p_learning↦aggregating'},
+            {'trigger': 'aggregation_timeout', 'source': 'training↦workflow↦p2p_learning↦waiting_for_partial_aggregation', 'dest': 'training↦workflow↦p2p_learning↦aggregating'},
+
+            {'trigger': 'continue_p2p_learning', 'source': 'training↦workflow↦p2p_learning↦aggregating', 'dest': 'training↦workflow↦p2p_learning↦aggregation_finished'},
+
+            # Loop
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦p2p_learning', 'dest': 'training↦workflow↦round_finished'},
+            {'trigger': 'next_stage', 'source': 'training↦workflow↦round_finished', 'dest': 'training↦workflow↦waiting_for_full_model'},
 
         ]
 
@@ -156,158 +203,19 @@ class BasicDFLWorkflow(TrainingWorkflow):
 
     @property
     def finished(self) -> bool:
-        """Return the name of the workflow."""
-        #return self.training_finished.is_active
-        return False
+        """
+        Check if the workflow is finished.
 
-    ###################
-    # STATE CALLBACKS #
-    ###################
+        Returns:
+            bool: True if the workflow is finished, False otherwise.
 
-    async def on_enter_starting_training(self,
-                                         experiment_name: str,
-                                         rounds: int =0,
-                                         epochs: int=0,
-                                         trainset_size: int=0,
-                                         source: str | None = None):
-        """Start the training."""
-        logger.info(self.node.address, "Starting learning workflow.")
-        self.is_running = True
-        await StartLearningStage.execute(
-            experiment_name=experiment_name,
-            rounds=rounds,
-            epochs=epochs,
-            trainset_size=trainset_size,
-            node=self.node,
-        )
+        """
+        return self.is_training_finished()
 
-        await self.next_stage()
+    
 
-    async def on_enter_waiting_for_synchronization(self):
-        """Wait for the synchronization."""
-        communication_protocol = self.node.get_communication_protocol()
-        local_state = self.node.get_local_state()
 
-        # Wait and gossip model initialization
-        logger.info(self.node.address, "⏳ Waiting initialization.")
-
-        # Communicate Initialization
-        try:
-            await communication_protocol.broadcast(communication_protocol.build_msg(StartLearningCommand.get_name(),
-                                                                                    [local_state.total_rounds,
-                                                                                    self.node.get_learner().get_epochs(),
-                                                                                    local_state.get_experiment().trainset_size,
-                                                                                    local_state.get_experiment().exp_name]
-                                                                                    ))
-
-            await communication_protocol.broadcast(communication_protocol.build_msg(NodeInitializedCommand.get_name()))
-        except Exception as e:
-            logger.debug(self.node.address, f"Error broadcasting start learning command: {e}")
-
-    async def on_enter_nodes_synchronized(self, source: str):
-        """All nodes are synchronized."""
-        logger.debug(self.node.address, "All nodes are synchronized.")
-        await self.next_stage()
-
-    async def on_enter_initial_model_received(self, source: str, weights: bytes):
-        """Initialize the model."""
-        await self.next_stage()
-
-    async def on_enter_gossipping_initial_model(self):
-        """Gossip the partial model."""
-        self.get_initial_gossipping_candidates()
-
-        await GossipInitialModelStage.execute(
-            candidates=self.candidates,
-            node=self.node,
-        )
-
-        await self.next_stage()
-
-    async def on_enter_starting_voting(self, *args, **kwargs):
-        """Set the model initialized."""
-        await self.continue_p2p_voting()
-
-    async def on_enter_waiting_voting(self):
-        """Vote for the train set."""
-        await VoteTrainSetStage.execute(
-            node=self.node,
-        )
-
-        logger.debug(self.node.address, "⏳ Waiting other node votes.")
-
-    async def on_enter_voting_finished(self, *args, **kwargs):
-        """Finish the voting."""
-        await AggregatingVoteTrainSetStage.execute(
-            node=self.node,
-        )
-
-    async def on_final_p2p_voting(self, *args, **kwargs):
-        """Finish the voting."""
-        await self.next_stage()
-
-    async def on_enter_evaluating(self):
-        """Evaluate the model."""
-        await EvaluateStage.execute(
-            node=self.node,
-        )
-        await self.continue_p2p_learning()
-
-    async def on_enter_training(self):
-        """Train the model."""
-        await TrainStage.execute(
-            node=self.node,
-        )
-        await self.continue_p2p_learning()
-
-    async def on_enter_gossipping_partial_aggregation(self):
-        """Gossip the partial model."""
-        await GossipPartialModelStage.execute(
-            candidates=self.candidates,
-            node=self.node,
-        )
-
-    async def on_exit_p2p_learning(self):
-        """Finish the training."""
-        pass
-
-    async def on_enter_aggregating(self):
-        """Aggregate the models."""
-        # Set aggregated model
-        agg_model = self.node.get_aggregator().aggregate(self.node.get_network_state().get_all_models())
-        self.node.get_learner().set_model(agg_model)
-
-    async def on_exit_waiting_for_partial_aggregation(self):
-        """Finish the aggregation."""
-        await AggregationFinishedStage.execute(
-            node=self.node,
-        )
-        await self.next_stage()
-
-    async def on_enter_aggregation_finished(self):
-        """Finish the aggregation."""
-        await self.next_stage()
-
-    async def on_enter_gossipping_full_model(self):
-        """Gossip the model."""
-        await GossipFinalModelStage.execute(
-            node=self.node,
-        )
-        await self.next_stage()
-
-    async def on_enter_round_finished(self):
-        """Finish the round."""
-        await RoundFinishedStage.execute(
-            node=self.node,
-        )
-        await self.next_stage()
-
-    async def on_enter_training_finished(self):
-        """Finish the training."""
-        await TrainingFinishedStage.execute(
-            node=self.node,
-        )
-        self.is_running = False
+    
 
 
     #####################
@@ -315,27 +223,43 @@ class BasicDFLWorkflow(TrainingWorkflow):
     #####################
 
     async def set_model_initialized(self, *args, **kwargs):
-        """Set the initial node."""
-        self.is_model_initialized = True
+        """Set the model initialized."""
+        # Set the model initialized
+        self.node.get_learner().get_model().set_round(0)
 
-    async def initialize_model(self,
+    async def save_full_model(self,
                             source: str,
+                            round: int,
                             weights: bytes):
         """Initialize model."""
-        # Set source model round
-        self.node.get_network_state().update_round(source, 0)
+        # Check source
+        # Wait and gossip model initialization
+        logger.info(self.node.address, "⏳ Waiting initialization.")
 
-        await InitializeModelStage.execute(
-            source=source,
-            weights=weights,
-            node=self.node,
-        )
-        self.is_model_initialized = True
+        try:
+            # Set new weights
+            self.node.get_learner().set_model(weights)
 
-    async def save_peer_model_initialized(self,
-                            source: str):
+            # Set self model round
+            #self.node.get_network_state().update_round(self.node.address, round)
+
+            logger.info(self.node.address, "🤖 Model Weights Initialized")
+
+        except DecodingParamsError:
+            logger.error(self.node.address, "Error decoding parameters.")
+
+        except ModelNotMatchingError:
+            logger.error(self.node.address, "Models not matching.")
+
+        except Exception as e:
+            logger.error(self.node.address, f"Unknown error adding model: {e}")
+
+    async def save_peer_round_updated(self,
+                            source: str,
+                            round: int,
+                            ):
         """Initialize model."""
-        self.node.get_network_state().update_round(source, 0)
+        self.node.get_network_state().update_round(source, round)
 
     async def broadcast_start_learning(self,
                                         experiment_name: str,
@@ -361,9 +285,9 @@ class BasicDFLWorkflow(TrainingWorkflow):
         for train_set_id, vote in tmp_votes:
             self.node.get_network_state().add_vote(source, train_set_id, vote)
 
-    async def save_aggregation(self, model: P2PFLModel):
+    async def save_aggregation(self, model: P2PFLModel, source: str):
         """Save the aggregation."""
-        self.node.get_network_state().add_model(model)
+        self.node.get_network_state().add_model(model, source)
 
     async def create_peer(self, source: str):
         """Update the peer round."""
@@ -379,30 +303,22 @@ class BasicDFLWorkflow(TrainingWorkflow):
     #####################
     # PREPARE CALLBACKS #
     #####################
-    def get_initial_gossipping_candidates(self):
-        """Get the candidates for the initial gossiping."""
-        def candidate_condition(node: str) -> bool:
-            round = self.node.get_network_state().get_round(node)
-            return round < 0 if round else True
-
-        self.candidates = [n for n in self.node.communication_protocol.get_neighbors(only_direct=True) if candidate_condition(n)]
-        logger.debug(self.node.local_state.addr, f"📡 Candidates to gossip to: {self.candidates}")
-
     def get_partial_gossipping_candidates(self):
         """Get the candidates from the train set to gossip the partial model."""
         def candidate_condition(node: str) -> bool:
             local_state = self.node.get_local_state()
             network_state = self.node.get_network_state()
             return set(local_state.train_set) - set(network_state.get_aggregation_sources(node))
-        candidates = set(self.node.get_local_state().train_set) - set(self.node.address)
+
+        candidates = set(self.node.get_local_state().train_set) - {self.node.address}
         self.candidates = [n for n in candidates if len(candidate_condition(n)) != 0]
         logger.debug(self.node.address, f"📡 Candidates to gossip to: {self.candidates}")
 
     def get_full_gossipping_candidates(self):
         """Get the candidates from the train set to gossip the full model."""
-        fixed_round = self.node.local_state.round
+        fixed_round = self.node.get_local_state().round
         def candidate_condition(node: str) -> bool:
-            return self.node.local_state.nei_status[node] < fixed_round
+            return self.node.get_network_state().get_round(node) < fixed_round
 
         self.candidates = [n for n in self.node.communication_protocol.get_neighbors(only_direct=True) if candidate_condition(n)]
         logger.debug(self.node.local_state.addr, f"📡 Candidates to gossip to: {self.candidates}")
@@ -412,7 +328,15 @@ class BasicDFLWorkflow(TrainingWorkflow):
     ##############
     def is_model_initialized(self, *args, **kwargs):
         """Check if the model has been initialized."""
-        return self.is_model_initialized
+        learner_round = self.node.get_learner().get_model().get_round()
+        return learner_round == self.node.get_local_state().round
+
+    def is_model_valid(self,
+                        source: str,
+                        round: int,
+                        weights: bytes):
+        """Check if the model has been initialized."""
+        return self.node.get_local_state().round+1 == round
 
     def is_all_nodes_started(self, *args, **kwargs):
         """Check if all nodes have started."""
@@ -421,7 +345,7 @@ class BasicDFLWorkflow(TrainingWorkflow):
     def is_all_models_initialized(self, *args, **kwargs):
         """Check if all models have been initialized."""
         rounds = self.node.get_network_state().get_all_rounds()
-        return sum(1 for value in rounds.values() if value == 0) == (len(self.node.communication_protocol.get_neighbors(only_direct=True)) + 1)
+        return sum(1 for value in rounds.values() if value == self.node.get_local_state().round) == len(rounds)
 
     def candidate_exists(self, *args, **kwargs):
         """Check if there are candidates."""
@@ -454,7 +378,7 @@ class BasicDFLWorkflow(TrainingWorkflow):
 
     def is_all_models_received(self, *args, **kwargs):
         """Check if all models have been received."""
-        return len(self.node.get_local_state().train_set) == len(self.node.aggregator.get_aggregated_models())
+        return len(self.node.get_local_state().train_set) == len(self.node.get_network_state().get_all_models())
 
 # if __name__ == "__main__":
 #     m = BasicDFLWorkflow(None)

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from p2pfl.communication.commands.weights.init_model_command import InitModelCommand
+from p2pfl.communication.commands.weights.full_model_command import FullModelCommand
 from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
@@ -53,7 +53,7 @@ class GossipInitialModelStage(Stage):
                 raise Exception("Round not initialized.")
             encoded_model = node.get_learner().get_model().encode_parameters()
             return node.get_communication_protocol().build_weights(
-                InitModelCommand.get_name(),
+                FullModelCommand.get_name(),
                 node.get_local_state().get_experiment().round,
                 encoded_model,
             )

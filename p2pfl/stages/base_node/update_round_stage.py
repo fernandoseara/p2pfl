@@ -15,31 +15,36 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Train stage."""
+
+"""Round Finished Stage."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from p2pfl.communication.commands.message.models_ready_command import ModelsReadyCommand
+from p2pfl.communication.commands.message.peer_round_updated_command import PeerRoundUpdatedCommand
 from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
-class AggregationFinishedStage(Stage):
-    """Aggregation Finished stage."""
+class UpdateRoundStage(Stage):
+    """Update Round Stage."""
 
     @staticmethod
     async def execute(node: Node) -> None:
         """Execute the stage."""
-        # Share that aggregation is done
-        logger.debug(
+        # Set next round and reset variables
+        node.get_network_state().reset_all_rounds()
+        node.get_local_state().increase_round()
+
+        state = node.get_local_state()
+
+        # Next Step or Finish
+        logger.info(
             node.address,
-            f"Broadcast aggregation done for round {node.get_local_state().get_experiment().round}",
+            f"🎉 Round {state.round} of {state.total_rounds} started.",
         )
-        await node.get_communication_protocol().broadcast(
-            node.get_communication_protocol.build_msg(ModelsReadyCommand.get_name(),
-                                                    [],
-                                                    round=node.get_local_state().get_experiment().round))
+        # if state.round is None or state.total_rounds is None:
+        #     raise ValueError("Round or total rounds not set.")

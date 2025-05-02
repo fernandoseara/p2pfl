@@ -45,9 +45,8 @@ class AsyDFLFactory(WorkflowFactory):
             PushSumWeightInformationUpdatingCommand,
         )
         from p2pfl.communication.commands.message.metrics_command import MetricsCommand
-        from p2pfl.communication.commands.message.model_initialized_command import ModelInitializedCommand
         from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
-        from p2pfl.communication.commands.message.models_ready_command import ModelsReadyCommand
+        from p2pfl.communication.commands.message.peer_round_updated_command import PeerRoundUpdatedCommand
         from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
         from p2pfl.communication.commands.message.stop_learning_command import StopLearningCommand
         from p2pfl.communication.commands.message.vote_train_set_command import VoteTrainSetCommand
@@ -58,10 +57,9 @@ class AsyDFLFactory(WorkflowFactory):
         return [
             StartLearningCommand(node),
             StopLearningCommand(node),
-            ModelInitializedCommand(node),
+            PeerRoundUpdatedCommand(node),
             VoteTrainSetCommand(node),
             ModelsAggregatedCommand(node),
-            ModelsReadyCommand(node),
             MetricsCommand(node),
             InitModelCommand(node),
             PartialModelCommand(node),

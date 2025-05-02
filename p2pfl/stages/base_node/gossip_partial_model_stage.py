@@ -71,7 +71,7 @@ class GossipPartialModelStage(Stage):
             model = node.get_network_state().get_model(n)
 
             if model is None:
-                logger.info(node.address, f"❔ No models to aggregate for {node}.")
+                logger.info(node.address, f"❔ No models to aggregate for {node.address}.")
                 return None
 
             return node.get_communication_protocol().build_weights(
