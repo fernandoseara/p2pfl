@@ -19,58 +19,28 @@
 
 from __future__ import annotations
 
-from functools import partial
-from typing import TYPE_CHECKING
-
 from transitions.extensions import HierarchicalAsyncGraphMachine
-from transitions.extensions.asyncio import AsyncTimeout
 from transitions.extensions.nesting import NestedState
-from transitions.extensions.states import add_state_features
 
 from p2pfl.management.logger import logger
+from p2pfl.stages.workflows.event_handler_workflow import EventHandlerWorkflow
+from p2pfl.stages.workflows.training_workflow import TrainingWorkflow
 
-if TYPE_CHECKING:
-    from p2pfl.node import Node
-
-
-
-
-def _log_trigger(self, *args, **kwargs):
-    """Log the trigger event."""
-    logger.debug(self.node.address, f"🏃 Running stage: {(self.state)}")
-    #self.event_log.append(self.event)
-    self.state_log.append(self.state)
+NestedState.separator = '↦'
 
 
-class TrainingWorkflow(object):
+class LearningWorkflow(HierarchicalAsyncGraphMachine):
     """Class to run a workflow of stages."""
 
-    @property
-    def finished(self) -> bool:
-        """
-        Check if the workflow is finished.
-
-        Returns:
-            bool: True if the workflow is finished, False otherwise.
-
-        """
-        return self.is_training_finished()
-
-    def __init__(self, node: Node, *args, **kwargs):
+    def __init__(self, model, *args, **kwargs):
         """Initialize the workflow."""
         self.event_log: list[str] = []
         self.state_log: list[str] = []
-        self.node = node
-
-        training_workflow_states = 
 
         states = [
             {'name': "waiting_for_training_start"},
-            {'name': "training", 'parallel': [
-                {'name': 'workflow', 'initial': 'starting_training', 'children': training_workflow_states},
-                {'name': 'event_handler', 'initial': 'waiting_network_start', 'children': event_handler_states}
-            ]},
-            {'name': "training_finished", 'on_enter': 'on_enter_training_finished', 'final': True}
+            {'name': "training", 'parallel': [{"name":"workflow","children":TrainingWorkflow()}, {"name":"event_handler","children":EventHandlerWorkflow()}]},
+            {'name': "training_finished", 'final': True}
         ]
 
         transitions = [
@@ -79,18 +49,11 @@ class TrainingWorkflow(object):
         ]
 
         super().__init__(
+            model=model,
             states=states,
             transitions=transitions,
-            model=model,
             initial='waiting_for_training_start',
             queued='model',
             ignore_invalid_triggers=True,
-            finalize_event=self._log_trigger,
-            #on_final=partial(final_event_raised, 'TrainingWorkflow'),
-            #ignore_invalid_triggers=True
+            finalize_event='finalize_logging',
         )
-
-    def _log_trigger(self, *args, **kwargs):
-        logger.debug(self.node.address, f"🏃 Running stage: {(self.state)}")
-        #self.event_log.append(self.event)
-        self.state_log.append(self.state)

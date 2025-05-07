@@ -18,7 +18,7 @@
 
 """Stage factory."""
 from p2pfl.stages.asyDFL.stage_factory import AsyDFLStageFactory
-from p2pfl.stages.workflows import TrainingWorkflow
+from p2pfl.stages.workflows.workflows import TrainingWorkflow
 
 
 class AsyDFLWorkflow(TrainingWorkflow):

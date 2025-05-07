@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-import abc
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.command import Command
@@ -29,22 +29,25 @@ from p2pfl.stages.workflow_type import WorkflowType
 if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
     from p2pfl.node import Node
-    from p2pfl.stages.workflows import TrainingWorkflow
+    from p2pfl.stages.workflows.workflows import LearningWorkflow
 
 
-class WorkflowFactory(abc.ABC):
+class WorkflowFactory(ABC):
     """Command interface."""
 
-    @abc.abstractmethod
-    def create_training_workflow() -> type[TrainingWorkflow]:
+    @staticmethod
+    @abstractmethod
+    def create_training_workflow() -> type[LearningWorkflow]:
         """Create a workflow."""
         raise NotImplementedError
 
-    @abc.abstractmethod
+    @staticmethod
+    @abstractmethod
     def create_commands(node: Node) -> list[Command]:
         """Create commands list."""
         raise NotImplementedError
 
+    @staticmethod
     def create_model(model: P2PFLModel) -> P2PFLModel:
         """Create model."""
         return model
@@ -59,7 +62,7 @@ class WorkflowFactoryProducer:
     def get_factory(workflow_name: WorkflowType) -> type[WorkflowFactory]:
         """Return the stage class."""
         if workflow_name == WorkflowType.BASIC:
-            from p2pfl.stages.base_node import BasicDFLFactory
+            from p2pfl.stages.workflows.workflow_factory import BasicDFLFactory
 
             return BasicDFLFactory
         elif workflow_name == WorkflowType.ASYNC:

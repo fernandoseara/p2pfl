@@ -41,7 +41,7 @@ from p2pfl.stages.base_node.train_stage import TrainStage
 from p2pfl.stages.base_node.training_finished_stage import TrainingFinishedStage
 from p2pfl.stages.base_node.update_round_stage import UpdateRoundStage
 from p2pfl.stages.base_node.vote_train_set_stage import VoteTrainSetStage
-from p2pfl.stages.workflows import TrainingWorkflow
+from p2pfl.stages.workflows.workflows import TrainingWorkflow
 
 if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.node import Node
@@ -57,6 +57,7 @@ class BasicDFLWorkflow(TrainingWorkflow):
     def __init__(self, node: Node):
         """Initialize the workflow."""
         self.candidates: list[str] = []
+        print(a)
 
         # Define states and events
         states = [

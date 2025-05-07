@@ -44,7 +44,10 @@ from p2pfl.node_state import LocalNodeState
 from p2pfl.settings import Settings
 from p2pfl.stages.workflow_factory import WorkflowFactoryProducer
 from p2pfl.stages.workflow_type import WorkflowType
-from p2pfl.stages.workflows import TrainingWorkflow
+from p2pfl.stages.workflows.event_handler_workflow import EventHandlerWorkflow
+from p2pfl.stages.workflows.models.syncFLModel import LearningWorkflowModel
+from p2pfl.stages.workflows.training_workflow import TrainingWorkflow
+from p2pfl.stages.workflows.workflows import LearningWorkflow
 
 # Disbalbe grpc log (pytorch causes warnings)
 if logger.get_level_name(logger.get_level()) != "DEBUG":
@@ -103,8 +106,8 @@ class Node:
 
         # Workflow
         workflow_factory = WorkflowFactoryProducer.get_factory(workflow)
-        self.learning_workflow_class: type[TrainingWorkflow] = workflow_factory.create_training_workflow()
-        self.learning_workflow: TrainingWorkflow = None
+        self.learning_workflow_class: type[LearningWorkflow] = workflow_factory.create_training_workflow()
+        self.learning_workflow: LearningWorkflow = None
         commands = workflow_factory.create_commands(self)
         model = workflow_factory.create_model(model)
 
@@ -220,7 +223,8 @@ class Node:
         if self.is_running():
             raise NodeRunningException("Node already running.")
 
-        self.learning_workflow = self.learning_workflow_class(self)
+        self.learning_workflow = LearningWorkflowModel(self)
+        self.learning_machine = self.learning_workflow_class(self.learning_workflow)
 
         # P2PFL Web Services
         logger.register_node(self.addr)
@@ -352,8 +356,8 @@ class Node:
 
         """
         return self.learner
-    
-    def get_learning_workflow(self) -> TrainingWorkflow:
+
+    def get_learning_workflow(self) -> LearningWorkflow:
         """
         Get the learning workflow.
 
