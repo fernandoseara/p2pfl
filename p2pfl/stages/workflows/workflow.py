@@ -57,7 +57,6 @@ class BasicDFLWorkflow(TrainingWorkflow):
     def __init__(self, node: Node):
         """Initialize the workflow."""
         self.candidates: list[str] = []
-        print(a)
 
         # Define states and events
         states = [
@@ -81,7 +80,7 @@ class BasicDFLWorkflow(TrainingWorkflow):
                         {'name': "waiting_voting", 'timeout':Settings.training.VOTE_TIMEOUT, 'on_timeout':"voting_timeout"},
                         {'name': 'voting_finished', 'on_enter': 'on_enter_voting_finished', 'final':True},
                     ]},
-                    {'name': 'p2p_learning', 'initial': 'evaluating', 'children':
+                    {'name': 'p2p_learning', 'initial': 'evaluating', 'on_final': 'on_final_p2p_learning', 'children':
                     [
                         {'name': 'evaluating', 'on_enter': 'on_enter_evaluating'},
                         {'name': 'training', 'on_enter': 'on_enter_training'},

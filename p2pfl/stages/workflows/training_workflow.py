@@ -82,7 +82,7 @@ class TrainingWorkflow(TimeoutMachine):
                 {'name': "waiting_voting", 'timeout': Settings.training.VOTE_TIMEOUT, 'on_timeout': "voting_timeout"},
                 {'name': 'voting_finished', 'on_enter': 'on_enter_voting_finished', 'final': True},
             ]},
-            {'name': 'p2p_learning', 'initial': 'evaluating', 'children': [
+            {'name': 'p2p_learning', 'initial': 'evaluating', 'on_final': 'on_final_p2p_learning', 'children': [
                 {'name': 'evaluating', 'on_enter': 'on_enter_evaluating'},
                 {'name': 'training', 'on_enter': 'on_enter_training'},
                 {'name': 'gossipping_partial_aggregation', 'on_enter': 'on_enter_gossipping_partial_aggregation'},
@@ -91,6 +91,7 @@ class TrainingWorkflow(TimeoutMachine):
                 {'name': "aggregation_finished", 'on_enter': 'on_enter_aggregation_finished', 'final': True},
             ]},
             {'name': "round_finished", 'on_enter': 'on_enter_round_finished'},
+            {'name': "training_finished", 'on_enter': 'on_enter_training_finished', 'final': True},
         ]
 
         transitions = [
@@ -130,19 +131,28 @@ class TrainingWorkflow(TimeoutMachine):
 
             # Learning
             {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦evaluating', 'dest': 'p2p_learning↦training'},
-            {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦training', 'dest': 'p2p_learning↦gossipping_partial_aggregation', 
+            {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦training', 'dest': 'p2p_learning↦gossipping_partial_aggregation',
             'prepare': ['get_partial_gossipping_candidates'], 'conditions': 'candidate_exists'},
             {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦training', 'dest': 'p2p_learning↦waiting_for_partial_aggregation'},
-            {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦gossipping_partial_aggregation', 'dest': 'p2p_learning↦waiting_for_partial_aggregation'},
+            {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦gossipping_partial_aggregation',
+             'dest': 'p2p_learning↦waiting_for_partial_aggregation'},
 
             {'trigger': 'aggregation_ready', 'source': 'p2p_learning', 'dest': 'p2p_learning↦aggregating'},
-            {'trigger': 'aggregation_timeout', 'source': 'p2p_learning↦waiting_for_partial_aggregation', 'dest': 'p2p_learning↦aggregating'},
+            {'trigger': 'aggregation_timeout', 'source': 'p2p_learning↦waiting_for_partial_aggregation',
+             'dest': 'p2p_learning↦aggregating'},
 
             {'trigger': 'continue_p2p_learning', 'source': 'p2p_learning↦aggregating', 'dest': 'p2p_learning↦aggregation_finished'},
 
             # Loop
             {'trigger': 'next_stage', 'source': 'p2p_learning', 'dest': 'round_finished'},
+            {'trigger': 'next_stage', 'source': 'round_finished', 'dest': 'updating_round', 'conditions': 'is_all_models_received'},
             {'trigger': 'next_stage', 'source': 'round_finished', 'dest': 'waiting_for_full_model'},
         ]
 
-        super().__init__(model=model, states=states, transitions=transitions, initial='starting_training', queued='model', ignore_invalid_triggers=True)
+        super().__init__(model=model,
+                         states=states,
+                         transitions=transitions,
+                         initial='starting_training',
+                         queued='model',
+                         ignore_invalid_triggers=True,
+        )

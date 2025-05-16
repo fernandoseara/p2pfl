@@ -42,6 +42,7 @@ class EventHandlerWorkflow(BaseMachine):
             {'name': "waiting_vote", 'on_enter': 'on_enter_waiting_vote'},
             {'name': "votes_received"},
             {'name': "waiting_partial_model", 'on_enter': 'on_enter_waiting_partial_model'},
+            {'name': "training_finished", 'final': True},
         ]
 
         transitions = [
@@ -61,6 +62,14 @@ class EventHandlerWorkflow(BaseMachine):
 
             {'trigger': 'aggregate', 'source': 'waiting_partial_model', 'dest': 'waiting_model_update',
             'prepare': 'save_aggregation', 'conditions': 'is_all_models_received', 'after': 'send_aggregation_ready'},
+
+            {'trigger': 'training_finished', 'source': '*', 'dest': 'training_finished'},
         ]
 
-        super().__init__(model=model, states=states, transitions=transitions, initial='waiting_network_start', queued=True, ignore_invalid_triggers=True)
+        super().__init__(model=model,
+                         states=states,
+                         transitions=transitions,
+                         initial='waiting_network_start',
+                         queued=True,
+                         ignore_invalid_triggers=True
+        )

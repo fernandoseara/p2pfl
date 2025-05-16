@@ -34,25 +34,24 @@ class LearningWorkflow(HierarchicalAsyncGraphMachine):
 
     def __init__(self, model, *args, **kwargs):
         """Initialize the workflow."""
-        self.event_log: list[str] = []
-        self.state_log: list[str] = []
 
         states = [
-            {'name': "waiting_for_training_start"},
-            {'name': "training", 'parallel': [{"name":"workflow","children":TrainingWorkflow()}, {"name":"event_handler","children":EventHandlerWorkflow()}]},
-            {'name': "training_finished", 'final': True}
+            {'name': "waiting_for_learning_start"},
+            {'name': "learning", 'on_final': "on_final_learning", 'parallel': [{"name":"workflow","children":TrainingWorkflow()}, {"name":"event_handler","children":EventHandlerWorkflow()}]},
+            {'name': "learning_finished", 'final': True}
         ]
 
         transitions = [
-            {'trigger': 'start_learning', 'source': 'waiting_for_training_start', 'dest': 'training', 'after': 'set_model_initialized'},
-            {'trigger': 'peer_learning_initiated', 'source': 'waiting_for_training_start', 'dest': 'training'},
+            {'trigger': 'start_learning', 'source': 'waiting_for_learning_start', 'dest': 'learning', 'after': 'set_model_initialized'},
+            {'trigger': 'peer_learning_initiated', 'source': 'waiting_for_learning_start', 'dest': 'learning'},
+            {'trigger': 'learning_finished', 'source': 'learning', 'dest': 'learning_finished'},
         ]
 
         super().__init__(
             model=model,
             states=states,
             transitions=transitions,
-            initial='waiting_for_training_start',
+            initial='waiting_for_learning_start',
             queued='model',
             ignore_invalid_triggers=True,
             finalize_event='finalize_logging',

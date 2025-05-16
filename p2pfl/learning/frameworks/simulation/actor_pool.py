@@ -18,6 +18,7 @@
 
 """Actor pool for distributed computing using Ray."""
 
+import asyncio
 import threading
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -45,25 +46,13 @@ class VirtualLearnerActor:
         logger.debug(self.__class__.__name__, f"Manually terminating {self.__class__.__name__}")
         ray.actor.exit_actor()
 
-    def fit(self, addr: str, learner: Learner) -> Tuple[str, P2PFLModel]:
+    async def fit(self, addr: str, learner: Learner) -> Tuple[str, P2PFLModel]:
         """Fit the model."""
-        try:
-            model = learner.fit()
+        return addr, await learner.fit()
 
-        except Exception as ex:
-            raise ex
-
-        return addr, model
-
-    def evaluate(self, addr: str, learner: Learner) -> Tuple[str, Dict[str, float]]:
+    async def evaluate(self, addr: str, learner: Learner) -> Tuple[str, Dict[str, float]]:
         """Evaluate the model."""
-        try:
-            results = learner.evaluate()
-
-        except Exception as ex:
-            raise ex
-
-        return addr, results
+        return addr, await learner.evaluate()
 
 
 class SuperActorPool(ActorPool):
@@ -83,7 +72,6 @@ class SuperActorPool(ActorPool):
     """
 
     _instance = None
-    _lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
         """
@@ -93,9 +81,8 @@ class SuperActorPool(ActorPool):
             Singleton instance of SuperActorPool.
 
         """
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls)
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self, resources=None, actor_list: Optional[List[VirtualLearnerActor]] = None):
@@ -121,10 +108,10 @@ class SuperActorPool(ActorPool):
             # A dict that maps addr to another dict containing: a reference to the remote job
             # and its status (i.e. whether it is ready or not)
             self._addr_to_future: dict[str, dict[str, Any]] = {}
-            self.actor_to_remove: Set[str] = set()  # a set of actor ids to be removed
+            self.actor_to_remove: set[str] = set()  # a set of actor ids to be removed
             self.num_actors = len(actors)
             logger.info("ActorPool", f"Initialized with {self.num_actors} actors")
-            self.lock = threading.RLock()
+            self.lock = asyncio.Lock()
             self.initialized = True  # Mark as initialized
 
     def __reduce__(self):
@@ -150,7 +137,7 @@ class SuperActorPool(ActorPool):
         """
         return VirtualLearnerActor.options(**self.resources).remote()  # type: ignore
 
-    def add_actor(self, num_actors: int) -> None:
+    async def add_actor(self, num_actors: int) -> None:
         """
         Add a specified number of actors to the pool.
 
@@ -158,13 +145,13 @@ class SuperActorPool(ActorPool):
             num_actors: Number of actors to add.
 
         """
-        with self.lock:
+        async with self.lock:
             new_actors = [self.create_actor() for _ in range(num_actors)]
             self._idle_actors.extend(new_actors)
             self.num_actors += num_actors
             logger.info("ActorPool", f"Created {num_actors} actors")
 
-    def submit(self, fn: Any, value: Tuple[str, Learner]) -> None:
+    async def submit(self, fn: Any, value: Tuple[str, Learner]) -> None:
         """
         Submit a task to an idle actor in the pool.
 
@@ -177,13 +164,13 @@ class SuperActorPool(ActorPool):
         actor = self._idle_actors.pop()
 
         if self._check_and_remove_actor_from_pool(actor):
-            future = fn(actor, addr, learner)
+            future = asyncio.wrap_future(fn(actor, addr, learner).future()) # Convert ray ObjectRefs into asyncio Futures
             future_key = tuple(future) if isinstance(future, list) else future
             self._future_to_actor[future_key] = (self._next_task_index, actor, addr)
             self._next_task_index += 1
             self._addr_to_future[addr]["future"] = future_key
 
-    def submit_learner_job(self, actor_fn: Any, job: Tuple[str, Learner]) -> None:
+    async def submit_learner_job(self, actor_fn: Any, job: Tuple[str, Learner]) -> None:
         """
         Submit a learner job to the pool, handling pending submits if no idle actors are available.
 
@@ -193,10 +180,10 @@ class SuperActorPool(ActorPool):
 
         """
         addr, _ = job
-        with self.lock:
+        async with self.lock:
             self._reset_addr_to_future_dict(addr)
             if self._idle_actors:
-                self.submit(actor_fn, job)
+                await self.submit(actor_fn, job)
             else:
                 self._pending_submits.append((actor_fn, job))
 
@@ -239,7 +226,7 @@ class SuperActorPool(ActorPool):
             return False
         return self._addr_to_future[addr]["ready"]  # type: ignore
 
-    def _fetch_future_result(self, addr: str) -> Tuple[Any, Any]:
+    async def _fetch_future_result(self, addr: str) -> Tuple[Any, Any]:
         """
         Fetch the result of a future associated with the given address.
 
@@ -252,7 +239,7 @@ class SuperActorPool(ActorPool):
         """
         try:
             future = self._addr_to_future[addr]["future"]
-            res_addr, result = ray.get(future)
+            res_addr, result = await future
         except ray.exceptions.RayActorError as ex:
             # print(ex)
             if hasattr(ex, "actor_id"):
@@ -270,9 +257,8 @@ class SuperActorPool(ActorPool):
             actor_id_hex: ID of the actor to be removed.
 
         """
-        with self.lock:
-            self.actor_to_remove.add(actor_id_hex)
-            logger.debug("ActorPool", f"Actor({actor_id_hex}) will be removed from pool.")
+        self.actor_to_remove.add(actor_id_hex)
+        logger.debug("ActorPool", f"Actor({actor_id_hex}) will be removed from pool.")
 
     def _check_and_remove_actor_from_pool(self, actor: VirtualLearnerActor) -> bool:
         """
@@ -285,14 +271,13 @@ class SuperActorPool(ActorPool):
             True if the actor should not be removed, False otherwise.
 
         """
-        with self.lock:
-            actor_id = actor._actor_id.hex()  # type: ignore
-            if actor_id in self.actor_to_remove:
-                self.actor_to_remove.remove(actor_id)
-                self.num_actors -= 1
-                logger.debug("ActorPool", f"REMOVED actor {actor_id} from pool")
-                return False
-            return True
+        actor_id = actor._actor_id.hex()  # type: ignore
+        if actor_id in self.actor_to_remove:
+            self.actor_to_remove.remove(actor_id)
+            self.num_actors -= 1
+            logger.debug("ActorPool", f"REMOVED actor {actor_id} from pool")
+            return False
+        return True
 
     def _check_actor_fits_in_pool(self) -> bool:
         """
@@ -308,7 +293,7 @@ class SuperActorPool(ActorPool):
             return False
         return True
 
-    def process_unordered_future(self, timeout: Optional[float] = None) -> None:
+    async def process_unordered_future(self, timeout: Optional[float] = None) -> None:
         """
         Process the next unordered future result from the pool.
 
@@ -320,24 +305,29 @@ class SuperActorPool(ActorPool):
             TimeoutError: If the future processing times out.
 
         """
-        if not self.has_next():  # type: ignore
-            raise StopIteration("No more results to get")
-        res, _ = ray.wait(list(self._future_to_actor), num_returns=1, timeout=timeout)
-        if res:
-            [future] = res
-        else:
-            raise TimeoutError("Timed out waiting for result")
-        with self.lock:
+        if not self.has_next():
+            raise StopAsyncIteration("No more results to get")
+
+        done, _ = await asyncio.wait(
+            self._future_to_actor,
+            return_when=asyncio.FIRST_COMPLETED,
+            timeout=timeout,
+        )
+
+        if not done:
+            raise asyncio.TimeoutError("Timed out waiting for result")
+
+        for future in done:
             _, actor, addr = self._future_to_actor.pop(future, (None, None, -1))
-            if actor is not None:
+            if actor:
                 if self._check_actor_fits_in_pool():
                     if self._check_and_remove_actor_from_pool(actor):
-                        self._return_actor(actor)  # type: ignore
+                        self._return_actor(actor)
                     self._flag_future_as_ready(addr)
                 else:
-                    actor.terminate.remote()
+                    await actor.terminate.remote()
 
-    def get_learner_result(self, addr: str, timeout: Optional[float]) -> Tuple[Any, Any]:
+    async def get_learner_result(self, addr: str, timeout: Optional[float]) -> Tuple[Any, Any]:
         """
         Retrieve the learner result associated with the given address.
 
@@ -349,9 +339,9 @@ class SuperActorPool(ActorPool):
             Address and result of the learner job.
 
         """
-        while self.has_next() and not self._is_future_ready(addr):  # type: ignore
+        while self.has_next() and not self._is_future_ready(addr):
             try:
-                self.process_unordered_future(timeout=timeout)
-            except StopIteration:
+                await self.process_unordered_future(timeout=timeout)
+            except StopAsyncIteration:
                 break
-        return self._fetch_future_result(addr)
+        return await self._fetch_future_result(addr)

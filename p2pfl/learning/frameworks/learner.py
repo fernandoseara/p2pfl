@@ -191,17 +191,17 @@ class Learner(ABC, NodeComponent):
             self.get_model().add_info(c.get_name(), c.get_info())
 
     @abstractmethod
-    def fit(self) -> P2PFLModel:
+    async def fit(self) -> P2PFLModel:
         """Fit the model."""
         pass
 
     @abstractmethod
-    def interrupt_fit(self) -> None:
+    async def interrupt_fit(self) -> None:
         """Interrupt the fit process."""
         pass
 
     @abstractmethod
-    def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> Dict[str, float]:
         """
         Evaluate the model with actual parameters.
 

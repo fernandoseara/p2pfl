@@ -82,7 +82,7 @@ class LightningLearner(Learner):
             raise ValueError("The data must be a PyTorch DataLoader")
         return pt_model, pt_data
 
-    def fit(self) -> P2PFLModel:
+    async def fit(self) -> P2PFLModel:
         """Fit the model."""
         if Settings.general.SEED is not None and not ray_installed():
             raise ValueError("You must use Ray to set a seed with PyTorch Lightning. Not working on a same process. | pip install ray")
@@ -123,7 +123,7 @@ class LightningLearner(Learner):
             self.__trainer.should_stop = True
             self.__trainer = None
 
-    def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> Dict[str, float]:
         """
         Evaluate the model with actual parameters.
 

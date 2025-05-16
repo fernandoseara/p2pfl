@@ -63,6 +63,9 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         # Neighbors
         self._neighbors = neighbors
 
+        # Background tasks
+        self._background_tasks = set()
+
     ####
     # Management
     ####
@@ -156,19 +159,27 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         if request.cmd in self.__commands:
             try:
                 if request.HasField("message"):
-                    await self.__commands[request.cmd].execute(request.source, request.round, *request.message.args)
+                    task = asyncio.create_task(self.__commands[request.cmd].execute(request.source, request.round, *request.message.args))
                 elif request.HasField("weights"):
-                    await self.__commands[request.cmd].execute(
+                    task = asyncio.create_task(self.__commands[request.cmd].execute(
                         request.source,
                         request.round,
                         weights=request.weights.weights,
                         contributors=request.weights.contributors,
                         num_samples=request.weights.num_samples,
-                    )
+                    ))
                 else:
                     error_text = f"Error while processing command: {request.cmd}: No message or weights"
                     logger.error(self.addr, error_text)
                     return node_pb2.ResponseMessage(error=error_text)
+
+                # Add task to the set. This creates a strong reference.
+                self._background_tasks.add(task)
+
+                # To prevent keeping references to finished tasks forever,
+                # make each task remove its own reference from the set after
+                # completion:
+                task.add_done_callback(self._background_tasks.discard)
             except Exception as e:
                 error_text = f"Error while processing command: {request.cmd}. {type(e).__name__}: {e}"
                 logger.error(self.addr, error_text + f"\n{traceback.format_exc()}")

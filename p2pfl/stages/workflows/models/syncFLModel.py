@@ -68,7 +68,7 @@ class LearningWorkflowModel:
             bool: True if the workflow is finished, False otherwise.
 
         """
-        return self.is_training_finished()
+        return self.is_learning_finished()
 
     async def set_model_initialized(self, *args, **kwargs):
         """Set the model initialized."""
@@ -217,7 +217,7 @@ class LearningWorkflowModel:
         """Finish the aggregation."""
         logger.info(self.node.address, "🤖 Aggregation finished.")
 
-    async def on_exit_p2p_learning(self):
+    async def on_final_p2p_learning(self):
         """Finish the training."""
         await self.next_stage()
 
@@ -236,6 +236,12 @@ class LearningWorkflowModel:
         )
 
         logger.info(self.node.address, "😋 Training finished!!")
+
+        await self.training_finished()
+
+    async def on_final_learning(self):
+        """Finish the learning workflow."""
+        await self.learning_finished()
 
     ##############
     # CONDITIONS #

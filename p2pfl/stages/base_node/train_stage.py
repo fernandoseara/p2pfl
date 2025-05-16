@@ -35,7 +35,7 @@ class TrainStage(Stage):
         """Execute the stage."""
         # Train
         logger.info(node.address, "🏋️‍♀️ Training...")
-        node.get_learner().fit()
+        await node.get_learner().fit()
         #await node.get_learner().fit()
         logger.info(node.address, "🎓 Training done.")
 

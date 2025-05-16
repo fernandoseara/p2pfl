@@ -140,14 +140,14 @@ class VirtualNodeLearner(Learner):
         """Add the additional information from the callbacks to the model."""
         self.learner.add_callback_info_to_model()
 
-    def fit(self) -> P2PFLModel:
+    async def fit(self) -> P2PFLModel:
         """Fit the model."""
         try:
-            self.actor_pool.submit_learner_job(
+            await self.actor_pool.submit_learner_job(
                 lambda actor, addr, learner: actor.fit.remote(addr, learner),
                 (str(self.addr), self.learner),
             )
-            model: P2PFLModel = self.actor_pool.get_learner_result(str(self.addr), None)[1]
+            model: P2PFLModel = (await self.actor_pool.get_learner_result(str(self.addr), None))[1]
             self.learner.set_model(model)
             return model
         except Exception as ex:
@@ -159,7 +159,7 @@ class VirtualNodeLearner(Learner):
         # TODO: Need to implement this!
         raise NotImplementedError
 
-    def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> Dict[str, float]:
         """
         Evaluate the model with actual parameters.
 
@@ -168,11 +168,11 @@ class VirtualNodeLearner(Learner):
 
         """
         try:
-            self.actor_pool.submit_learner_job(
+            await self.actor_pool.submit_learner_job(
                 lambda actor, addr, learner: actor.evaluate.remote(addr, learner),
                 (str(self.addr), self.learner),
             )
-            result: Dict[str, float] = self.actor_pool.get_learner_result(str(self.addr), None)[1]
+            result: Dict[str, float] = (await self.actor_pool.get_learner_result(str(self.addr), None))[1]
             return result
         except Exception as ex:
             logger.error(self.addr, f"An error occurred during remote evaluation: {ex}")

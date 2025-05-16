@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import random
 from typing import TYPE_CHECKING, Any, List, Set, Type, Union
 
 from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
@@ -28,7 +29,9 @@ from p2pfl.management.logger import logger
 from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
 
 if TYPE_CHECKING:
+    from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
     from p2pfl.node import Node
+
 
 class GossipPartialModelStage(Stage):
     """GossipPartialModel stage."""
@@ -68,7 +71,19 @@ class GossipPartialModelStage(Stage):
         """
 
         def model_fn(n: str) -> Any:
-            model = node.get_network_state().get_model(n)
+            models: list[P2PFLModel] = node.get_network_state().get_all_models()
+            aggregation_sources = node.get_network_state().get_aggregation_sources(n)
+
+            # Filter models whose contributors are not in aggregation sources
+            eligible_models = [
+                model for model in models
+                if not set(model.get_contributors()).issubset(aggregation_sources)
+            ]
+
+            # Select one random eligible model
+            model = None
+            if eligible_models:
+                model = random.choice(eligible_models)
 
             if model is None:
                 logger.info(node.address, f"❔ No models to aggregate for {node.address}.")
@@ -83,13 +98,13 @@ class GossipPartialModelStage(Stage):
             )
 
         # Gossip to eligible neighbors
-        logger.debug(node.address, f"📡 Candidates to gossip to: {candidates}")
-
         for neighbor in candidates:
             payload = model_fn(neighbor)
-            try:
-                logger.debug(node.address, f"🗣️ Sending model to {neighbor}")
-                await node.get_communication_protocol().send(neighbor, payload, temporal_connection=True)
-                logger.debug(node.address, f"✅ Sent model to {neighbor}")
-            except Exception as e:
-                logger.warning(node.address, f"⚠️ Failed to send model to {neighbor}: {e}")
+
+            if payload is not None:
+                try:
+                    logger.debug(node.address, f"🗣️ Sending model to {neighbor}")
+                    await node.get_communication_protocol().send(neighbor, payload, temporal_connection=True)
+                    logger.debug(node.address, f"✅ Sent model to {neighbor}")
+                except Exception as e:
+                    logger.warning(node.address, f"⚠️ Failed to send model to {neighbor}: {e}")

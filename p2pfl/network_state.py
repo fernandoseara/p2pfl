@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Netowork state."""
+"""Network state."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class PeerNodeState:
     """Class to store the state of a peer node."""
 
     round_number: int
-    model_updated: P2PFLModel # The model updated by this peer
+    model_updated: P2PFLModel|None # The model updated by this peer
     aggregated_from: list[str] # Addresses of models this one was aggregated from
     train_set_votes: dict[str, int] # for each nei the given vote
 
@@ -134,6 +134,11 @@ class NetworkState:
         state = self.get_peer_state(peer_id)
         return state.model_updated if state else None
 
+    def get_contributors(self, peer_id: str) -> list[str] | None:
+        """Retrieve the contributors of a specific peer's model."""
+        state = self.get_peer_state(peer_id)
+        return state.model_updated.get_contributors() if state and state.model_updated else None
+
     def get_vote(self, peer_id: str, train_set_id: str) -> int | None:
         """Retrieve the vote for a specific training set by a peer."""
         if peer_id in self._peer_states:
@@ -153,7 +158,7 @@ class NetworkState:
 
     def get_all_models(self) -> list[P2PFLModel]:
         """Get all models currently stored."""
-        return [state.model_updated for state in self._peer_states.values()]
+        return [state.model_updated for state in self._peer_states.values() if state.model_updated]
 
     def get_all_contributors(self) -> list[str]:
         """Get all contributors for the models."""

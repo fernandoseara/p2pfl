@@ -128,7 +128,7 @@ class KerasLearner(Learner):
     #         logger.error(self._self_addr, f"Error in training with Keras: {e}")
     #         raise e
 
-    def fit(self) -> KerasModel:
+    async def fit(self) -> KerasModel:
         """Fit the model."""
         set_seed(Settings.general.SEED, self.get_framework())
         try:
@@ -159,7 +159,7 @@ class KerasLearner(Learner):
         # Need to implement a custom callback or use a flag to stop training.
         logger.error(self.addr, "Interrupting training (not fully implemented for Keras).")
 
-    def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> Dict[str, float]:
         """Evaluate the Keras model."""
         try:
             if self.epochs > 0:
