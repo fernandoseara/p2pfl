@@ -19,8 +19,8 @@
 """Context Information Updating commands."""
 
 from typing import Optional
+
 from p2pfl.communication.commands.command import Command
-from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.management.logger import logger
 from p2pfl.node import Node
 
@@ -38,7 +38,7 @@ class LossInformationUpdatingCommand(Command):
         """Get the command name."""
         return "loss_information_updating"
 
-    def execute(self, source: str, round: int, loss: str, **kwargs) -> None:
+    async def execute(self, source: str, round: int, loss: str, **kwargs) -> None:
         """
         Execute the command.
 
@@ -50,9 +50,10 @@ class LossInformationUpdatingCommand(Command):
 
         """
         # Save loss
-        if loss is not None:
-            logger.info(self.__node.local_state.addr, "📉 Neighbour training loss received.")
-            self.__node.local_state.losses[source] = (float(loss), round)
+        if loss is None:
+            raise ValueError("Loss is required")
+
+        await self.__node.get_learning_workflow().loss_information_received(source, round, float(loss))
 
 
 class IndexInformationUpdatingCommand(Command):
@@ -68,21 +69,22 @@ class IndexInformationUpdatingCommand(Command):
         """Get the command name."""
         return "index_information_updating"
 
-    def execute(self, source: str, round: int, index: str, **kwargs) -> None:
+    async def execute(self, source: str, round: int, **kwargs) -> None:
         """
         Execute the command.
 
         Args:
             source: The source of the command.
             round: The round of the command.
-            index: Index of local iteration of the source.
             **kwargs: The command keyword arguments.
 
         """
         # Save index of local iteration about model updating
-        if index is not None:
-            logger.info(self.__node.local_state.addr, "🔄 Index of local iteration received.")
-            self.__node.local_state.reception_times[source] = int(index)
+        if round is None:
+            raise ValueError("Index is required")
+
+        await self.__node.get_learning_workflow().iteration_index_received(source,
+                                                                    index=round)
 
 
 class ModelInformationUpdatingCommand(Command):
@@ -98,7 +100,7 @@ class ModelInformationUpdatingCommand(Command):
         """Get the command name."""
         return "model_information_updating"
 
-    def execute(self, source: str, round: int,
+    async def execute(self, source: str, round: int,
                 weights: Optional[bytes] = None,
                 contributors: Optional[list[str]] = None,  # TIPO ESTA MAL (NECESARIO CASTEARLO AL LLAMAR)
                 num_samples: Optional[int] = None,
@@ -117,30 +119,7 @@ class ModelInformationUpdatingCommand(Command):
         if weights is None or contributors is None or num_samples is None:
             raise ValueError("Weights, contributors and weight are required")
 
-        logger.info(self.__node.local_state.addr, "Model received.")
-
-        # Check if Learning is running
-        if self.__node.local_state.round is not None:
-            try:
-                # Save model
-                model = self.__node.learner.get_model().build_copy(params=weights, num_samples=num_samples, contributors=list(contributors))
-                self.__node.aggregator.add_model(model)
-            # Warning: these stops can cause a denegation of service attack
-            except DecodingParamsError:
-                logger.error(self.__node.local_state.addr, "Error decoding parameters.")
-                self.__node.stop()
-
-            except ModelNotMatchingError:
-                logger.error(self.__node.local_state.addr, "Models not matching.")
-                self.__node.stop()
-
-            except Exception as e:
-                logger.error(self.__node.local_state.addr, f"Unknown error adding model: {e}")
-                self.__node.stop()
-
-        else:
-            logger.debug(self.__node.local_state.addr, "Tried to add a model while learning is not running")
-
+        await self.__node.get_learning_workflow().model_received(source, round, weights, num_samples, list(contributors))
 
 class PushSumWeightInformationUpdatingCommand(Command):
     """PushSumWeightInformationUpdatingCommand."""
@@ -155,7 +134,7 @@ class PushSumWeightInformationUpdatingCommand(Command):
         """Get the command name."""
         return "push_sum_weight_information_updating"
 
-    def execute(self, source: str, round: int, push_sum_weight: str, **kwargs) -> None:
+    async def execute(self, source: str, round: int, push_sum_weight: str, **kwargs) -> None:
         """
         Execute the command.
 
@@ -167,6 +146,8 @@ class PushSumWeightInformationUpdatingCommand(Command):
 
         """
         # Save push-sum weight
-        if push_sum_weight is not None:
-            logger.info(self.__node.local_state.addr, "Push-sum weight received.")
-            self.__node.local_state.push_sum_weights[source] = float(push_sum_weight)
+        if push_sum_weight is None:
+            raise ValueError("Push-sum weight is required")
+
+        await self.__node.get_learning_workflow().push_sum_weight_received(source,
+                push_sum_weight=float(push_sum_weight))

@@ -18,7 +18,7 @@
 
 """Keras model abstraction for P2PFL."""
 
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
 import tensorflow as tf  # type: ignore
@@ -26,9 +26,9 @@ import tensorflow as tf  # type: ignore
 from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
-from p2pfl.learning.frameworks.tensorflow.custom_models.custom_model_factory import KerasCustomModelFactory
-
 from p2pfl.management.logger import logger
+
+T = TypeVar("T", bound="KerasP2PFLModel")
 
 #####################
 #    KerasModel     #
@@ -41,7 +41,7 @@ class ModelNotBuiltError(Exception):
     pass
 
 
-class KerasModel(P2PFLModel):
+class KerasP2PFLModel(P2PFLModel):
     """
     P2PFL model abstraction for TensorFlow/Keras.
 
@@ -134,12 +134,17 @@ class KerasModel(P2PFLModel):
         """
         return self.model.__class__.from_config(self.model.get_config())
 
-    def set_custom_model(self, type):
+    def build_copy(self, **kwargs) -> "P2PFLModel":
         """
-        Set the custom model.
+        Create a copy of the model with the same configuration.
 
         Args:
-            type: The type of the custom model.
+            **kwargs: Additional keyword arguments for the model.
+
+        Returns:
+            A new instance of the same class with the cloned model.
 
         """
-        self.model = KerasCustomModelFactory.create_model(type,self.model)
+        model_config = tf.keras.utils.serialize_keras_object(self.model)
+        model_copy = tf.keras.utils.deserialize_keras_object(model_config)
+        return self.__class__(model_copy, **kwargs)

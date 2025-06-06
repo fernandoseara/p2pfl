@@ -19,6 +19,7 @@
 
 import asyncio
 import traceback
+import typing
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
@@ -48,6 +49,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
     def __init__(
         self,
+        gossiper: Gossiper,
         neighbors: Neighbors,
         commands: Optional[list[Command]] = None,
     ) -> None:
@@ -60,11 +62,14 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         # (addr) Super
         NodeComponent.__init__(self)
 
+        # Gossiper
+        self._gossiper = gossiper
+
         # Neighbors
         self._neighbors = neighbors
 
         # Background tasks
-        self._background_tasks = set()
+        self._background_tasks: set[typing.Awaitable] = set()
 
     ####
     # Management
@@ -142,18 +147,14 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
         """
         # If message already processed, return
-        # if request.HasField("message"):
-        #     """
-        #     if request.cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and request.source == "beat"):
-        #         logger.debug(self.addr, f"🙅 Message already processed: {request.cmd} (id {request.message.hash})")
-        #     """
-        #     return node_pb2.ResponseMessage()
+        if request.HasField("message") and not await self._gossiper.check_and_set_processed(request):
+            return node_pb2.ResponseMessage()
 
         # Process message/model
         if request.cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and request.cmd == "beat"):
             emoji = "📫" if request.HasField("message") else "📦"
             logger.debug(
-                self.addr,
+                self.address,
                 f"{emoji} {request.cmd.upper()} received from {request.source}",
             )
         if request.cmd in self.__commands:
@@ -170,7 +171,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                     ))
                 else:
                     error_text = f"Error while processing command: {request.cmd}: No message or weights"
-                    logger.error(self.addr, error_text)
+                    logger.error(self.address, error_text)
                     return node_pb2.ResponseMessage(error=error_text)
 
                 # Add task to the set. This creates a strong reference.
@@ -182,24 +183,18 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                 task.add_done_callback(self._background_tasks.discard)
             except Exception as e:
                 error_text = f"Error while processing command: {request.cmd}. {type(e).__name__}: {e}"
-                logger.error(self.addr, error_text + f"\n{traceback.format_exc()}")
+                logger.error(self.address, error_text + f"\n{traceback.format_exc()}")
                 return node_pb2.ResponseMessage(error=error_text)
         else:
             # disconnect node
-            logger.error(self.addr, f"Unknown command: {request.cmd} from {request.source}")
+            logger.error(self.address, f"Unknown command: {request.cmd} from {request.source}")
             return node_pb2.ResponseMessage(error=f"Unknown command: {request.cmd}")
 
         # If message gossip
         if request.HasField("message") and request.message.ttl > 0:
             # Update ttl and gossip
             request.message.ttl -= 1
-            for addr, _ in self._neighbors.get_all(only_direct=True).items():
-                # Send message to all direct neighbors
-                if addr != request.source and addr != self.addr:
-                    try:
-                        await self._neighbors.get(addr).send(request)
-                    except Exception as e:
-                        logger.error(self.addr, f"Error while sending message to {addr}: {e}")
+            await self._gossiper.add_message(request)
 
         return node_pb2.ResponseMessage()
 
@@ -221,5 +216,22 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                 self.__commands[cmd.get_name()] = cmd
         elif isinstance(cmds, Command):
             self.__commands[cmds.get_name()] = cmds
+        else:
+            raise Exception("Command not valid")
+
+    @allow_no_addr_check
+    def remove_command(self, cmds: Union[Command, list[Command]]) -> None:
+        """
+        Remove a command.
+
+        Args:
+            cmd: Command to be removed.
+
+        """
+        if isinstance(cmds, list):
+            for cmd in cmds:
+                self.__commands.pop(cmd.get_name(), None)
+        elif isinstance(cmds, Command):
+            self.__commands.pop(cmds.get_name(), None)
         else:
             raise Exception("Command not valid")

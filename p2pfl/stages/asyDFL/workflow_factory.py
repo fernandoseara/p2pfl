@@ -18,22 +18,34 @@
 
 """Stage factory."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from p2pfl.communication.commands.command import Command
+from p2pfl.communication.commands.message.node_initialized_command import NodeInitializedCommand
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.node import Node
 from p2pfl.stages.workflow_factory import WorkflowFactory
 from p2pfl.stages.workflows.workflows import LearningWorkflow
 
+if TYPE_CHECKING:
+    from p2pfl.communication.commands.command import Command
+    from p2pfl.node import Node
+    from p2pfl.stages.workflows.workflows import LearningWorkflow
 
 class AsyDFLFactory(WorkflowFactory):
-    """Factory class to create workflows. Main goal: Avoid cyclic imports."""
+    """Factory class to create workflows."""
 
     @staticmethod
-    def create_training_workflow() -> type[LearningWorkflow]:
+    def create_training_workflow(node: Node) -> LearningWorkflow:
         """Create a workflow."""
-        from p2pfl.stages.asyDFL.workflow import AsyDFLWorkflow
+        from p2pfl.stages.workflows.async_event_handler_workflow import AsyncEventHandlerWorkflow
+        from p2pfl.stages.workflows.async_training_workflow import AsyncTrainingWorkflow
+        from p2pfl.stages.workflows.models.async_learning_workflow_model import AsyncLearningWorkflowModel
 
-        return AsyDFLWorkflow
+        model = AsyncLearningWorkflowModel(node)
+        return model, LearningWorkflow(model, AsyncTrainingWorkflow(), AsyncEventHandlerWorkflow())
 
     @staticmethod
     def create_commands(node: Node) -> list[Command]:
@@ -47,15 +59,12 @@ class AsyDFLFactory(WorkflowFactory):
         from p2pfl.communication.commands.message.metrics_command import MetricsCommand
         from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
         from p2pfl.communication.commands.message.peer_round_updated_command import PeerRoundUpdatedCommand
-        from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
-        from p2pfl.communication.commands.message.stop_learning_command import StopLearningCommand
         from p2pfl.communication.commands.message.vote_train_set_command import VoteTrainSetCommand
         from p2pfl.communication.commands.weights.full_model_command import FullModelCommand
         from p2pfl.communication.commands.weights.partial_model_command import PartialModelCommand
 
         return [
-            StartLearningCommand(node),
-            StopLearningCommand(node),
+            NodeInitializedCommand(node),
             PeerRoundUpdatedCommand(node),
             VoteTrainSetCommand(node),
             ModelsAggregatedCommand(node),
@@ -71,7 +80,6 @@ class AsyDFLFactory(WorkflowFactory):
     @staticmethod
     def create_model(model: P2PFLModel) -> P2PFLModel:
         """Create model."""
-        # TODO: Check type asydfl model
-        model.set_custom_model("AsyDFL")
+        from p2pfl.learning.frameworks.custom_model_factory import CustomModelFactory
 
-        return model
+        return CustomModelFactory.create_model("AsyDFL", model)

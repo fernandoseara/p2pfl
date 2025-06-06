@@ -68,13 +68,13 @@ class Gossiper(NodeComponent):
 
     async def start(self) -> None:
         """Launch the gossiping task."""
-        logger.info(self.addr, "🏁 Starting async gossiper...")
+        logger.info(self.address, "🏁 Starting gossiper...")
         self._terminate_event.clear()
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
         """Signal the gossiper to stop and wait for completion."""
-        logger.info(self.addr, "🛑 Stopping async gossiper...")
+        logger.info(self.address, "🛑 Stopping gossiper...")
         self._terminate_event.set()
         if self._task:
             await self._task
@@ -86,7 +86,7 @@ class Gossiper(NodeComponent):
         async with self._pending_msgs_lock:
             neighbors = [
                 v[0] for addr, v in self._neighbors.get_all(only_direct=True).items()
-                if addr != self.addr and addr != msg.source
+                if addr != self.address and addr != msg.source
             ]
             self._pending_msgs.append((msg, neighbors))
 
@@ -95,7 +95,7 @@ class Gossiper(NodeComponent):
         Marks a message as processed if it hasn't been seen yet.
         Returns True if the message was new, False otherwise.
         """
-        if msg.source == self.addr:
+        if msg.source == self.address:
             return False
 
         async with self._processed_messages_lock:
@@ -164,15 +164,15 @@ class Gossiper(NodeComponent):
             start_time = asyncio.get_event_loop().time()
 
             if early_stopping_fn():
-                logger.info(self.addr, "Stopping model gossip process.")
+                logger.info(self.address, "Stopping model gossip process.")
                 return
 
             candidates = get_candidates_fn()
             if not candidates:
-                logger.info(self.addr, "🤫 Gossip finished.")
+                logger.info(self.address, "🤫 Gossip finished.")
                 return
 
-            logger.debug(self.addr, f"👥 Remaining gossip targets: {candidates}")
+            logger.debug(self.address, f"👥 Remaining gossip targets: {candidates}")
 
             current_status = status_fn()
             if len(last_status) < Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS:
@@ -182,8 +182,8 @@ class Gossiper(NodeComponent):
                 j = (j + 1) % Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS
 
                 if all(status == last_status[0] for status in last_status):
-                    logger.info(self.addr, f"⏹️  Gossip stopped: {Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS} identical rounds.")
-                    logger.debug(self.addr, f"Final status: {last_status[-1]}")
+                    logger.info(self.address, f"⏹️  Gossip stopped: {Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS} identical rounds.")
+                    logger.debug(self.address, f"Final status: {last_status[-1]}")
                     return
 
             # Randomly select a subset of candidate nodes
@@ -198,7 +198,7 @@ class Gossiper(NodeComponent):
             for client in clients:
                 model = model_fn(client.nei_addr)
                 if model is not None:
-                    logger.debug(self.addr, f"🗣️ Sending model to {client.nei_addr}")
+                    logger.debug(self.address, f"🗣️ Sending model to {client.nei_addr}")
                     await client.send(model, temporal_connection=temporal_connection)
 
             elapsed = asyncio.get_event_loop().time() - start_time

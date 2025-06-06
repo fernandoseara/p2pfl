@@ -94,7 +94,7 @@ def test_convergence(x, model_build_fn):
 
     # Node Connection
     for i in range(len(nodes) - 1):
-        nodes[i + 1].connect(nodes[i].addr)
+        nodes[i + 1].connect(nodes[i].address)
         time.sleep(0.1)
     wait_convergence(nodes, n - 1, only_direct=False)
 
@@ -147,7 +147,7 @@ def test_convergence(x, model_build_fn):
 def _test_interrupt_train(two_nodes):
     """Test interrupting training of a node."""
     n1, n2 = two_nodes
-    n1.connect(n2.addr)
+    n1.connect(n2.address)
     wait_convergence([n1, n2], 1, only_direct=True)
 
     n1.set_start_learning(100, 100)
@@ -185,7 +185,7 @@ def _test_node_down_on_learning(n):
 
     # Node Connection
     for i in range(len(nodes) - 1):
-        nodes[i + 1].connect(nodes[i].addr)
+        nodes[i + 1].connect(nodes[i].address)
         time.sleep(0.1)
     wait_convergence(nodes, n - 1, only_direct=False)
 
@@ -231,7 +231,7 @@ def test_framework_node(build_model_fn):
     n2.start()
 
     # Connect
-    n2.connect(n1.addr)
+    n2.connect(n1.address)
     wait_convergence([n1, n2], 1, only_direct=True)
 
     # Start Learning

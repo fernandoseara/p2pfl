@@ -25,7 +25,7 @@ from transitions.extensions.nesting import NestedState
 NestedState.separator = '↦'
 
 
-class BasicEventHandlerWorkflow(BaseMachine):
+class AsyncEventHandlerWorkflow(BaseMachine):
     """
     Event handler model for the base node.
 
@@ -45,18 +45,14 @@ class BasicEventHandlerWorkflow(BaseMachine):
             {'trigger': 'node_started', 'source': 'waiting_context_update', 'dest': None,
             'prepare': 'create_peer', 'conditions': 'is_all_nodes_started', 'after': 'send_network_ready'},
 
-            {'trigger': 'peer_round_updated', 'source': 'waiting_context_update', 'dest': None,
-            'prepare': 'save_peer_round_updated', 'conditions': 'is_all_models_initialized', 'after': 'send_peers_ready'},
-            {'trigger': 'full_model_received', 'source': 'waiting_context_update', 'dest': None,
-            'prepare': 'save_full_model', 'after': 'send_full_model_ready'},
-
-            {'trigger': 'vote', 'source': 'waiting_context_update', 'dest': None,
-            'prepare': 'save_votes', 'conditions': 'is_all_votes_received', 'after': 'send_votes_ready'},
-
-            {'trigger': 'aggregated_models_received', 'source': 'waiting_context_update', 'dest': None,
-            'prepare': 'save_aggregated_models'},
-            {'trigger': 'aggregate', 'source': 'waiting_context_update', 'dest': None,
-            'prepare': 'save_aggregation', 'conditions': 'is_all_models_received', 'after': 'send_aggregation_ready'},
+            {'trigger': 'loss_information_received', 'source': 'waiting_context_update', 'dest': None,
+            'prepare': 'save_loss_information'},
+            {'trigger': 'iteration_index_received', 'source': 'waiting_context_update', 'dest': None,
+            'prepare': 'save_iteration_index'},
+            {'trigger': 'model_received', 'source': 'waiting_context_update', 'dest': None,
+            'prepare': 'save_model'},
+            {'trigger': 'push_sum_weight_received', 'source': 'waiting_context_update', 'dest': None,
+            'prepare': 'save_push_sum_weight'},
 
             {'trigger': 'training_finished', 'source': '*', 'dest': 'training_finished'},
         ]
@@ -65,6 +61,6 @@ class BasicEventHandlerWorkflow(BaseMachine):
                          states=states,
                          transitions=transitions,
                          initial='waiting_context_update',
-                         queued='model',
+                         queued=True,
                          ignore_invalid_triggers=True
         )

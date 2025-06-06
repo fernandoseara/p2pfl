@@ -27,31 +27,33 @@ from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
+    from p2pfl.stages.network_state.network_state import NetworkState
 
 class AggregatingVoteTrainSetStage(Stage):
     """Vote Train Set Stage."""
 
     @staticmethod
     async def execute(
+        network_state: NetworkState,
         node: Node,
         ) -> None:
         """Execute the stage."""
         # Aggregate votes
         node.get_local_state().train_set = AggregatingVoteTrainSetStage.__validate_train_set(
-            await AggregatingVoteTrainSetStage.__aggregate_votes(node),
+            await AggregatingVoteTrainSetStage.__aggregate_votes(network_state,node),
             node,
         )
         logger.info(
             node.address,
             f"🚂 Train set of {len(node.get_local_state().train_set)} nodes: {node.get_local_state().train_set}",
         )
-        # Set Models To Aggregate
-        #aggregator.set_nodes_to_aggregate(state.train_set)
 
 
     @staticmethod
-    async def __aggregate_votes(node: Node) -> list[str]:
-        network_state = node.get_network_state()
+    async def __aggregate_votes(
+        network_state: NetworkState,
+        node: Node
+        ) -> list[str]:
 
         # Get all votes
         results: dict[str, int] = {}

@@ -50,6 +50,10 @@ class VirtualLearnerActor:
         """Fit the model."""
         return addr, await learner.fit()
 
+    async def train_on_batch(self, addr: str, learner: Learner) -> Tuple[str, P2PFLModel]:
+        """Train the model on a single batch."""
+        return addr, await learner.train_on_batch()
+
     async def evaluate(self, addr: str, learner: Learner) -> Tuple[str, Dict[str, float]]:
         """Evaluate the model."""
         return addr, await learner.evaluate()
@@ -293,6 +297,18 @@ class SuperActorPool(ActorPool):
             return False
         return True
 
+    async def _return_actor(self, actor: VirtualLearnerActor) -> None:
+        """
+        Return an actor to the pool.
+
+        Args:
+            actor: Actor instance to return.
+
+        """
+        self._idle_actors.append(actor)
+        if self._pending_submits:
+            await self.submit(*self._pending_submits.pop(0))
+
     async def process_unordered_future(self, timeout: Optional[float] = None) -> None:
         """
         Process the next unordered future result from the pool.
@@ -305,7 +321,7 @@ class SuperActorPool(ActorPool):
             TimeoutError: If the future processing times out.
 
         """
-        if not self.has_next():
+        if not self.has_next(): # type: ignore
             raise StopAsyncIteration("No more results to get")
 
         done, _ = await asyncio.wait(
@@ -322,10 +338,10 @@ class SuperActorPool(ActorPool):
             if actor:
                 if self._check_actor_fits_in_pool():
                     if self._check_and_remove_actor_from_pool(actor):
-                        self._return_actor(actor)
+                        await self._return_actor(actor)
                     self._flag_future_as_ready(addr)
                 else:
-                    await actor.terminate.remote()
+                    actor.terminate.remote()
 
     async def get_learner_result(self, addr: str, timeout: Optional[float]) -> Tuple[Any, Any]:
         """
@@ -339,7 +355,7 @@ class SuperActorPool(ActorPool):
             Address and result of the learner job.
 
         """
-        while self.has_next() and not self._is_future_ready(addr):
+        while self.has_next() and not self._is_future_ready(addr):  # type: ignore
             try:
                 await self.process_unordered_future(timeout=timeout)
             except StopAsyncIteration:

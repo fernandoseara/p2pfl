@@ -45,9 +45,9 @@ class LocalNodeState:
 
     """
 
-    def __init__(self, addr: str) -> None:
+    def __init__(self, address: str) -> None:
         """Initialize the node state."""
-        self.addr = addr
+        self.address = address
         self.status = "Idle"
 
         # Train Set
@@ -72,6 +72,11 @@ class LocalNodeState:
         """Get the actual experiment name."""
         return self.experiment.exp_name if self.experiment is not None else None
 
+    @property
+    def epochs(self) -> int | None:
+        """Get the number of epochs."""
+        return self.experiment.epochs if self.experiment is not None else None
+
     def get_experiment(self) -> Experiment | None:
         """Get the actual experiment."""
         return self.experiment
@@ -92,7 +97,7 @@ class LocalNodeState:
         """
         self.status = "Learning"
         self.experiment = Experiment(exp_name, total_rounds, epochs, trainset_size)
-        logger.experiment_started(self.addr, self.experiment)  # TODO: Improve changes on the experiment
+        logger.experiment_started(self.address, self.experiment)  # TODO: Improve changes on the experiment
 
     def increase_round(self) -> None:
         """
@@ -109,16 +114,16 @@ class LocalNodeState:
             raise ValueError("Experiment not initialized")
 
         self.experiment.increase_round()
-        logger.experiment_started(self.addr, self.experiment)  # TODO: Improve changes on the experiment
+        logger.experiment_started(self.address, self.experiment)  # TODO: Improve changes on the experiment
 
     def clear(self) -> None:
         """Clear the state."""
-        type(self).__init__(self, self.addr)
+        type(self).__init__(self, self.address)
 
     def __str__(self) -> str:
         """Return a String representation of the node state."""
         return (
-            f"NodeState(addr={self.addr}, status={self.status}, exp_name={self.exp_name}, "
+            f"NodeState(addr={self.address}, status={self.status}, exp_name={self.exp_name}, "
             f"round={self.round}, total_rounds={self.total_rounds}, "
             f"train_set={self.train_set})"
         )

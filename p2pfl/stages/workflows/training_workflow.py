@@ -19,29 +19,14 @@
 
 from __future__ import annotations
 
-import asyncio
-from functools import partial
 from typing import TYPE_CHECKING
 
-from transitions.extensions import HierarchicalAsyncGraphMachine
+from transitions.extensions import HierarchicalAsyncMachine as BaseMachine
 from transitions.extensions.asyncio import AsyncTimeout
 from transitions.extensions.nesting import NestedState
 from transitions.extensions.states import add_state_features
 
-from p2pfl.communication.commands.message.node_initialized_command import NodeInitializedCommand
-from p2pfl.communication.commands.message.peer_round_updated_command import PeerRoundUpdatedCommand
-from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
-from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
-from p2pfl.stages.base_node.aggregating_vote_train_set_stage import AggregatingVoteTrainSetStage
-from p2pfl.stages.base_node.evaluate_stage import EvaluateStage
-from p2pfl.stages.base_node.gossip_full_model_stage import GossipFullModelStage
-from p2pfl.stages.base_node.gossip_partial_model_stage import GossipPartialModelStage
-from p2pfl.stages.base_node.start_learning_stage import StartLearningStage
-from p2pfl.stages.base_node.train_stage import TrainStage
-from p2pfl.stages.base_node.training_finished_stage import TrainingFinishedStage
-from p2pfl.stages.base_node.update_round_stage import UpdateRoundStage
-from p2pfl.stages.base_node.vote_train_set_stage import VoteTrainSetStage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
@@ -49,14 +34,13 @@ if TYPE_CHECKING:
 NestedState.separator = '↦'
 
 @add_state_features(AsyncTimeout)
-class TimeoutMachine(HierarchicalAsyncGraphMachine):
+class TimeoutMachine(BaseMachine):
     """State machine with timeout support."""
 
     pass
 
-from p2pfl.management.logger import logger
 
-class TrainingWorkflow(TimeoutMachine):
+class BasicTrainingWorkflow(TimeoutMachine):
     """
     Event handler model for the base node.
 
@@ -68,6 +52,7 @@ class TrainingWorkflow(TimeoutMachine):
     def __init__(self, model=None):
         """Initialize the event handler model."""
         states = [
+            # Setup & initial synchronization
             {'name': "starting_training", 'on_enter': 'on_enter_starting_training'},
             {'name': "waiting_for_synchronization", 'on_enter': 'on_enter_waiting_for_synchronization'},
             {'name': "nodes_synchronized", 'on_enter': 'on_enter_nodes_synchronized'},
@@ -95,7 +80,7 @@ class TrainingWorkflow(TimeoutMachine):
         ]
 
         transitions = [
-            # Setup & Initial synchronization
+            # Setup & initial synchronization
             {'trigger': 'next_stage', 'source': 'starting_training', 'dest': 'waiting_for_synchronization'},
             {'trigger': 'network_ready', 'source': 'waiting_for_synchronization', 'dest': 'nodes_synchronized'},
 

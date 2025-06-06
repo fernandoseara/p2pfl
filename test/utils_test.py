@@ -30,9 +30,9 @@ from p2pfl.utils.topologies import TopologyFactory, TopologyType
 class MockNode:
     """Mock Node class for testing."""
 
-    def __init__(self, addr):
+    def __init__(self, address):
         """Initialize the mock node."""
-        self.addr = addr
+        self.address = address
         self.connect = MagicMock()
 
 
@@ -102,7 +102,7 @@ class MockNodeComponent(NodeComponent):
 
     def example_method(self) -> str:
         """Return the address. Example method that requires addr to be set."""
-        return self.addr
+        return self.address
 
     @allow_no_addr_check
     def get_default_name(self) -> str:
@@ -113,12 +113,12 @@ class MockNodeComponent(NodeComponent):
 def test_node_component_initialization():
     """Test initial state and setting of addr."""
     component = MockNodeComponent()
-    assert component.addr == ""
+    assert component.address == ""
 
-    addr = "test_address"
-    returned_addr = component.set_addr(addr)
-    assert component.addr == addr
-    assert returned_addr == addr
+    address = "test_address"
+    returned_addr = component.set_addr(address)
+    assert component.address == address
+    assert returned_addr == address
 
 
 def test_node_component_methods():

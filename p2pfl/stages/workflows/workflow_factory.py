@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from p2pfl.stages.workflow_factory import WorkflowFactory
 
+
 if TYPE_CHECKING:
     from p2pfl.communication.commands.command import Command
     from p2pfl.node import Node
@@ -31,14 +32,19 @@ if TYPE_CHECKING:
 
 
 class BasicDFLFactory(WorkflowFactory):
-    """Factory class to create workflows. Main goal: Avoid cyclic imports."""
+    """Factory class to create workflows."""
 
     @staticmethod
-    def create_training_workflow() -> type[LearningWorkflow]:
+    def create_training_workflow(node: Node) -> LearningWorkflow:
         """Create a workflow."""
+        from p2pfl.stages.workflows.event_handler_workflow import BasicEventHandlerWorkflow
+        from p2pfl.stages.workflows.models import BasicLearningWorkflowModel
+        from p2pfl.stages.workflows.training_workflow import BasicTrainingWorkflow
         from p2pfl.stages.workflows.workflows import LearningWorkflow
 
-        return LearningWorkflow
+        model = BasicLearningWorkflowModel(node)
+        return model, LearningWorkflow(model, BasicTrainingWorkflow(), BasicEventHandlerWorkflow())
+
 
     @staticmethod
     def create_commands(node: Node) -> list[Command]:
@@ -47,15 +53,11 @@ class BasicDFLFactory(WorkflowFactory):
         from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
         from p2pfl.communication.commands.message.node_initialized_command import NodeInitializedCommand
         from p2pfl.communication.commands.message.peer_round_updated_command import PeerRoundUpdatedCommand
-        from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
-        from p2pfl.communication.commands.message.stop_learning_command import StopLearningCommand
         from p2pfl.communication.commands.message.vote_train_set_command import VoteTrainSetCommand
         from p2pfl.communication.commands.weights.full_model_command import FullModelCommand
         from p2pfl.communication.commands.weights.partial_model_command import PartialModelCommand
 
         return [
-            StartLearningCommand(node),
-            StopLearningCommand(node),
             NodeInitializedCommand(node),
             PeerRoundUpdatedCommand(node),
             VoteTrainSetCommand(node),

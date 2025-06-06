@@ -1,7 +1,7 @@
 #
 # This file is part of the federated_learning_p2p (p2pfl) distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2024 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,22 +15,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+"""Network state."""
 
-"""Wait start Stage."""
-
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-from p2pfl.stages.stage import Stage
-
-if TYPE_CHECKING:
-    pass
+from abc import ABC, abstractmethod
 
 
-class WaitingForStartStage(Stage):
-    """Start learning stage."""
+class NetworkState(ABC):
+    """Network state to keep track of peer nodes and their states."""
 
-    @staticmethod
-    async def execute() -> None:
-        return
+    @abstractmethod
+    def add_peer(self, address: str):
+        """Add a new peer to the network state."""
+        pass

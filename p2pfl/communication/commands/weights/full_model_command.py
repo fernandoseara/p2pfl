@@ -22,10 +22,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from transitions import MachineError
-
 from p2pfl.communication.commands.command import Command
-from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.management.logger import logger
 
 if TYPE_CHECKING:  # Only imports the below statements during type checking
@@ -52,16 +49,7 @@ class FullModelCommand(Command):
     ) -> None:
         """Execute the command."""
         if weights is None:
-            logger.error(self.__node.address, "Invalid FullModelCommand message")
+            logger.error(self.__node.address, "❌ FullModelCommand: Weights are None.")
             return
 
-        try:
-            logger.info(self.__node.address, "📦 Full model received.")
-            await self.__node.learning_workflow.full_model_received(source, round, weights)
-
-        except DecodingParamsError:
-            logger.error(self.__node.address, "❌ Error decoding parameters.")
-        except ModelNotMatchingError:
-            logger.error(self.__node.address, "❌ Models not matching.")
-        except Exception as e:
-            logger.error(self.__node.address, f"❌ Unknown error adding model: {e}")
+        await self.__node.get_learning_workflow().full_model_received(source, round, weights)

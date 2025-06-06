@@ -30,7 +30,6 @@ class CommunicationProtocol(ABC, NodeComponent):
     Communication protocol interface.
 
     Args:
-        addr: The address.
         commands: The commands.
 
     """
@@ -62,15 +61,30 @@ class CommunicationProtocol(ABC, NodeComponent):
         """
         pass
 
+    @allow_no_addr_check
     @abstractmethod
-    def build_msg(self, cmd: str, args: Optional[List[str]] = None, round: Optional[int] = None) -> Any:
+    def remove_command(self, cmd: Union[str, Command]) -> None:
         """
-        Build a message.
+        Remove a command from the communication protocol.
 
         Args:
-            cmd: The message.
-            args: The arguments.
-            round: The round.
+            cmd: The command to remove.
+
+        """
+        pass
+
+    @abstractmethod
+    def build_msg(self, command_name: str, content: Optional[list[Any]] = None, round: Optional[int] = None) -> Any:
+        """
+        Build a message to send to the neighbors.
+
+        Args:
+            command_name: Command of the message.
+            content: Content of the message.
+            round: Round of the message.
+
+        Returns:
+            Message to send.
 
         """
         pass
@@ -98,7 +112,7 @@ class CommunicationProtocol(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    def send(
+    async def send(
         self,
         nei: str,
         msg: Any,
@@ -119,7 +133,7 @@ class CommunicationProtocol(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    def broadcast(self, msg: Any, node_list: Optional[List[str]] = None) -> None:
+    async def broadcast(self, msg: Any, node_list: Optional[List[str]] = None) -> None:
         """
         Broadcast a message to all neighbors.
 
@@ -131,19 +145,52 @@ class CommunicationProtocol(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    def connect(self, addr: str, non_direct: bool = False) -> bool:
+    async def gossip(
+        self,
+        nei: str,
+        msg: Any,
+        raise_error: bool = False,
+        remove_on_error: bool = True,
+        temporal_connection: bool = False,
+    ) -> None:
+        """
+        Gossip a message to a neighbor.
+
+        Args:
+            nei: The neighbor to gossip the message.
+            msg: The message to gossip.
+            raise_error: If raise error.
+            remove_on_error: If remove on error.
+
+        """
+        pass
+
+    @abstractmethod
+    async def broadcast_gossip(self, msg: Any, node_list: Optional[List[str]] = None) -> None:
+        """
+        Gossip a message to all neighbors.
+
+        Args:
+            msg: The message to gossip.
+            node_list: Optional node list.
+
+        """
+        pass
+
+    @abstractmethod
+    async def connect(self, address: str, non_direct: bool = False) -> bool:
         """
         Connect to a neighbor.
 
         Args:
-            addr: The address to connect to.
+            address: The address to connect to.
             non_direct: The non direct flag.
 
         """
         pass
 
     @abstractmethod
-    def disconnect(self, nei: str, disconnect_msg: bool = True) -> None:
+    async def disconnect(self, nei: str, disconnect_msg: bool = True) -> None:
         """
         Disconnect from a neighbor.
 
@@ -173,7 +220,7 @@ class CommunicationProtocol(ABC, NodeComponent):
             The address.
 
         """
-        return self.addr
+        return self.address
 
     @abstractmethod
     def wait_for_termination(self) -> None:

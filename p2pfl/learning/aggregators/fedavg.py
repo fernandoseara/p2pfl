@@ -51,7 +51,7 @@ class FedAvg(Aggregator):
         """
         # Check if there are models to aggregate
         if len(models) == 0:
-            raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there is no models")
+            raise NoModelsToAggregateError(f"({self.address}) Trying to aggregate models when there is no models")
 
         # Total Samples
         total_samples = sum([m.get_num_samples() for m in models])

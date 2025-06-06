@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from p2pfl.node import Node
 
 
-class StartLearningStage(Stage):
+class StartLearningStage:
     """Start learning stage."""
 
     @staticmethod
@@ -44,4 +44,4 @@ class StartLearningStage(Stage):
         learner = node.get_learner()
 
         state.set_experiment(experiment_name, rounds, epochs, trainset_size)
-        learner.set_epochs(state.get_experiment().epochs)
+        learner.set_epochs(state.epochs)

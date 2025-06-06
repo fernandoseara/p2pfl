@@ -36,7 +36,7 @@ with contextlib.suppress(ImportError):
 
     from p2pfl.examples.mnist.model.mlp_tensorflow import model_build_fn as model_build_fn_tensorflow
     from p2pfl.learning.frameworks.tensorflow.keras_dataset import KerasExportStrategy
-    from p2pfl.learning.frameworks.tensorflow.keras_model import KerasModel
+    from p2pfl.learning.frameworks.tensorflow.keras_model import KerasP2PFLModel
 
 
 with contextlib.suppress(ImportError):
@@ -187,7 +187,7 @@ def test_wrong_encoding_tensorflow():
     p2pfl_model1 = model_build_fn_tensorflow()
     encoded_params = p2pfl_model1.encode_parameters()
     mobile_net = tf.keras.applications.MobileNetV2((32, 32, 3), classes=10, weights=None)
-    p2pfl_model2 = KerasModel(mobile_net)
+    p2pfl_model2 = KerasP2PFLModel(mobile_net)
     decoded_params = p2pfl_model2.decode_parameters(encoded_params)
     # Check that raises
     with pytest.raises(ModelNotMatchingError):
@@ -340,7 +340,7 @@ def test_learner_train(build_model_fn):
     # Learner
     learner = LearnerFactory.create_learner(p2pfl_model)()
     learner.set_addr(node_name)
-    learner.set_model(p2pfl_model)
+    learner.set_P2PFLModel(p2pfl_model)
     learner.set_data(dataset)
 
     # Train

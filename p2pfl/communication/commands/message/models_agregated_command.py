@@ -52,11 +52,4 @@ class ModelsAggregatedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        if round == self._node.local_state.round:
-            for aggregated_model in list(args):
-                self._node.get_network_state().add_aggregated_from(source, aggregated_model)
-        else:
-            logger.debug(
-                self._node.local_state.addr,
-                f"Models Aggregated message from {source} in a late round. Ignored. {round} != {self._node.local_state.round}",
-            )
+        await self._node.get_learning_workflow().aggregated_models_received(source, round, list(args))

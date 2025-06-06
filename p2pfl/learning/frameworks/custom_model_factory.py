@@ -18,13 +18,11 @@
 
 """Keras custom model factory."""
 
-import tensorflow as tf
-
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.logger import logger
 
 
-class KerasCustomModelFactory:
+class CustomModelFactory:
     """Factory for creating learners based on the model framework."""
 
     @classmethod
@@ -40,10 +38,11 @@ class KerasCustomModelFactory:
             The custom model.
 
         """
-        if type == "AsyDFL":
-            from p2pfl.learning.frameworks.tensorflow.custom_models.asydfl_model import AsyDFLKerasP2PFLModel
+        framework = model.get_framework()
+        if framework == "tensorflow":
+            from p2pfl.learning.frameworks.tensorflow.custom_models.custom_model_factory import KerasCustomModelFactory
 
-            return model if isinstance(model, AsyDFLKerasP2PFLModel) else AsyDFLKerasP2PFLModel(model)
+            return KerasCustomModelFactory.create_model(type, model)
         else:
-            logger.error("KerasCustomModelFactory", f"Unsupported type: {type}")
-            raise ValueError(f"Unsupported type: {type}")
+            logger.error("CustomModelFactory", f"Unsupported framework: {framework}")
+            raise ValueError(f"Unsupported framework: {framework}")

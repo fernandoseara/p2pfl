@@ -24,6 +24,7 @@ from typing import Optional
 from grpc import aio, ssl_server_credentials
 
 from p2pfl.communication.commands.command import Command
+from p2pfl.communication.protocols.protobuff.gossiper import Gossiper
 from p2pfl.communication.protocols.protobuff.grpc.address import AddressParser
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2_grpc
@@ -45,12 +46,13 @@ class GrpcServer(ProtobuffServer):
 
     def __init__(
         self,
+        gossiper: Gossiper,
         neighbors: Neighbors,
         commands: Optional[list[Command]] = None,
     ) -> None:
         """Initialize the GRPC server."""
         # Super
-        super().__init__(neighbors, commands)
+        super().__init__(gossiper, neighbors, commands)
 
         # Server
         maxMsgLength = 1024 * 1024 * 1024
@@ -92,11 +94,11 @@ class GrpcServer(ProtobuffServer):
                 server_credentials = ssl_server_credentials(
                     [(private_key, certificate_chain)], root_certificates=root_certificates, require_client_auth=True
                 )
-                self.__server.add_secure_port(self.addr, server_credentials)
+                self.__server.add_secure_port(self.address, server_credentials)
             else:
-                self.__server.add_insecure_port(self.addr)
+                self.__server.add_insecure_port(self.address)
         except Exception as e:
-            raise Exception(f"Cannot bind the address ({self.addr}): {e}") from e
+            raise Exception(f"Cannot bind the address ({self.address}): {e}") from e
         await self.__server.start()
         self.__server_started = True
 

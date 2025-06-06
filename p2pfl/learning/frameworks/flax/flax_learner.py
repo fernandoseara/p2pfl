@@ -66,7 +66,7 @@ class FlaxLearner(Learner):
     @property
     def flax_model(self) -> FlaxModel:
         """Retrieve the Flax model."""
-        return cast(FlaxModel, self.get_model())
+        return cast(FlaxModel, self.get_P2PFLModel())
 
     def __get_flax_data(self, train: bool = True) -> Tuple:
         return self.get_data().export(FlaxExportStrategy, train=train)
@@ -125,17 +125,17 @@ class FlaxLearner(Learner):
                     avg_loss = total_loss / num_batches
                     avg_acc = total_acc / num_batches
                     # End of epoch: Log training progress
-                    logger.log_metric(self.addr, "epoch", epoch)
-                    logger.log_metric(self.addr, "loss", avg_loss)
-                    logger.log_metric(self.addr, "accuracy", avg_acc)
+                    logger.log_metric(self.address, "epoch", epoch)
+                    logger.log_metric(self.address, "loss", avg_loss)
+                    logger.log_metric(self.address, "accuracy", avg_acc)
 
             # Set model contribution
-            self.flax_model.set_contribution([self.addr], self.get_data().get_num_samples(train=True))
+            self.flax_model.set_contribution([self.address], self.get_data().get_num_samples(train=True))
 
             return self.flax_model
 
         except Exception as e:
-            logger.error(self.addr, f"Error in training with Flax: {e}")
+            logger.error(self.address, f"Error in training with Flax: {e}")
             raise e
 
     def evaluate(self) -> Dict[str, float]:
@@ -156,19 +156,19 @@ class FlaxLearner(Learner):
                     accuracies.append(accuracy)
 
                 avg_accuracy = float(jnp.mean(jnp.array(accuracies)))
-                logger.log_metric(self.addr, "accuracy", avg_accuracy)
+                logger.log_metric(self.address, "accuracy", avg_accuracy)
                 return {"accuracy": avg_accuracy}
             else:
                 return {}
         except Exception as e:
-            logger.error(self.addr, f"Evaluation error with Flax: {e}")
+            logger.error(self.address, f"Evaluation error with Flax: {e}")
             raise e
 
     def interrupt_fit(self) -> None:
         """Interrupt the fit process."""
         # Flax doesn't have a direct way to interrupt fit.
         # Need to implement a custom callback or use a flag to stop training.
-        logger.error(self.addr, "Interrupting training (not fully implemented for Flax).")
+        logger.error(self.address, "Interrupting training (not fully implemented for Flax).")
 
     def get_framework(self) -> str:
         """

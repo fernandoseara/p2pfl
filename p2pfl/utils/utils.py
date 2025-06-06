@@ -53,7 +53,7 @@ def set_standalone_settings() -> None:
     Settings.heartbeat.WAIT_CONVERGENCE = 2
     Settings.heartbeat.EXCLUDE_BEAT_LOGS = True
     Settings.gossip.PERIOD = 0
-    Settings.gossip.TTL = 10
+    Settings.gossip.TTL = 51
     Settings.gossip.MESSAGES_PER_PERIOD = 9999999999
     Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED = 10000
     Settings.gossip.MODELS_PERIOD = 2
@@ -65,7 +65,7 @@ def set_standalone_settings() -> None:
     logger.set_level(Settings.general.LOG_LEVEL)  # Refresh (maybe already initialized)
 
 
-def wait_convergence(
+async def wait_convergence(
     nodes: list[Node | CommunicationProtocol],
     n_neis: int,
     wait: Union[int, float] = 5,
@@ -96,7 +96,7 @@ def wait_convergence(
                 "Waiting for convergence",
                 str([list(n.get_neighbors(only_direct=only_direct).keys()) for n in nodes]),
             )
-        time.sleep(0.1)
+        await asyncio.sleep(0.1)
         acum += time.time() - begin
         if acum > wait:
             raise AssertionError()
@@ -112,7 +112,7 @@ def full_connection(node: Node, nodes: List[Node]) -> None:
 
     """
     for n in nodes:
-        node.connect(n.addr)
+        node.connect(n.address)
 
 
 async def wait_to_finish(nodes: List[Node], timeout=60):
@@ -149,7 +149,7 @@ def check_equal_models(nodes: List[Node]) -> None:
     first = True
     for node in nodes:
         if first:
-            model_params = node.learner.get_model().get_parameters()
+            model_params = node.get_learner().get_P2PFLModel().get_parameters()
             first = False
         else:
             # compare layers with a tolerance
@@ -158,6 +158,6 @@ def check_equal_models(nodes: List[Node]) -> None:
             for i, layer in enumerate(model_params):
                 assert np.allclose(
                     layer,
-                    node.learner.get_model().get_parameters()[i],
+                    node.get_learner().get_P2PFLModel().get_parameters()[i],
                     atol=1e-1,
                 )

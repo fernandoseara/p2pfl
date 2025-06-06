@@ -40,8 +40,7 @@ class Heartbeater(NodeComponent):
     def __init__(self, neighbors: Neighbors, build_msg: Callable[..., node_pb2.RootMessage]) -> None:
         """Initialize the heartbeat task."""
         self.__neighbors = neighbors
-        self.__build_beat_message: Callable[[float], node_pb2.RootMessage] = \
-            lambda t: build_msg(heartbeater_cmd_name, args=[str(t)])
+        self.__build_beat_message: Callable[[float], node_pb2.RootMessage] = lambda time: build_msg(heartbeater_cmd_name, content=[time])
         self.__heartbeat_task: Optional[asyncio.Task] = None
         self.__stop_event = asyncio.Event()
         self.name = "heartbeater-async-unknown"
@@ -64,7 +63,7 @@ class Heartbeater(NodeComponent):
 
     async def beat(self, nei: str, time: float) -> None:
         """Update heartbeat time for a neighbor."""
-        if nei == self.addr:
+        if nei == self.address:
             return
         await self.__neighbors.refresh_or_add(nei, time)
 
@@ -89,7 +88,7 @@ class Heartbeater(NodeComponent):
                 for nei, (_, last_seen) in neis.items():
                     if t - last_seen > timeout:
                         logger.info(
-                            self.addr,
+                            self.address,
                             f"Heartbeat timeout for {nei} ({t - last_seen}). Removing...",
                         )
                         await self.__neighbors.remove(nei)
@@ -98,11 +97,12 @@ class Heartbeater(NodeComponent):
 
             # Send heartbeat
             beat_msg = self.__build_beat_message(time.time())
+            beat_msg.message.ttl = Settings.gossip.TTL
             for client, _ in self.__neighbors.get_all(only_direct=True).values():
                 try:
                     await client.send(beat_msg, raise_error=False, disconnect_on_error=True)
                 except Exception as e:
-                    logger.warning(self.addr, f"Failed to send heartbeat to {client}: {e}")
+                    logger.warning(self.address, f"Failed to send heartbeat to {client}: {e}")
 
             # Sleep
             elapsed = time.time() - t

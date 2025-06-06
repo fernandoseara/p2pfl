@@ -147,7 +147,6 @@ async def mnist(
             protocol=MemoryCommunicationProtocol() if protocol == "memory" else GrpcCommunicationProtocol(),
             address=address,
             aggregator=Scaffold() if aggregator == "scaffold" else None,
-            workflow=WorkflowType.ASYNC if workflow == "async" else WorkflowType.BASIC,
         )
         await node.start()
         nodes.append(node)
@@ -156,13 +155,14 @@ async def mnist(
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
         await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
 
-        wait_convergence(nodes, n - 1, only_direct=False, wait=60)  # type: ignore
+        await wait_convergence(nodes, n - 1, only_direct=False, wait=60)  # type: ignore
 
         if r < 1:
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        await nodes[0].set_start_learning(rounds=r, epochs=e)
+        await nodes[0].set_start_learning(rounds=r, epochs=e,
+            workflow=WorkflowType.ASYNC if workflow == "async" else WorkflowType.BASIC)
 
         # Wait and check
         await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour

@@ -35,9 +35,9 @@ class NodeComponent:
 
     """
 
-    addr: str
+    address: str
 
-    def set_addr(self, addr: str) -> str:
-        """Set the addr of the node."""
-        self.addr = addr
-        return self.addr
+    def set_addr(self, address: str) -> str:
+        """Set the address of the node."""
+        self.address = address
+        return self.address

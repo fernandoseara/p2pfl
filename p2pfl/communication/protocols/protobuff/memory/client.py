@@ -126,13 +126,12 @@ class MemoryClient(ProtobuffClient):
         # Check if connected (threadsafe)
         if not self.is_connected():
             if temporal_connection:
-                with self._temporal_connection_lock:
-                    self._temporal_connection_uses += 1
-                    if self._temporal_connection_uses == 1:
-                        logger.debug(
-                            self.self_addr, f"💔 Neighbor {self.nei_addr} not connected. Trying to send message with temporal connection"
-                        )
-                        await self.connect(handshake_msg=False)
+                self._temporal_connection_uses += 1
+                if self._temporal_connection_uses == 1:
+                    logger.debug(
+                        self.self_addr, f"💔 Neighbor {self.nei_addr} not connected. Trying to send message with temporal connection"
+                    )
+                    await self.connect(handshake_msg=False)
             elif raise_error:
                 raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
             else:
@@ -148,12 +147,11 @@ class MemoryClient(ProtobuffClient):
 
         # Disconnect
         if temporal_connection:
-            with self._temporal_connection_lock:
-                self._temporal_connection_uses -= 1
-                if self._temporal_connection_uses == 0:
-                    self.disconnect(disconnect_msg=False)
+            self._temporal_connection_uses -= 1
+            if self._temporal_connection_uses == 0:
+                await self.disconnect(disconnect_msg=False)
         elif disconnect_on_error and res.error:
-            self.disconnect(disconnect_msg=True)
+            await self.disconnect(disconnect_msg=True)
 
         # Raise
         if res.error and raise_error:

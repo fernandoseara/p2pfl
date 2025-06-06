@@ -196,16 +196,6 @@ class P2PFLModel:
         """
         raise NotImplementedError
 
-    def set_custom_model(self, type: str) -> None:
-        """
-        Set the custom model.
-
-        Args:
-            type: The type of model.
-
-        """
-        pass
-
     def get_round(self) -> Optional[int]:
         """
         Get the round of the model.
@@ -238,3 +228,205 @@ class P2PFLModel:
             self.round += 1
 
         raise ValueError("Round not set. Cannot increment round.")
+
+    def clone_model(self) -> Any:
+        """
+        Clone the model.
+
+        Returns:
+            The cloned model.
+
+        """
+        raise NotImplementedError("Clone method not implemented for this model.")
+
+class P2PFLModelDecorator(P2PFLModel):
+    """
+    Base decorator interface for P2PFLModel.
+
+    Delegates all calls to the wrapped model.
+    """
+
+    def __init__(self, wrapped_model: P2PFLModel):
+        """
+        Initialize the decorator with a wrapped P2PFLModel.
+
+        Args:
+            wrapped_model: The P2PFLModel to wrap.
+
+        """
+        self._wrapped_model = wrapped_model
+
+    def get_parameters(self) -> list[np.ndarray]:
+        """
+        Get the parameters of the wrapped model.
+
+        Returns:
+            The parameters of the wrapped model.
+
+        """
+        return self._wrapped_model.get_parameters()
+
+    def set_parameters(self, params: Union[list[np.ndarray], bytes]) -> None:
+        """
+        Set the parameters of the wrapped model.
+
+        Args:
+            params: The parameters to set in the wrapped model.
+
+        Raises:
+            ModelNotMatchingError: If parameters don't match the wrapped model.
+
+        """
+        self._wrapped_model.set_parameters(params)
+
+    def get_framework(self) -> str:
+        """
+        Retrieve the framework of the wrapped model.
+
+        Returns:
+            The framework of the wrapped model.
+
+        """
+        return self._wrapped_model.get_framework()
+
+    def get_model(self) -> Any:
+        """
+        Get the underlying model of the wrapped P2PFLModel.
+
+        Returns:
+            The underlying model of the wrapped P2PFLModel.
+
+        """
+        return self._wrapped_model.get_model()
+
+    def get_round(self) -> Optional[int]:
+        """
+        Get the round of the wrapped model.
+
+        Returns:
+            The round of the wrapped model.
+
+        """
+        return self._wrapped_model.get_round()
+
+    def set_round(self, round: int) -> None:
+        """
+        Set the round of the wrapped model.
+
+        Args:
+            round: The round to set in the wrapped model.
+
+        """
+        self._wrapped_model.set_round(round)
+
+    def increment_round(self) -> None:
+        """
+        Increment the round of the wrapped model.
+
+        Raises:
+            ValueError: If the round is not set in the wrapped model.
+
+        """
+        self._wrapped_model.increment_round()
+
+    def build_copy(self, **kwargs) -> "P2PFLModel":
+        """
+        Build a copy of this decorator (including a copy of the wrapped model).
+
+        Returns:
+            A copy of the decorator, wrapping a copy of the model.
+
+        """
+        copied_wrapped_model = self._wrapped_model.build_copy(**kwargs)
+        return self.__class__(copied_wrapped_model)
+
+    def encode_parameters(self, params: Optional[list[np.ndarray]] = None) -> bytes:
+        """
+        Encode the parameters of the wrapped model.
+
+        Args:
+            params: The parameters of the wrapped model.
+
+        Returns:
+            Encoded parameters as bytes.
+
+        """
+        return self._wrapped_model.encode_parameters(params)
+
+    def decode_parameters(self, data: bytes) -> tuple[list[np.ndarray], dict[str, Any]]:
+        """
+        Decode the parameters of the wrapped model.
+
+        Args:
+            data: The encoded parameters of the wrapped model.
+
+        Returns:
+            A tuple containing the decoded parameters and additional info.
+
+        """
+        return self._wrapped_model.decode_parameters(data)
+
+    def add_info(self, callback: str, info: Any) -> None:
+        """
+        Add additional information to the wrapped model.
+
+        Args:
+            callback: The callback to add the information.
+            info: The information for the callback.
+
+        """
+        self._wrapped_model.add_info(callback, info)
+
+    def get_info(self, callback: Optional[str] = None) -> Any:
+        """
+        Get additional information from the wrapped model.
+
+        Args:
+            callback: The callback to retrieve the information.
+
+        Returns:
+            The requested information or all additional info if no callback is specified.
+
+        """
+        return self._wrapped_model.get_info(callback)
+
+    def set_contribution(self, contributors: list[str], num_samples: int) -> None:
+        """
+        Set the contribution of the wrapped model.
+
+        Args:
+            contributors: The contributors of the wrapped model.
+            num_samples: The number of samples used to train this model.
+
+        """
+        self._wrapped_model.set_contribution(contributors, num_samples)
+
+    def get_contributors(self) -> list[str]:
+        """
+        Get the contributors of the wrapped model.
+
+        Returns:
+            The contributors of the wrapped model.
+
+        """
+        return self._wrapped_model.get_contributors()
+
+    def get_num_samples(self) -> int:
+        """
+        Get the number of samples used to train the wrapped model.
+
+        Returns:
+            The number of samples used to train the wrapped model.
+
+        """
+        return self._wrapped_model.get_num_samples()
+
+    def clone_model(self) -> Any:
+        """
+        Clone the underlying model of the wrapped P2PFLModel.
+
+        Returns:
+            The cloned model of the wrapped P2PFLModel.
+
+        """
+        return self._wrapped_model.clone_model()

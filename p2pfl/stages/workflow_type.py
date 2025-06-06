@@ -17,10 +17,10 @@
 #
 """Workflow enum."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class WorkflowType(Enum):
+class WorkflowType(StrEnum):
     """Workflow type enum."""
 
     BASIC = "basic"

@@ -17,6 +17,7 @@
 #
 """Virtual Node Learner."""
 
+import traceback
 from typing import Dict, List, Union
 
 import numpy as np
@@ -42,7 +43,7 @@ class VirtualNodeLearner(Learner):
         self.learner.set_addr(addr)
         return super().set_addr(addr)
 
-    def set_model(self, model: Union[P2PFLModel, List[np.ndarray], bytes]) -> None:
+    def set_P2PFLModel(self, model: Union[P2PFLModel, List[np.ndarray], bytes]) -> None:
         """
         Set the model of the learner (not weights).
 
@@ -50,9 +51,9 @@ class VirtualNodeLearner(Learner):
             model: The model of the learner.
 
         """
-        self.learner.set_model(model)
+        self.learner.set_P2PFLModel(model)
 
-    def get_model(self) -> P2PFLModel:
+    def get_P2PFLModel(self) -> P2PFLModel:
         """
         Get the model of the learner.
 
@@ -60,7 +61,7 @@ class VirtualNodeLearner(Learner):
             The model of the learner.
 
         """
-        return self.learner.get_model()
+        return self.learner.get_P2PFLModel()
 
     def set_data(self, data: P2PFLDataset) -> None:
         """
@@ -145,13 +146,33 @@ class VirtualNodeLearner(Learner):
         try:
             await self.actor_pool.submit_learner_job(
                 lambda actor, addr, learner: actor.fit.remote(addr, learner),
-                (str(self.addr), self.learner),
+                (str(self.address), self.learner),
             )
-            model: P2PFLModel = (await self.actor_pool.get_learner_result(str(self.addr), None))[1]
-            self.learner.set_model(model)
+            model: P2PFLModel = (await self.actor_pool.get_learner_result(str(self.address), None))[1]
+            self.learner.set_P2PFLModel(model)
             return model
         except Exception as ex:
-            logger.error(self.addr, f"An error occurred during remote fit: {ex}")
+            logger.error(self.address, f"An error occurred during remote fit: {ex}")
+            raise ex
+
+    async def train_on_batch(self) -> P2PFLModel:
+        """
+        Train the model on the next batch manually.
+
+        Returns:
+            The model after training on the batch.
+
+        """
+        try:
+            await self.actor_pool.submit_learner_job(
+                lambda actor, addr, learner: actor.train_on_batch.remote(addr, learner),
+                (str(self.address), self.learner),
+            )
+            model: P2PFLModel = (await self.actor_pool.get_learner_result(str(self.address), None))[1]
+            self.learner.set_P2PFLModel(model)
+            return model
+        except Exception as ex:
+            logger.error(self.address, f"An error occurred during remote train_on_batch: {ex}")
             raise ex
 
     def interrupt_fit(self) -> None:
@@ -170,12 +191,13 @@ class VirtualNodeLearner(Learner):
         try:
             await self.actor_pool.submit_learner_job(
                 lambda actor, addr, learner: actor.evaluate.remote(addr, learner),
-                (str(self.addr), self.learner),
+                (str(self.address), self.learner),
             )
-            result: Dict[str, float] = (await self.actor_pool.get_learner_result(str(self.addr), None))[1]
+            result: Dict[str, float] = (await self.actor_pool.get_learner_result(str(self.address), None))[1]
             return result
         except Exception as ex:
-            logger.error(self.addr, f"An error occurred during remote evaluation: {ex}")
+            logger.error(self.address, traceback.format_exc())
+            logger.error(self.address, f"An error occurred during remote evaluation: {ex}")
             raise ex
 
     def get_framework(self) -> str:

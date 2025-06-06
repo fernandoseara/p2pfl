@@ -1,11 +1,18 @@
-""" Custom Keras Model with de-biased gradient updates. """
+"""Custom Keras Model with de-biased gradient updates."""
+
+from __future__ import annotations
+
 import importlib
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import tensorflow as tf
 
+from p2pfl.learning.frameworks.p2pfl_model import P2PFLModelDecorator
 from p2pfl.management.logger import logger
+
+if TYPE_CHECKING:
+    from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
 @tf.keras.utils.register_keras_serializable(package="p2pfl")
@@ -18,11 +25,12 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
         de_biased_model: The de-biased model.
 
     """
+
     def __init__(self, model: tf.keras.Model, push_sum_weight: float = 1.0, last_training_loss: Optional[float] = None, **kwargs):
         """Initialize the model."""
         super().__init__(**kwargs)
         self.model = model
-        self.push_sum_weight = push_sum_weight
+        self.push_sum_weight = tf.Variable(tf.constant(push_sum_weight, dtype=tf.float32))
         self.last_training_loss = last_training_loss
 
         self.loss = self.model.loss
@@ -49,6 +57,7 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
         """
         self.model.optimizer = value
 
+    @tf.function
     def train_step(self, data):
         """
         Apply a de-biasing adjustment in a custom training step.
@@ -61,7 +70,7 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
 
         """
         # Unpack the data
-        x, y = data
+        x, y = data[0], data[1]
 
         # Scale trainable variables by μ_t before the forward pass
         for var in self.model.trainable_variables:
@@ -94,13 +103,15 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
         # Return a dict mapping metric names to current value
         return {m.name: m.result() for m in self.metrics}
 
-    def call(self, inputs, training=False) -> tf.Tensor:
+    def call(self, inputs, training=None) -> tf.Tensor:
         """
         Call the model with the given inputs.
 
         Args:
             inputs: The input data.
-            training: Whether the model is training.
+            training: Whether the model is in training mode.
+            *args: Positional arguments for the model.
+            **kwargs: Keyword arguments for the model.
 
         Returns:
             The model output.
@@ -119,13 +130,13 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
         config = super().get_config()
         config.update({
             "model": tf.keras.utils.serialize_keras_object(self.model),
-            "push_sum_weight": self.push_sum_weight,
+            "push_sum_weight": self.push_sum_weight.numpy(),
             "last_training_loss": self.last_training_loss
         })
         return config
 
     @classmethod
-    def from_config(cls, config: dict):
+    def from_config(cls, config: dict) -> "DeBiasedAsyDFLKerasModel":
         """
         Create an instance from the configuration dictionary.
 
@@ -136,7 +147,7 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
             The model instance.
 
         """
-        def load_model_from_config(model_config):
+        def load_model_from_config(model_config: dict) -> tf.keras.Model:
             """Dynamically load a model from its config."""
             module_name = model_config["module"]
             class_name = model_config["class_name"]
@@ -155,7 +166,7 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
         return cls(**config)
 
     def get_weights(self) -> list[np.ndarray]:
-        """ Get the weights of the model. """
+        """Get the weights of the model."""
         return self.model.get_weights()
 
     def set_weights(self, weights: list[np.ndarray]) -> None:
@@ -167,3 +178,92 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
 
         """
         self.model.set_weights(weights)
+
+
+class AsyDFLKerasP2PFLModel(P2PFLModelDecorator):
+    """
+    Keras P2PFL Model with de-biased gradient updates.
+
+    Args:
+        model: The Keras model.
+        push_sum_weight: The push sum weight for de-biasing.
+        last_training_loss: The last training loss.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments.
+
+    """
+
+    def __init__(self,
+        wrapped_model: P2PFLModel,
+        push_sum_weight: float = 1.0,
+        last_training_loss: float | None = None,
+        ) -> None:
+        """Initialize the model."""
+        if not isinstance(wrapped_model, DeBiasedAsyDFLKerasModel):
+            # If the wrapped model is not already a DeBiasedAsyDFLKerasModel, wrap it
+            debiased_model = DeBiasedAsyDFLKerasModel(
+                wrapped_model.get_model(),
+                push_sum_weight,
+                last_training_loss,
+            )
+            wrapped_model.model = debiased_model
+        super().__init__(wrapped_model)
+
+    def get_push_sum_weight(self) -> float:
+        """
+        Get the push sum weight.
+
+        Returns:
+            The push sum weight.
+
+        """
+        return self.get_model().push_sum_weight.numpy()
+
+    def set_push_sum_weight(self, weight: float) -> None:
+        """
+        Set the push sum weight.
+
+        Args:
+            weight: The push sum weight.
+
+        """
+        if not isinstance(weight, (float, int)):
+            raise ValueError("Push sum weight must be a float or int.")
+        self.get_model().push_sum_weight.assign(tf.constant(weight, dtype=tf.float32))
+
+    def get_last_training_loss(self) -> float | None:
+        """
+        Get the last training loss.
+
+        Returns:
+            The last training loss or None if not set.
+
+        """
+        return self.get_model().last_training_loss
+
+    def build_copy(self, **kwargs) -> "AsyDFLKerasP2PFLModel":
+        """
+        Build a copy of the model with the same configuration.
+
+        Args:
+            **kwargs: Additional keyword arguments for the copy.
+
+        Returns:
+            A new instance of AsyDFLKerasP2PFLModel with the same configuration.
+
+        """
+        copied_model = self._wrapped_model.build_copy(**kwargs)
+
+        # Recover push_sum_weight and last_training_loss from the model if needed
+        if isinstance(copied_model.model, DeBiasedAsyDFLKerasModel):
+            push_sum_weight = copied_model.model.push_sum_weight.numpy()
+            last_training_loss = copied_model.model.last_training_loss
+        else:
+            push_sum_weight = 1.0
+            last_training_loss = None
+
+        return AsyDFLKerasP2PFLModel(
+            wrapped_model=copied_model,
+            push_sum_weight=push_sum_weight,
+            last_training_loss=last_training_loss
+        )

@@ -22,6 +22,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from p2pfl.stages.network_state.network_state import NetworkState
+
 if TYPE_CHECKING:
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
@@ -34,126 +36,126 @@ class PeerNodeState:
     aggregated_from: list[str] # Addresses of models this one was aggregated from
     train_set_votes: dict[str, int] # for each nei the given vote
 
-class NetworkState:
+class BasicNetworkState(NetworkState):
     """Network state to keep track of peer nodes and their states."""
 
     def __init__(self):
         """Initialize the network state."""
-        # peer_id -> PeerNodeState
+        # address -> PeerNodeState
         self._peer_states: dict[str, PeerNodeState] = {}
 
-    def add_peer(self, peer_id: str):
+    def add_peer(self, address: str):
         """Add a new peer to the network state."""
-        if peer_id not in self._peer_states:
-            self._peer_states[peer_id] = PeerNodeState(
-                round_number=0,
+        if address not in self._peer_states:
+            self._peer_states[address] = PeerNodeState(
+                round_number=-1,
                 model_updated=None,
                 aggregated_from=[],
                 train_set_votes={},
             )
         else:
-            raise ValueError(f"Peer ID {peer_id} already exists in network state.")
+            raise ValueError(f"Address {address} already exists in network state.")
 
-    def add_peer_state(self, peer_id: str, state: PeerNodeState):
+    def add_peer_state(self, address: str, state: PeerNodeState):
         """Add or update a peer's state."""
-        self._peer_states[peer_id] = state
+        self._peer_states[address] = state
 
     def add_model(self, model: P2PFLModel, source: str):
         """Add a model to a peer's state."""
         if source in self._peer_states:
             self._peer_states[source].model_updated = model
         else:
-            raise ValueError(f"Peer ID {source} not found in network state.")
+            raise ValueError(f"Address {source} not found in network state.")
 
-    def add_vote(self, peer_id: str, train_set_id: str, vote: int):
+    def add_vote(self, address: str, train_set_id: str, vote: int):
         """Add a vote to a peer's state."""
-        if peer_id in self._peer_states:
-            if train_set_id not in self._peer_states[peer_id].train_set_votes:
-                self._peer_states[peer_id].train_set_votes[train_set_id] = 0
-            self._peer_states[peer_id].train_set_votes[train_set_id] += vote
+        if address in self._peer_states:
+            if train_set_id not in self._peer_states[address].train_set_votes:
+                self._peer_states[address].train_set_votes[train_set_id] = 0
+            self._peer_states[address].train_set_votes[train_set_id] += vote
         else:
-            raise ValueError(f"Peer ID {peer_id} not found in network state.")
+            raise ValueError(f"Address {address} not found in network state.")
 
-    def add_aggregated_from(self, peer_id: str, source: str):
+    def add_aggregated_from(self, address: str, source: str):
         """Add a source to the aggregated_from list of a peer's state."""
-        if peer_id in self._peer_states:
-            self._peer_states[peer_id].aggregated_from.append(source)
+        if address in self._peer_states:
+            self._peer_states[address].aggregated_from.append(source)
         else:
-            raise ValueError(f"Peer ID {peer_id} not found in network state.")
+            raise ValueError(f"Address {address} not found in network state.")
 
-    def update_round(self, peer_id: str, round_number: int):
+    def update_round(self, address: str, round_number: int):
         """Update the round number for a peer's state."""
-        if peer_id in self._peer_states:
-            self._peer_states[peer_id].round_number = round_number
+        if address in self._peer_states:
+            self._peer_states[address].round_number = round_number
         else:
-            raise ValueError(f"Peer ID {peer_id} not found in network state.")
+            raise ValueError(f"Address {address} not found in network state.")
 
-    def reset_round(self, peer_id): 
+    def reset_round(self, address): 
         """Reset the round number for a peer's state."""
-        self.remove_model(peer_id=peer_id)
-        self.clear_votes(peer_id=peer_id)
-        self.clear_aggregated_from(peer_id=peer_id)
+        self.remove_model(address=address)
+        self.clear_votes(address=address)
+        self.clear_aggregated_from(address=address)
 
     def reset_all_rounds(self):
         """Reset the round number to 0 for all peers' states."""
-        for peer_id in self._peer_states:
-            self.reset_round(peer_id=peer_id)
+        for address in self._peer_states:
+            self.reset_round(address=address)
 
-    def clear_aggregated_from(self, peer_id):
+    def clear_aggregated_from(self, address):
         """Reset the aggregated model from for all peers' states."""
-        if peer_id in self._peer_states:
-            self._peer_states[peer_id].aggregated_from.clear()
+        if address in self._peer_states:
+            self._peer_states[address].aggregated_from.clear()
         else:
-            raise ValueError(f"Peer ID {peer_id} not found in network state.")
+            raise ValueError(f"Address {address} not found in network state.")
 
-    def remove_model(self, peer_id: str):
+    def remove_model(self, address: str):
         """Remove a model from a peer's state."""
-        if peer_id in self._peer_states:
-            self._peer_states[peer_id].model_updated = None
+        if address in self._peer_states:
+            self._peer_states[address].model_updated = None
         else:
-            raise ValueError(f"Peer ID {peer_id} not found in network state.")
+            raise ValueError(f"Address {address} not found in network state.")
 
-    def clear_votes(self, peer_id: str):
+    def clear_votes(self, address: str):
         """Clear votes for a peer's state."""
-        if peer_id in self._peer_states:
-            self._peer_states[peer_id].train_set_votes.clear()
+        if address in self._peer_states:
+            self._peer_states[address].train_set_votes.clear()
         else:
-            raise ValueError(f"Peer ID {peer_id} not found in network state.")
+            raise ValueError(f"Address {address} not found in network state.")
 
     def clear_all_votes(self):
         """Clear all votes for all peers."""
         for state in self._peer_states.values():
             state.train_set_votes.clear()
 
-    def get_peer_state(self, peer_id: str) -> PeerNodeState | None:
+    def get_peer_state(self, address: str) -> PeerNodeState | None:
         """Retrieve a peer's state by ID."""
-        return self._peer_states.get(peer_id)
+        return self._peer_states.get(address)
 
-    def get_model(self, peer_id: str) -> P2PFLModel | None:
+    def get_model(self, address: str) -> P2PFLModel | None:
         """Retrieve the model updated by a specific peer."""
-        state = self.get_peer_state(peer_id)
+        state = self.get_peer_state(address)
         return state.model_updated if state else None
 
-    def get_contributors(self, peer_id: str) -> list[str] | None:
+    def get_contributors(self, address: str) -> list[str] | None:
         """Retrieve the contributors of a specific peer's model."""
-        state = self.get_peer_state(peer_id)
+        state = self.get_peer_state(address)
         return state.model_updated.get_contributors() if state and state.model_updated else None
 
-    def get_vote(self, peer_id: str, train_set_id: str) -> int | None:
+    def get_vote(self, address: str, train_set_id: str) -> int | None:
         """Retrieve the vote for a specific training set by a peer."""
-        if peer_id in self._peer_states:
-            return self._peer_states[peer_id].train_set_votes.get(train_set_id)
+        if address in self._peer_states:
+            return self._peer_states[address].train_set_votes.get(train_set_id)
         else:
-            raise ValueError(f"Peer ID {peer_id} not found in network state.")
+            raise ValueError(f"Address {address} not found in network state.")
 
-    def get_votes(self, peer_id: str) -> dict[str, int] | None:
+    def get_votes(self, address: str) -> dict[str, int] | None:
         """Retrieve all votes for a specific peer."""
-        state = self.get_peer_state(peer_id)
+        state = self.get_peer_state(address)
         return state.train_set_votes if state else None
 
-    def get_round(self, peer_id: str) -> int | None:
+    def get_round(self, address: str) -> int | None:
         """Retrieve the peer round number."""
-        state = self.get_peer_state(peer_id)
+        state = self.get_peer_state(address)
         return state.round_number if state else None
 
     def get_all_models(self) -> list[P2PFLModel]:
@@ -170,32 +172,32 @@ class NetworkState:
 
     def get_all_votes(self) -> dict[str, dict[str, int]]:
         """Return all votes by peer, per training set."""
-        return {peer_id: state.train_set_votes for peer_id, state in self._peer_states.items()}
+        return {address: state.train_set_votes for address, state in self._peer_states.items()}
 
     def get_all_rounds(self) -> dict[str, int]:
         """Return all rounds by peer."""
-        return {peer_id: state.round_number for peer_id, state in self._peer_states.items()}
+        return {address: state.round_number for address, state in self._peer_states.items()}
 
     def get_all_peers(self) -> dict[str, PeerNodeState]:
         """Return all peers and their states."""
         return self._peer_states
 
-    def get_aggregation_sources(self, peer_id: str) -> list[str] | None:
+    def get_aggregation_sources(self, address: str) -> list[str] | None:
         """List addresses that contributed to a peer's aggregated model."""
-        state = self.get_peer_state(peer_id)
+        state = self.get_peer_state(address)
         return state.aggregated_from if state else None
 
     def get_peers_by_round(self, round_number: int) -> list[str]:
-        """List peer IDs that reported for a given round."""
+        """List Addresss that reported for a given round."""
         return [pid for pid, state in self._peer_states.items() if state.round_number == round_number]
 
-    def remove_peer(self, peer_id: str):
+    def remove_peer(self, address: str):
         """Remove a peer's state from the network."""
-        if peer_id in self._peer_states:
-            del self._peer_states[peer_id]
+        if address in self._peer_states:
+            del self._peer_states[address]
 
     def list_peers(self) -> list[str]:
-        """List all peer IDs in the network state."""
+        """List all Addresss in the network state."""
         return list(self._peer_states.keys())
 
     def clear(self):
@@ -206,9 +208,9 @@ class NetworkState:
         """Get the number of peers in the network state."""
         return len(self._peer_states)
 
-    def __contains__(self, peer_id: str):
-        """Check if a peer ID is in the network state."""
-        return peer_id in self._peer_states
+    def __contains__(self, address: str):
+        """Check if a Address is in the network state."""
+        return address in self._peer_states
 
     def __repr__(self):
         """Representation of the network state."""

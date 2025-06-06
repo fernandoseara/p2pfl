@@ -257,13 +257,13 @@ async def run_from_yaml(yaml_path: str):
             )
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
         await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
-        wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=False)  # type: ignore
+        await wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=False)  # type: ignore
 
         # Additional connections
         additional_connections = network_config.get("additional_connections")
         if additional_connections:
             for source, connect_to in additional_connections:
-                nodes[source].connect(nodes[connect_to].addr)
+                await nodes[source].connect(nodes[connect_to].address)
 
         # Start Learning
         r = experiment_config.get("rounds")
@@ -276,7 +276,7 @@ async def run_from_yaml(yaml_path: str):
         await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size)
 
         # Wait and check
-        wait_to_finish(nodes, timeout=60 * 60)  # 1 hour | TODO: Make this configurable
+        await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour | TODO: Make this configurable
 
     except Exception as e:
         raise e

@@ -23,7 +23,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from p2pfl.communication.commands.command import Command
+from p2pfl.exceptions import NodeRunningException
 from p2pfl.management.logger import logger
+from p2pfl.stages.workflow_type import WorkflowType
 
 if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.node import Node
@@ -50,6 +52,7 @@ class StartLearningCommand(Command):
         learning_epochs: Optional[int] = None,
         trainset_size: Optional[int] = None,
         experiment_name: Optional[str] = None,
+        workflow: Optional[str] = None,
         **kwargs,
     ) -> None:
         """
@@ -68,9 +71,16 @@ class StartLearningCommand(Command):
         if learning_rounds is None or learning_epochs is None or trainset_size is None or experiment_name is None:
             raise ValueError("Learning rounds and epochs are required")
 
-        await self.__node.learning_workflow.peer_learning_initiated(experiment_name,
-                                                                    rounds=int(learning_rounds),
-                                                                    epochs=int(learning_epochs),
-                                                                    trainset_size=int(trainset_size),
-                                                                    source=source)
+        try:
+            self.__node.set_learning_workflow(workflow=WorkflowType(workflow))
+            await self.__node.get_learning_workflow().peer_learning_initiated(
+                experiment_name,
+                rounds=int(learning_rounds),
+                epochs=int(learning_epochs),
+                trainset_size=int(trainset_size),
+                workflow_type=workflow,
+                source=source
+            )
+        except NodeRunningException as e:
+            logger.debug(self.__node.local_state.address, e)
 

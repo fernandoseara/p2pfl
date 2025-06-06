@@ -73,7 +73,7 @@ class LightningLearner(Learner):
 
     def __get_pt_model_data(self, train: bool = True) -> Tuple[L.LightningModule, DataLoader]:
         # Get Model
-        pt_model = self.get_model().get_model()
+        pt_model = self.get_P2PFLModel().get_model()
         if not isinstance(pt_model, L.LightningModule):
             raise ValueError("The model must be a PyTorch Lightning model")
         # Get Data
@@ -102,17 +102,17 @@ class LightningLearner(Learner):
                 self.__trainer = None
 
             # Set model contribution
-            self.get_model().set_contribution([self.addr], self.get_data().get_num_samples())
+            self.get_P2PFLModel().set_contribution([self.address], self.get_data().get_num_samples())
 
             # Set callback info
             self.add_callback_info_to_model()
 
-            return self.get_model()
+            return self.get_P2PFLModel()
 
         except Exception as e:
             print(traceback.format_exc())
             logger.error(
-                self.addr,
+                self.address,
                 f"Fit error. Something went wrong with pytorch lightning. {e}",
             )
             raise e
@@ -139,14 +139,14 @@ class LightningLearner(Learner):
                 self.__trainer = None
                 # Log metrics
                 for k, v in results.items():
-                    logger.log_metric(self.addr, k, v)
+                    logger.log_metric(self.address, k, v)
                 return dict(results)
 
             else:
                 return {}
         except Exception as e:
             logger.error(
-                self.addr,
+                self.address,
                 f"Evaluation error. Something went wrong with pytorch lightning. {e}",
             )
             raise e

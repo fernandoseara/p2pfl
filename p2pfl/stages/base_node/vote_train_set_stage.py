@@ -57,7 +57,7 @@ class VoteTrainSetStage(Stage):
         # Add self vote (send it to itself)
         self_vote = list(zip(nodes_voted, weights))
         logger.debug(node.address, f"🪞🗳️ Self Vote: {self_vote}")
-        await node.learning_workflow.vote(node.address, self_vote)
+        await node.learning_workflow.vote(node.address, state.round, self_vote)
 
         # Convert self vote to a plain list
         votes_list = []
@@ -67,7 +67,7 @@ class VoteTrainSetStage(Stage):
 
         # Send and wait for votes
         logger.info(node.address, "🗳️ Sending train set vote.")
-        await communication_protocol.broadcast(
+        await communication_protocol.broadcast_gossip(
             communication_protocol.build_msg(
                 VoteTrainSetCommand.get_name(),
                 votes_list,

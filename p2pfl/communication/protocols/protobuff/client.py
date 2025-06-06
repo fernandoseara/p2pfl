@@ -18,11 +18,10 @@
 
 """Protocol agnostic client."""
 
-import threading
 from abc import ABC, abstractmethod
 
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
-import asyncio
+
 
 class ProtobuffClient(ABC):
     """

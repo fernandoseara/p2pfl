@@ -19,7 +19,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING
 
 from transitions.extensions.nesting import NestedState
@@ -35,12 +34,13 @@ from p2pfl.stages.base_node import (
     EvaluateStage,
     GossipFullModelStage,
     GossipPartialModelStage,
-    StartLearningStage,
-    TrainingFinishedStage,
     TrainStage,
     UpdateRoundStage,
     VoteTrainSetStage,
 )
+from p2pfl.stages.base_node.start_learning_stage import StartLearningStage
+from p2pfl.stages.network_state.basic_network_state import BasicNetworkState
+from p2pfl.stages.workflows.models.learning_workflow_model import LearningWorkflowModel
 
 NestedState.separator = '↦'
 
@@ -48,44 +48,32 @@ if TYPE_CHECKING:
     from p2pfl.node import Node
 
 
-class LearningWorkflowModel:
+class BasicLearningWorkflowModel(LearningWorkflowModel):
     """Model for the training workflow."""
 
     def __init__(self, node: Node):
         """Initialize the workflow model."""
-        self.node = node
-        self.candidates = []
+        super().__init__(node=node)
 
-        self.event_log = []
-        self.state_log = []
-
-    @property
-    def finished(self) -> bool:
-        """
-        Check if the workflow is finished.
-
-        Returns:
-            bool: True if the workflow is finished, False otherwise.
-
-        """
-        return self.is_learning_finished()
-
-    async def set_model_initialized(self, *args, **kwargs):
-        """Set the model initialized."""
-        # Set the model initialized
-        self.node.get_learner().get_model().set_round(0)
-
+        # Set the initial state
+        self.network_state: BasicNetworkState = BasicNetworkState()
 
     ###################
     # STATE CALLBACKS #
     ###################
-    async def on_enter_starting_training(self,
-                                         experiment_name: str,
-                                         rounds: int =0,
-                                         epochs: int=0,
-                                         trainset_size: int=0,
-                                         source: str | None = None):
+    async def on_enter_starting_training(
+        self,
+        experiment_name: str,
+        rounds: int = 0,
+        epochs: int = 0,
+        trainset_size: int = 0,
+        workflow_type: str = "BASIC",
+        source: str | None = None
+        ):
         """Start the training."""
+        communication_protocol = self.node.get_communication_protocol()
+        local_state = self.node.get_local_state()
+
         logger.info(self.node.address, "⏳ Starting training.")
         await StartLearningStage.execute(
             experiment_name=experiment_name,
@@ -95,31 +83,39 @@ class LearningWorkflowModel:
             node=self.node,
         )
 
+        # Comunicate start learning command
+        await communication_protocol.broadcast_gossip(
+            communication_protocol.build_msg(
+                StartLearningCommand.get_name(),
+                [
+                    local_state.total_rounds,
+                    self.node.get_learner().get_epochs(),
+                    local_state.get_experiment().trainset_size,
+                    local_state.get_experiment().exp_name,
+                    workflow_type
+                ]
+            )
+        )
+
+
         await self.next_stage()
 
     async def on_enter_waiting_for_synchronization(self):
         """Wait for the synchronization."""
         communication_protocol = self.node.get_communication_protocol()
-        local_state = self.node.get_local_state()
 
         # Wait and gossip model initialization
         logger.info(self.node.address, "⏳ Waiting initialization.")
 
+        # Set self model initialized
+        await self.node.get_learning_workflow().node_started(
+            source=self.node.address,
+        )
+
         # Communicate Initialization
         try:
-            await communication_protocol.broadcast(communication_protocol.build_msg(StartLearningCommand.get_name(),
-                                                                                    [local_state.total_rounds,
-                                                                                    self.node.get_learner().get_epochs(),
-                                                                                    local_state.get_experiment().trainset_size,
-                                                                                    local_state.get_experiment().exp_name]
-                                                                                    ))
+            await communication_protocol.broadcast_gossip(communication_protocol.build_msg(NodeInitializedCommand.get_name()))
 
-            await communication_protocol.broadcast(communication_protocol.build_msg(NodeInitializedCommand.get_name()))
-
-            # Set self model initialized
-            await self.node.learning_workflow.node_started(
-                source=self.node.address,
-            )
         except Exception as e:
             logger.debug(self.node.address, f"Error broadcasting start learning command: {e}")
 
@@ -135,17 +131,21 @@ class LearningWorkflowModel:
 
     async def on_enter_updating_round(self, *args, **kwargs):
         """Update the round."""
+        # Set self model round
         await UpdateRoundStage.execute(
+            network_state=self.network_state,
             node=self.node,
         )
 
-        await self.node.get_communication_protocol().broadcast(
-            self.node.get_communication_protocol().build_msg(PeerRoundUpdatedCommand.get_name(),
-                                                    round=self.node.get_local_state().get_experiment().round))
-
-        await self.node.learning_workflow.peer_round_updated(
+        # Send event to the workflow
+        await self.node.get_learning_workflow().peer_round_updated(
             self.node.address, self.node.get_local_state().round
         )
+
+        # Communicate round update
+        await self.node.get_communication_protocol().broadcast_gossip(
+            self.node.get_communication_protocol().build_msg(PeerRoundUpdatedCommand.get_name(),
+                                                    round=self.node.get_local_state().get_experiment().round))
 
         await self.continue_p2p_round_initialization()
 
@@ -178,6 +178,7 @@ class LearningWorkflowModel:
     async def on_final_p2p_voting(self, *args, **kwargs):
         """Finish the voting."""
         await AggregatingVoteTrainSetStage.execute(
+            network_state=self.network_state,
             node=self.node,
         )
 
@@ -195,11 +196,19 @@ class LearningWorkflowModel:
         await TrainStage.execute(
             node=self.node,
         )
+
+        # Send aggregated model to the workflow
+        await self.node.get_learning_workflow().aggregate(
+            self.node.get_learner().get_P2PFLModel(),
+            self.node.address
+        )
+
         await self.continue_p2p_learning()
 
     async def on_enter_gossipping_partial_aggregation(self):
         """Gossip the partial model."""
         await GossipPartialModelStage.execute(
+            network_state=self.network_state,
             candidates=self.candidates,
             node=self.node,
         )
@@ -208,8 +217,8 @@ class LearningWorkflowModel:
     async def on_enter_aggregating(self):
         """Aggregate the models."""
         # Set aggregated model
-        agg_model = self.node.get_aggregator().aggregate(self.node.get_network_state().get_all_models())
-        self.node.get_learner().set_model(agg_model)
+        agg_model = self.node.get_aggregator().aggregate(self.network_state.get_all_models())
+        self.node.get_learner().set_P2PFLModel(agg_model)
 
         await self.continue_p2p_learning()
 
@@ -231,41 +240,38 @@ class LearningWorkflowModel:
 
     async def on_enter_training_finished(self):
         """Finish the training."""
-        await TrainingFinishedStage.execute(
+        await EvaluateStage.execute(
             node=self.node,
         )
+
+        # Clean state
+        self.node.get_local_state().clear()
+        self.network_state.clear()
 
         logger.info(self.node.address, "😋 Training finished!!")
 
         await self.training_finished()
 
-    async def on_final_learning(self):
-        """Finish the learning workflow."""
-        await self.learning_finished()
 
     ##############
     # CONDITIONS #
     ##############
     def is_model_initialized(self, *args, **kwargs):
         """Check if the model has been initialized."""
-        learner_round = self.node.get_learner().get_model().get_round()
+        learner_round = self.node.get_learner().get_P2PFLModel().get_round()
         return learner_round == self.node.get_local_state().round
-
-    def is_model_valid(self,
-                        source: str,
-                        round: int,
-                        weights: bytes):
-        """Check if the model has been initialized."""
-        return self.node.get_local_state().round+1 == round
 
     def is_all_nodes_started(self, *args, **kwargs):
         """Check if all nodes have started."""
-        return len(self.node.get_network_state().list_peers()) == (len(self.node.communication_protocol.get_neighbors(only_direct=True)) + 1)
+        return len(self.network_state.list_peers()) == (len(self.node.communication_protocol.get_neighbors(only_direct=False)) + 1)
 
     def is_all_models_initialized(self, *args, **kwargs):
         """Check if all models have been initialized."""
-        rounds = self.node.get_network_state().get_all_rounds()
-        return sum(1 for value in rounds.values() if value == self.node.get_local_state().round) == len(rounds)
+        rounds = self.network_state.get_all_rounds()
+        current_round = self.node.get_local_state().round
+        initialized_nodes = sum(1 for value in rounds.values() if value == current_round)
+
+        return initialized_nodes >= len(rounds)
 
     def candidate_exists(self, *args, **kwargs):
         """Check if there are candidates."""
@@ -273,20 +279,11 @@ class LearningWorkflowModel:
 
     def is_all_votes_received(self, *args, **kwargs):
         """Check if all votes from neis have been received."""
-        communication_protocol = self.node.get_communication_protocol()
-        # Get all votes
-        nc_votes = {
-                k: v
-                for k, v in self.node.get_network_state().get_all_votes().items()
-                if k in list(communication_protocol.get_neighbors(only_direct=False)) or k == self.node.address
-            }
+        neighbors = self.network_state.list_peers()
+        votes = self.network_state.get_all_votes()
 
-        #needed_votes = set(list(communication_protocol.get_neighbors(only_direct=False)) + [self.node.address])
-
-        #return needed_votes == set(nc_votes.keys())
-
-        # Check if none of the needed peers votes are empty
-        return all(v for v in nc_votes.values())
+        # Check if all neighbors have voted
+        return all(votes.get(nei) for nei in neighbors)
 
     def in_train_set(self, *args, **kwargs):
         """Check if the node is in the train set."""
@@ -298,32 +295,16 @@ class LearningWorkflowModel:
 
     def is_all_models_received(self, *args, **kwargs):
         """Check if all models have been received."""
-        return len(self.node.get_local_state().train_set) == len(self.node.get_network_state().get_all_models())
+        return len(self.node.get_local_state().train_set) == len(self.network_state.get_all_models())
 
 
 
     ###########################
     # EVENT HANDLER CALLBACKS #
     ###########################
-    async def on_enter_waiting_network_start(self, *args, **kwargs):
-        """Wait for the node to start."""
-        logger.info(self.node.address, "⏳ Waiting for the node to start.")
-
-    async def on_enter_waiting_vote(self, *args, **kwargs):
-        """Wait for the vote."""
-        logger.info(self.node.address, "⏳ Waiting for votes.")
-
-    async def on_enter_waiting_partial_model(self, *args, **kwargs):
-        """Wait for the partial model."""
-        logger.info(self.node.address, "⏳ Waiting for partial models.")
-
-    async def on_enter_waiting_full_model(self, *args, **kwargs):
-        """Wait for the full model."""
-        logger.info(self.node.address, "⏳ Waiting for the full model.")
-
-    async def on_enter_waiting_round_update(self, *args, **kwargs):
-        """Wait for the round update."""
-        logger.info(self.node.address, "⏳ Waiting for peer round updates.")
+    async def on_enter_waiting_context_update(self, *args, **kwargs):
+        """Wait for the context to be updated."""
+        logger.info(self.node.address, "⏳ Waiting for the context to be updated.")
 
     ########################
     # EVENT HANDLER EVENTS #
@@ -364,26 +345,48 @@ class LearningWorkflowModel:
     #########################
     async def save_started_node(self, source: str):
         """Save the votes."""
-        self.node.get_network_state().update_round(source, -1)
+        self.network_state.update_round(source, -1)
+        logger.debug(self.node.address, f"📦 Node started: {source}")
 
-    async def save_votes(self, source: str, tmp_votes: list[tuple[str, int]]):
+    async def save_votes(self, source: str, round: int, tmp_votes: list[tuple[str, int]]):
         """Save the votes."""
-        for train_set_id, vote in tmp_votes:
-            self.node.get_network_state().add_vote(source, train_set_id, vote)
+        local_state = self.node.get_local_state()
+        if local_state is None:
+            logger.error(self.node.address, f"Local state is None, cannot update votes for {source}")
+            return
+
+        if round == local_state.round:
+            for train_set_id, vote in tmp_votes:
+                self.network_state.add_vote(source, train_set_id, vote)
+            logger.debug(self.node.address, f"📦 Votes received from {source}: {tmp_votes}")
+        else:
+            logger.error(self.node.address, f"📦 Votes not received from {source}: {tmp_votes} (expected {local_state.round})")
 
     async def save_aggregation(self, model: P2PFLModel, source: str):
         """Save the aggregation."""
-        self.node.get_network_state().add_model(model, source)
+        self.network_state.add_model(model, source)
+        logger.debug(self.node.address, f"📦 Model received from {source}: {model}")
 
     async def create_peer(self, source: str):
         """Update the peer round."""
-        self.node.get_network_state().add_peer(source)
+        self.network_state.add_peer(source)
         logger.debug(self.node.address, f"📡 {source} peer created")
 
-    async def update_peer_round(self, source: str, round: int):
-        """Update the peer round."""
-        self.node.get_network_state().update_round(source, round)
-        logger.debug(self.node.address, f"📡 {source} round updated to {round}")
+    async def save_peer_round_updated(self,
+                            source: str,
+                            round: int,
+                            ):
+        """Initialize model."""
+        local_round = self.node.get_local_state().round
+        if local_round is None:
+            logger.error(self.node.address, f"Local state is None, cannot update round for {source}")
+            return
+
+        if round in [local_round, local_round+1]:
+            self.network_state.update_round(source, round)
+            logger.debug(self.node.address, f"📡 Peer round updated: {source} -> {round}")
+        else:
+            logger.error(self.node.address, f"📡 Peer round not updated: {source} -> {round} (local round: {local_round})")
 
 
     async def save_full_model(self,
@@ -392,36 +395,34 @@ class LearningWorkflowModel:
                             weights: bytes):
         """Initialize model."""
         # Check source
-        # Wait and gossip model initialization
-        logger.info(self.node.address, "⏳ Waiting initialization.")
+        logger.info(self.node.address, "📦 Full model received.")
 
         try:
             # Set new weights
-            self.node.get_learner().set_model(weights)
+            self.node.get_learner().set_P2PFLModel(weights)
 
-            # Set self model round
-            #self.node.get_network_state().update_round(self.node.address, round)
+            # Set model round
+            self.node.get_learner().get_P2PFLModel().set_round(round)
 
             logger.info(self.node.address, "🤖 Model Weights Initialized")
 
         except DecodingParamsError:
-            logger.error(self.node.address, "Error decoding parameters.")
-
+            logger.error(self.node.address, "❌ Error decoding parameters.")
         except ModelNotMatchingError:
-            logger.error(self.node.address, "Models not matching.")
-
+            logger.error(self.node.address, "❌ Models not matching.")
         except Exception as e:
-            logger.error(self.node.address, f"Unknown error adding model: {e}")
+            logger.error(self.node.address, f"❌ Unknown error adding model: {e}")
 
-    async def save_peer_round_updated(self,
-                            source: str,
-                            round: int,
-                            ):
-        """Initialize model."""
-        self.node.get_network_state().update_round(source, round)
+    async def save_aggregated_models(self, source: str, round: int, aggregated_models: list[str]):
+        """Save the aggregated models."""
+        local_state = self.node.get_local_state()
+        if round == local_state.round:
+            for aggregated_model in list(aggregated_models):
+                self.network_state.add_aggregated_from(source, aggregated_model)
 
-
-
+            logger.debug(self.node.address, f"📦 Aggregated models received from {source}: {aggregated_models}")
+        else:
+            logger.error(self.node.address, f"📦 Aggregated models not received from {source}: {aggregated_models} (expected {local_state.round})")
 
 
 
@@ -430,10 +431,9 @@ class LearningWorkflowModel:
     ########################
     def get_partial_gossipping_candidates(self):
         """Get the candidates from the train set to gossip the partial model."""
-        def candidate_condition(node: str) -> bool:
+        def candidate_condition(node: str) -> set[str]:
             local_state = self.node.get_local_state()
-            network_state = self.node.get_network_state()
-            return set(local_state.train_set) - set(network_state.get_aggregation_sources(node))
+            return set(local_state.train_set) - set(self.network_state.get_aggregation_sources(node) or [])
 
         candidates = set(self.node.get_local_state().train_set) - {self.node.address}
         self.candidates = [n for n in candidates if len(candidate_condition(n)) != 0]
@@ -443,20 +443,7 @@ class LearningWorkflowModel:
         """Get the candidates from the train set to gossip the full model."""
         fixed_round = self.node.get_local_state().round
         def candidate_condition(node: str) -> bool:
-            return self.node.get_network_state().get_round(node) < fixed_round
+            return self.network_state.get_round(node) < fixed_round
 
         self.candidates = [n for n in self.node.communication_protocol.get_neighbors(only_direct=True) if candidate_condition(n)]
-        logger.debug(self.node.local_state.addr, f"📡 Candidates to gossip to: {self.candidates}")
-
-    ######################
-    # LOGGING CALLBACKS #
-    ######################
-    def finalize_logging(self, *args, **kwargs):
-        """Logging callback."""
-        logger.debug(self.node.address, f"🏃 Running stage: {(self.state)}")
-        #self.event_log.append(self.event)
-        self.state_log.append(self.state)
-
-    def test(self, *args, **kwargs):
-        """Test function for debugging."""
-        logger.info(self.node.address, "Test function called.")
+        logger.debug(self.node.local_state.address, f"📡 Candidates to gossip to: {self.candidates}")

@@ -58,13 +58,13 @@ class Learner(ABC, NodeComponent):
         # Model and data init (dummy if not)
         self.__model: Optional[P2PFLModel] = None
         if model:
-            self.set_model(model)
+            self.set_P2PFLModel(model)
         self.__data: Optional[P2PFLDataset] = None
         if data:
             self.set_data(data)
 
     @allow_no_addr_check
-    def set_model(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
+    def set_P2PFLModel(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
         """
         Set the model of the learner.
 
@@ -75,13 +75,13 @@ class Learner(ABC, NodeComponent):
         if isinstance(model, P2PFLModel):
             self.__model = model
         elif isinstance(model, (list, bytes)):
-            self.get_model().set_parameters(model)
+            self.get_P2PFLModel().set_parameters(model)
 
         # Update callbacks with model info
         self.update_callbacks_with_model_info()
 
     @allow_no_addr_check
-    def get_model(self) -> P2PFLModel:
+    def get_P2PFLModel(self) -> P2PFLModel:
         """
         Get the model of the learner.
 
@@ -176,7 +176,7 @@ class Learner(ABC, NodeComponent):
     @allow_no_addr_check
     def update_callbacks_with_model_info(self) -> None:
         """Update the callbacks with the model additional information."""
-        new_info = self.get_model().get_info()
+        new_info = self.get_P2PFLModel().get_info()
         for callback in self.callbacks:
             try:
                 callback_name = callback.get_name()
@@ -188,11 +188,28 @@ class Learner(ABC, NodeComponent):
     def add_callback_info_to_model(self) -> None:
         """Add the additional information from the callbacks to the model."""
         for c in self.callbacks:
-            self.get_model().add_info(c.get_name(), c.get_info())
+            self.get_P2PFLModel().add_info(c.get_name(), c.get_info())
 
     @abstractmethod
     async def fit(self) -> P2PFLModel:
-        """Fit the model."""
+        """
+        Fit the model.
+
+        Returns:
+            The model after fitting.
+
+        """
+        pass
+
+    @abstractmethod
+    async def train_on_batch(self) -> P2PFLModel:
+        """
+        Train the model on the next batch manually.
+
+        Returns:
+            The model after training on the batch.
+
+        """
         pass
 
     @abstractmethod

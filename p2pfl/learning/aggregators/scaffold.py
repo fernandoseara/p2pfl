@@ -64,7 +64,7 @@ class Scaffold(Aggregator):
 
         """
         if not models:
-            raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there is no models")
+            raise NoModelsToAggregateError(f"({self.address}) Trying to aggregate models when there is no models")
 
         total_samples = sum([m.get_num_samples() for m in models])
         # initialize the accumulators for the model and the control variates

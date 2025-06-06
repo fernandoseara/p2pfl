@@ -32,12 +32,12 @@ with contextlib.suppress(ImportError):
 def test_virtual_node_learner_initialization():
     """Test the initialization of the VirtualNodeLearner class."""
     learner = MagicMock(spec=Learner)
-    addr = "test_addr"
+    address = "test_addr"
     virtual_learner = VirtualNodeLearner(learner)
-    virtual_learner.set_addr(addr)
+    virtual_learner.set_addr(address)
     assert virtual_learner.learner == learner
     assert isinstance(virtual_learner.actor_pool, SuperActorPool)
-    assert virtual_learner.addr == addr
+    assert virtual_learner.address == address
 
 
 def test_set_model():
@@ -46,7 +46,7 @@ def test_set_model():
     virtual_learner = VirtualNodeLearner(learner)
     virtual_learner.set_addr("test_addr")
     model = MagicMock(spec=P2PFLModel)
-    virtual_learner.set_model(model)
+    virtual_learner.set_P2PFLModel(model)
     learner.set_model.assert_called_once_with(model)
 
 
@@ -57,7 +57,7 @@ def test_get_model():
     virtual_learner.set_addr("test_addr")
     model = MagicMock(spec=P2PFLModel)
     learner.get_model.return_value = model
-    result = virtual_learner.get_model()
+    result = virtual_learner.get_P2PFLModel()
     assert result == model
     learner.get_model.assert_called_once()
 

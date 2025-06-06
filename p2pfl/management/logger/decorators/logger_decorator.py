@@ -146,25 +146,25 @@ class LoggerDecorator(P2PFLogger):
         """
         return self._p2pfl_logger.get_global_logs()
 
-    def register_node(self, node: str) -> None:
+    def register_node(self, address: str) -> None:
         """
         Register a node.
 
         Args:
-            node: The node address.
+            address: The node address.
 
         """
-        self._p2pfl_logger.register_node(node)
+        self._p2pfl_logger.register_node(address)
 
-    def unregister_node(self, node: str) -> None:
+    def unregister_node(self, address: str) -> None:
         """
         Unregister a node.
 
         Args:
-            node: The node address.
+            address: The node address.
 
         """
-        self._p2pfl_logger.unregister_node(node)
+        self._p2pfl_logger.unregister_node(address)
 
     def experiment_started(self, node: str, experiment: Experiment) -> None:
         """

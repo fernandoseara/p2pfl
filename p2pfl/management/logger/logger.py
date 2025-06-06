@@ -339,77 +339,77 @@ class P2PFLogger:
     # Node registration
     ######
 
-    def register_node(self, node: str) -> None:
+    def register_node(self, address: str) -> None:
         """
         Register a node.
 
         Args:
-            node: The node address.
+            address: The node address.
 
         """
         # Node State
-        if self._nodes.get(node) is None:
+        if self._nodes.get(address) is None:
             # Dict[str, Dict[str,Any]]
-            self._nodes[node] = {}
+            self._nodes[address] = {}
         else:
-            raise Exception(f"Node {node} already registered.")
+            raise Exception(f"Node {address} already registered.")
 
-    def unregister_node(self, node: str) -> None:
+    def unregister_node(self, address: str) -> None:
         """
         Unregister a node.
 
         Args:
-            node: The node address.
+            address: The node address.
 
         """
         # Node state
-        n = self._nodes[node]
+        n = self._nodes[address]
         if n is not None:
             # Unregister the node
-            self._nodes.pop(node)
+            self._nodes.pop(address)
         else:
-            raise Exception(f"Node {node} not registered.")
+            raise Exception(f"Node {address} not registered.")
 
     ######
     # Node Status
     ######
 
-    def experiment_started(self, node: str, experiment: Experiment) -> None:
+    def experiment_started(self, address: str, experiment: Experiment) -> None:
         """
         Notify the experiment start.
 
         Args:
-            node: The node address.
+            address: The node address.
             experiment: The experiment.
 
         """
-        self._nodes[node]["Experiment"] = experiment
+        self._nodes[address]["Experiment"] = experiment
 
-    def experiment_updated(self, node: str, experiment: Experiment) -> None:
+    def experiment_updated(self, address: str, experiment: Experiment) -> None:
         """
         Notify the round end.
 
         Args:
-            node: The node address.
+            address: The node address.
             experiment: The experiment to update.
 
         """
-        self.warning(node, "Uncatched Round Finished on Logger")
-        if self._nodes[node]["Experiment"] is not None:
-            self._nodes[node]["Experiment"] = experiment
+        self.warning(address, "Uncatched Round Finished on Logger")
+        if self._nodes[address]["Experiment"] is not None:
+            self._nodes[address]["Experiment"] = experiment
         else:
-            raise Exception(f"Node {node} has no experiment.")
+            raise Exception(f"Node {address} has no experiment.")
 
-    def experiment_finished(self, node: str) -> None:
+    def experiment_finished(self, address: str) -> None:
         """
         Notify the experiment end.
 
         Args:
-            node: The node address.
+            address: The node address.
 
         """
-        self.warning(node, "Uncatched Experiment Ended on Logger")
-        del self._nodes[node]["Experiment"]
+        self.warning(address, "Uncatched Experiment Ended on Logger")
+        del self._nodes[address]["Experiment"]
 
     def get_nodes(self) -> Dict[str, Dict[Any, Any]]:
         """

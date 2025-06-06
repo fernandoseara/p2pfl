@@ -36,8 +36,4 @@ class TrainStage(Stage):
         # Train
         logger.info(node.address, "🏋️‍♀️ Training...")
         await node.get_learner().fit()
-        #await node.get_learner().fit()
         logger.info(node.address, "🎓 Training done.")
-
-        # Send aggregated model to the workflow
-        await node.get_learning_workflow().aggregate(node.get_learner().get_model(), node.address)

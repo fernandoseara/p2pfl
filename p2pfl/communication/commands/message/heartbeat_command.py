@@ -49,4 +49,5 @@ class HeartbeatCommand(Command):
         """
         if time is None:
             raise ValueError("Time is required")
+
         await self.__heartbeat.beat(source, time=float(time))

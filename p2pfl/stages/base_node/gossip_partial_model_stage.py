@@ -20,17 +20,17 @@
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING, Any, List, Set, Type, Union
+from typing import TYPE_CHECKING, Any
 
 from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
 from p2pfl.communication.commands.weights.partial_model_command import PartialModelCommand
-from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError
 from p2pfl.management.logger import logger
-from p2pfl.stages.stage import EarlyStopException, Stage, check_early_stop
+from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
     from p2pfl.node import Node
+    from p2pfl.stages.network_state.network_state import NetworkState
 
 
 class GossipPartialModelStage(Stage):
@@ -38,32 +38,31 @@ class GossipPartialModelStage(Stage):
 
     @staticmethod
     async def execute(
+        network_state: NetworkState,
         node: Node,
         candidates: list[str]
         ) -> None:
         """Execute the stage."""
-        try:
-            # Communicate Aggregation
-            await node.get_communication_protocol().broadcast(
-                node.get_communication_protocol().build_msg(
-                    ModelsAggregatedCommand.get_name(),
-                    node.get_network_state().get_all_contributors(),
-                    round=node.get_local_state().round,
-                )
+        # Communicate Aggregation
+        await node.get_communication_protocol().broadcast_gossip(
+            node.get_communication_protocol().build_msg(
+                ModelsAggregatedCommand.get_name(),
+                network_state.get_all_contributors(),
+                round=node.get_local_state().round,
             )
-            await GossipPartialModelStage.__gossip_model_aggregation(node=node, candidates=candidates)
-        except EarlyStopException:
-            return None
+        )
+        await GossipPartialModelStage.__gossip_model_aggregation(network_state=network_state, node=node, candidates=candidates)
 
     @staticmethod
     async def __gossip_model_aggregation(
+        network_state: NetworkState,
         node: Node,
         candidates: list[str],
     ) -> None:
         """
         Gossip model aggregation.
 
-        CAREFULL:
+        CAREFUL:
             - Full connected trainset to increase aggregation speed. On real scenarios, this won't
             be possible, private networks and firewalls.
             - Needed because the trainset can split the networks (and neighbors that are not in the
@@ -71,8 +70,8 @@ class GossipPartialModelStage(Stage):
         """
 
         def model_fn(n: str) -> Any:
-            models: list[P2PFLModel] = node.get_network_state().get_all_models()
-            aggregation_sources = node.get_network_state().get_aggregation_sources(n)
+            models: list[P2PFLModel] = network_state.get_all_models()
+            aggregation_sources = network_state.get_aggregation_sources(n)
 
             # Filter models whose contributors are not in aggregation sources
             eligible_models = [

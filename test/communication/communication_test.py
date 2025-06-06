@@ -17,7 +17,7 @@
 #
 """P2PFL communication tests."""
 
-import time
+import asyncio
 from typing import Callable
 
 import pytest
@@ -78,19 +78,19 @@ class MockCommand(Command):
         self.flag = True
 
 
-@pytest.mark.parametrize("protocol_builder", build_protocols_fns)
-def test_connect_invalid_node(protocol_builder: ProtocolBuilder):
+@pytest.mark.asyncio.parametrize("protocol_builder", build_protocols_fns)
+async def test_connect_invalid_node(protocol_builder: ProtocolBuilder):
     """Test that a node can't connect to an invalid node."""
     protocol1 = protocol_builder()
-    protocol1.start()
+    await protocol1.start()
     assert protocol1.connect("google.es:80") is False
     assert protocol1.connect("holadani.holaenrique") is False
     assert len(protocol1.get_neighbors()) == 0
-    protocol1.stop()
+    await protocol1.stop()
 
 
-@pytest.mark.parametrize("protocol_builder", build_protocols_fns)
-def test_basic_communication(protocol_builder: ProtocolBuilder):
+@pytest.mark.asyncio.parametrize("protocol_builder", build_protocols_fns)
+async def test_basic_communication(protocol_builder: ProtocolBuilder):
     """Test the start and stop methods."""
     # Create 2 communication protocols
     protocol1 = protocol_builder()
@@ -109,8 +109,8 @@ def test_basic_communication(protocol_builder: ProtocolBuilder):
         protocol1.connect(protocol2.get_address())
 
     # Start the protocols
-    protocol1.start()
-    protocol2.start()
+    await protocol1.start()
+    await protocol2.start()
 
     # Try to send without connect
     with pytest.raises(NeighborNotConnectedError):
@@ -120,7 +120,7 @@ def test_basic_communication(protocol_builder: ProtocolBuilder):
     assert protocol1.connect(protocol2.get_address()) is True
 
     # Check neighbors
-    time.sleep(1)  # Wait for the connection to be established
+    asyncio.sleep(1)  # Wait for the connection to be established
     assert list(protocol1.get_neighbors().keys()) == [protocol2.get_address()]
     assert list(protocol2.get_neighbors().keys()) == [protocol1.get_address()]
 
@@ -138,16 +138,16 @@ def test_basic_communication(protocol_builder: ProtocolBuilder):
     protocol1.send(protocol2.get_address(), built_cmd, raise_error=True)
 
     # Ensure the command is executed
-    time.sleep(1)  # Wait for the command to be executed
+    asyncio.sleep(1)  # Wait for the command to be executed
     assert command.flag is True
 
     # Stop the protocols
-    protocol1.stop()
-    protocol2.stop()
+    await protocol1.stop()
+    await protocol2.stop()
 
 
-@pytest.mark.parametrize("protocol_builder", build_protocols_fns)
-def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
+@pytest.mark.asyncio.parametrize("protocol_builder", build_protocols_fns)
+async def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
     """Test the neighbor management."""
     # Create the protocols
     protocol1 = protocol_builder()
@@ -157,11 +157,11 @@ def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
     protocol5 = protocol_builder()
 
     # Start the protocols
-    protocol1.start()
-    protocol2.start()
-    protocol3.start()
-    protocol4.start()
-    protocol5.start()
+    await protocol1.start()
+    await protocol2.start()
+    await protocol3.start()
+    await protocol4.start()
+    await protocol5.start()
 
     # Connect the protocols
     protocol1.connect(protocol2.get_address())
@@ -170,7 +170,7 @@ def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
     protocol3.connect(protocol4.get_address())
 
     # Wait for convergence
-    wait_convergence([protocol1, protocol2, protocol3, protocol4, protocol5], 4, wait=5, only_direct=False)
+    await wait_convergence([protocol1, protocol2, protocol3, protocol4, protocol5], 4, wait=5, only_direct=False)
 
     # Check neighbors (only direct)
     assert len(protocol1.get_neighbors(only_direct=True)) == 1
@@ -184,8 +184,8 @@ def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
 
     # Wait for convergence
     wait_time = Settings.heartbeat.TIMEOUT * 3
-    wait_convergence([protocol1, protocol2], 1, wait=wait_time, only_direct=False)
-    wait_convergence([protocol3, protocol4, protocol5], 2, wait=wait_time, only_direct=False)
+    await wait_convergence([protocol1, protocol2], 1, wait=wait_time, only_direct=False)
+    await wait_convergence([protocol3, protocol4, protocol5], 2, wait=wait_time, only_direct=False)
 
     # Check neighbors (only direct)
     assert len(protocol1.get_neighbors(only_direct=True)) == 1
@@ -198,9 +198,9 @@ def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
     protocol4.disconnect(protocol3.get_address())
 
     # Wait for convergence
-    wait_convergence([protocol4, protocol5], 1, wait=wait_time, only_direct=False)
-    wait_convergence([protocol1, protocol2], 1, wait=wait_time, only_direct=False)
-    wait_convergence([protocol3], 0, wait=wait_time, only_direct=False)
+    await wait_convergence([protocol4, protocol5], 1, wait=wait_time, only_direct=False)
+    await wait_convergence([protocol1, protocol2], 1, wait=wait_time, only_direct=False)
+    await wait_convergence([protocol3], 0, wait=wait_time, only_direct=False)
 
     # Check neighbors (only direct)
     assert len(protocol1.get_neighbors(only_direct=True)) == 1
@@ -210,42 +210,42 @@ def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
     assert len(protocol5.get_neighbors(only_direct=True)) == 1
 
     # Stop the protocols
-    protocol1.stop()
-    protocol2.stop()
-    protocol3.stop()
-    protocol4.stop()
-    protocol5.stop()
+    await protocol1.stop()
+    await protocol2.stop()
+    await protocol3.stop()
+    await protocol4.stop()
+    await protocol5.stop()
 
 
-@pytest.mark.parametrize("protocol_builder", build_protocols_fns)
-def test_node_down(protocol_builder: ProtocolBuilder):
+@pytest.mark.asyncio.parametrize("protocol_builder", build_protocols_fns)
+async def test_node_down(protocol_builder: ProtocolBuilder):
     """Test that a node abruptly down is removed from the neighbors list."""
     # Create 2 communication protocols
     protocol1 = protocol_builder()
     protocol2 = protocol_builder()
 
     # Start the protocols
-    protocol1.start()
-    protocol2.start()
+    await protocol1.start()
+    await protocol2.start()
 
     # Connect the protocols
     protocol1.connect(protocol2.get_address())
 
     # Wait for convergence
-    wait_convergence([protocol1, protocol2], 1, wait=5, only_direct=True)
+    await wait_convergence([protocol1, protocol2], 1, wait=5, only_direct=True)
 
     # Check neighbors
     assert len(protocol1.get_neighbors()) == 1
     assert len(protocol2.get_neighbors()) == 1
 
     # Stop the protocol 2
-    protocol2.stop()
+    await protocol2.stop()
 
     # Wait for convergence
-    wait_convergence([protocol1], 0, wait=10, only_direct=True, debug=True)
+    await wait_convergence([protocol1], 0, wait=10, only_direct=True, debug=True)
 
     # Check neighbors
     assert len(protocol1.get_neighbors()) == 0
 
     # Stop the protocol 1
-    protocol1.stop()
+    await protocol1.stop()

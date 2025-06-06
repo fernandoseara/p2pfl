@@ -54,10 +54,6 @@ class NodeInitializedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        try:
-            await self._node.learning_workflow.node_started(
-                source
-            )
-
-        except MachineError as e:
-            logger.debug(self._node.address, f"Unexpected message: {e}")
+        await self._node.get_learning_workflow().node_started(
+            source
+        )

@@ -17,8 +17,6 @@
 #
 """Stage."""
 
-from typing import Type, Union
-
 from p2pfl.management.logger import logger
 from p2pfl.node_state import LocalNodeState
 
@@ -54,7 +52,7 @@ def check_early_stop(state: LocalNodeState, raise_exception: bool = True) -> boo
 
     """
     if state.round is None:
-        logger.info(state.addr, "Stopping Wokflow.")
+        logger.info(state.address, "Stopping Wokflow.")
         if raise_exception:
             raise EarlyStopException("Early stopping.")
         return True

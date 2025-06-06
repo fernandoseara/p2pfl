@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.message.peer_round_updated_command import PeerRoundUpdatedCommand
 from p2pfl.management.logger import logger
+from p2pfl.stages.network_state.network_state import NetworkState
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
@@ -33,10 +34,10 @@ class UpdateRoundStage(Stage):
     """Update Round Stage."""
 
     @staticmethod
-    async def execute(node: Node) -> None:
+    async def execute(network_state: NetworkState, node: Node) -> None:
         """Execute the stage."""
         # Set next round and reset variables
-        node.get_network_state().reset_all_rounds()
+        network_state.reset_all_rounds()
         node.get_local_state().increase_round()
 
         state = node.get_local_state()
@@ -46,5 +47,3 @@ class UpdateRoundStage(Stage):
             node.address,
             f"🎉 Round {state.round} of {state.total_rounds} started.",
         )
-        # if state.round is None or state.total_rounds is None:
-        #     raise ValueError("Round or total rounds not set.")

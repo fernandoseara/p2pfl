@@ -52,21 +52,11 @@ class VoteTrainSetCommand(Command):
             *args: Vote values (pairs of key and values).
             **kwargs: The command keyword arguments.
 
-        """  # check moment: round or round + 1 because of node async
-        ########################################################
-        # try to improve clarity in message moment check
-        ########################################################
-        if round in [self._node.local_state.round, self._node.local_state.round + 1]:
-            # build vote dict
-            votes = VoteTrainSetCommand.parse_votes_list(args)
+        """
+        # build vote dict
+        votes = VoteTrainSetCommand.parse_votes_list(args)
 
-            await self._node.learning_workflow.vote(source, votes)
-
-        else:
-            logger.error(
-                self._node.local_state.addr,
-                f"Vote received in a late round. Ignored. {round} != {self._node.local_state.round} / {self._node.local_state.round+1}",
-            )
+        await self._node.get_learning_workflow().vote(source, round, votes)
 
     @staticmethod
     def parse_votes_list(votes_list: list[str]) -> list[tuple[str, int]]:

@@ -84,8 +84,8 @@ def __fl_without_training(seed):
         [node.stop() for node in nodes]
 
     # Return the stages of the nodes.
-    nodes = sorted(nodes, key=lambda x: x.addr)
-    print([node.addr for node in nodes])
+    nodes = sorted(nodes, key=lambda x: x.address)
+    print([node.address for node in nodes])
 
     return [node.learning_workflow.history for node in nodes]
 
@@ -216,7 +216,7 @@ def test_local_training_reproducibility(model_build_fn):
         model1 = model_build_fn(lr_rate=2.0)  # High learning rate to ensure that schocastic differences are visible
         learner1 = LearnerFactory.create_learner(model1)()
         learner1.set_data(dataset)
-        learner1.set_model(model1)
+        learner1.set_P2PFLModel(model1)
         learner1.set_addr("test-node-1")
         learner1.set_epochs(1)
         learner1.fit()
@@ -227,7 +227,7 @@ def test_local_training_reproducibility(model_build_fn):
         model1_1 = model_build_fn(lr_rate=2.0)  # High learning rate to ensure that schocastic differences are visible
         learner1_1 = LearnerFactory.create_learner(model1_1)()
         learner1_1.set_data(dataset)
-        learner1_1.set_model(model1_1)
+        learner1_1.set_P2PFLModel(model1_1)
         learner1_1.set_addr("test-node-1")
         learner1_1.set_epochs(1)
         learner1_1.fit()
@@ -246,7 +246,7 @@ def test_local_training_reproducibility(model_build_fn):
         model2 = model_build_fn(lr_rate=2.0)  # High learning rate to ensure that schocastic differences are visible
         learner2 = LearnerFactory.create_learner(model2)()
         learner2.set_data(dataset)
-        learner2.set_model(model2)
+        learner2.set_P2PFLModel(model2)
         learner2.set_addr("test-node-2")
         learner2.set_epochs(1)
         learner2.fit()

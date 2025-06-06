@@ -25,7 +25,6 @@ from typing import TYPE_CHECKING, List, Optional
 from transitions import MachineError
 
 from p2pfl.communication.commands.command import Command
-from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.management.logger import logger
 
@@ -63,15 +62,19 @@ class PartialModelCommand(Command):
 
         try:
             # Add model to aggregator
-            model = self.__node.learner.get_model().build_copy(params=weights, num_samples=num_samples, contributors=list(contributors))
+            model = self.__node.get_learner().get_P2PFLModel().build_copy(
+                params=weights,
+                num_samples=num_samples,
+                contributors=list(contributors)
+            )
 
-            await self.__node.learning_workflow.aggregate(model, source)
+            await self.__node.get_learning_workflow().aggregate(model, source)
 
         except MachineError:
-            logger.debug(self.__node.local_state.addr, "Invalid state.")
+            logger.debug(self.__node.address, "Invalid state.")
         except DecodingParamsError:
-            logger.error(self.__node.local_state.addr, "Error decoding parameters.")
+            logger.error(self.__node.address, "Error decoding parameters.")
         except ModelNotMatchingError:
-            logger.error(self.__node.local_state.addr, "Models not matching.")
+            logger.error(self.__node.address, "Models not matching.")
         except Exception as e:
-            logger.error(self.__node.local_state.addr, f"Unknown error adding model: {e}")
+            logger.error(self.__node.address, f"Unknown error adding model: {e}")

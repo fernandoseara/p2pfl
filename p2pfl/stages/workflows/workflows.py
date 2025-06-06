@@ -19,31 +19,42 @@
 
 from __future__ import annotations
 
-from transitions.extensions import HierarchicalAsyncGraphMachine
+import logging
+
+from transitions.extensions import HierarchicalAsyncMachine as BaseMachine
 from transitions.extensions.nesting import NestedState
 
 from p2pfl.management.logger import logger
-from p2pfl.stages.workflows.event_handler_workflow import EventHandlerWorkflow
-from p2pfl.stages.workflows.training_workflow import TrainingWorkflow
 
 NestedState.separator = '↦'
 
+# Set up pytransitions logging
+logging.getLogger('transitions').setLevel(logging.WARNING)
 
-class LearningWorkflow(HierarchicalAsyncGraphMachine):
+
+class LearningWorkflow(BaseMachine):
     """Class to run a workflow of stages."""
 
-    def __init__(self, model, *args, **kwargs):
+    def __init__(self, model, training_workflow=None, event_handler_workflow=None, *args, **kwargs):
         """Initialize the workflow."""
 
         states = [
+            # Initial state
             {'name': "waiting_for_learning_start"},
-            {'name': "learning", 'on_final': "on_final_learning", 'parallel': [{"name":"workflow","children":TrainingWorkflow()}, {"name":"event_handler","children":EventHandlerWorkflow()}]},
+            # Learning process (should be a nested state machine)
+            {'name': "learning", 'on_final': "on_final_learning",
+            'parallel': [{"name":"workflow","children":training_workflow},
+                        {"name":"event_handler","children":event_handler_workflow}]} if training_workflow and event_handler_workflow else {'name': "learning"},
+            # Final state
             {'name': "learning_finished", 'final': True}
         ]
 
         transitions = [
-            {'trigger': 'start_learning', 'source': 'waiting_for_learning_start', 'dest': 'learning', 'after': 'set_model_initialized'},
+            # Starting the learning process
+            {'trigger': 'start_learning', 'source': 'waiting_for_learning_start', 'dest': 'learning', 'before': 'set_model_initialized'},
             {'trigger': 'peer_learning_initiated', 'source': 'waiting_for_learning_start', 'dest': 'learning'},
+
+            # Learning process finished
             {'trigger': 'learning_finished', 'source': 'learning', 'dest': 'learning_finished'},
         ]
 
