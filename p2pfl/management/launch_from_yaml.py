@@ -240,7 +240,6 @@ async def run_from_yaml(yaml_path: str):
             partitions[i],
             protocol=protocol(),
             aggregator=aggregator_fn(),
-            workflow=workflow_fn(),
         )
         await node.start()
         nodes.append(node)
@@ -273,7 +272,8 @@ async def run_from_yaml(yaml_path: str):
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size)
+        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size,
+            workflow=workflow_fn())
 
         # Wait and check
         await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour | TODO: Make this configurable

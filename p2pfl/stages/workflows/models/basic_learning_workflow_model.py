@@ -257,9 +257,22 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
     # CONDITIONS #
     ##############
     def is_model_initialized(self, *args, **kwargs):
-        """Check if the model has been initialized."""
+        """
+        Check if the model has been initialized.
+
+        This is done by checking if the learner's model round is greater than the local state round.
+
+        Args:
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+
+        Returns:
+            bool: True if the model is initialized, False otherwise.
+
+        """
         learner_round = self.node.get_learner().get_P2PFLModel().get_round()
-        return learner_round == self.node.get_local_state().round
+
+        return learner_round == self.node.get_local_state().round if learner_round is not None else False
 
     def is_all_nodes_started(self, *args, **kwargs):
         """Check if all nodes have started."""

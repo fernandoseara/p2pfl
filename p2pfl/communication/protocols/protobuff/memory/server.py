@@ -107,13 +107,13 @@ class MemoryServer(ProtobuffServer):
             raise Exception("ServerSingleton instance not created")
         self.__singleton_dict[self.address] = self
         self.__terminated.set()
-        logger.info(self.address, f"InMemoryServer started at {self.address}")
+        logger.info(self.address, f"🚀 InMemoryServer started at {self.address}")
 
     async def stop(self) -> None:
         """Stop the in-memory server."""
         del self.__singleton_dict[self.address]
         self.__terminated.clear()
-        logger.info(self.address, f"InMemoryServer stopped at {self.address}")
+        logger.info(self.address, f"🛑 InMemoryServer stopped at {self.address}")
 
     async def wait_for_termination(self) -> None:
         """Wait for termination."""
