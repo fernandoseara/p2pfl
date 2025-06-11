@@ -24,6 +24,7 @@ import time
 import traceback
 from typing import Any, Dict, Optional
 
+from p2pfl.communication.commands.message.metrics_command import MetricsCommand
 from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
 from p2pfl.communication.commands.message.stop_learning_command import StopLearningCommand
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
@@ -128,6 +129,7 @@ class Node:
         self.communication_protocol.add_command([
             StartLearningCommand(self),
             StopLearningCommand(self),
+            MetricsCommand(self),
         ])
 
         self.running = False  # Node state

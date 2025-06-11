@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING
 
 from p2pfl.stages.workflow_factory import WorkflowFactory
 
-
 if TYPE_CHECKING:
     from p2pfl.communication.commands.command import Command
     from p2pfl.node import Node
@@ -49,7 +48,6 @@ class BasicDFLFactory(WorkflowFactory):
     @staticmethod
     def create_commands(node: Node) -> list[Command]:
         """Create a list of commands."""
-        from p2pfl.communication.commands.message.metrics_command import MetricsCommand
         from p2pfl.communication.commands.message.models_agregated_command import ModelsAggregatedCommand
         from p2pfl.communication.commands.message.node_initialized_command import NodeInitializedCommand
         from p2pfl.communication.commands.message.peer_round_updated_command import PeerRoundUpdatedCommand
@@ -62,7 +60,6 @@ class BasicDFLFactory(WorkflowFactory):
             PeerRoundUpdatedCommand(node),
             VoteTrainSetCommand(node),
             ModelsAggregatedCommand(node),
-            MetricsCommand(node),
             PartialModelCommand(node),
             FullModelCommand(node),
         ]

@@ -26,8 +26,6 @@ from typing import TYPE_CHECKING
 from p2pfl.communication.commands.command import Command
 from p2pfl.stages.workflow_type import WorkflowType
 
-from transitions import Machine
-
 if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
     from p2pfl.node import Node

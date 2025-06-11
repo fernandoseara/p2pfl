@@ -37,6 +37,7 @@ from p2pfl.management.logger import logger
 from p2pfl.stages.asyDFL.compute_priority_stage import ComputePriorityStage
 from p2pfl.stages.asyDFL.gossip_model_stage import GossipModelStage
 from p2pfl.stages.asyDFL.select_neighbor_stage import SelectNeighborsStage
+from p2pfl.stages.base_node.evaluate_stage import EvaluateStage
 from p2pfl.stages.network_state.async_network_state import AsyncNetworkState
 from p2pfl.stages.workflows.models.learning_workflow_model import LearningWorkflowModel
 
@@ -95,10 +96,6 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         #learner.get_P2PFLModel().get_model().de_biased_model = learner.get_P2PFLModel().get_model().clone_model()  # χ(0) = ω(0)
         self.tau = 2  # τ
 
-        # Setup learner
-        learner.set_steps_per_epoch(1)
-        learner.set_epochs(1)
-
         await self.next_stage()
 
     async def on_enter_waiting_for_synchronization(self, *args, **kwargs):
@@ -106,6 +103,10 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         logger.info(self.node.address, "⏳ Waiting initialization.")
 
         communication_protocol = self.node.get_communication_protocol()
+
+        await EvaluateStage.execute(
+            node=self.node,
+        )
 
         # Communicate Initialization
         await communication_protocol.broadcast(communication_protocol.build_msg(NodeInitializedCommand.get_name()))
@@ -210,6 +211,11 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         agg_model = self.node.get_aggregator().aggregate(self.network_state.get_all_models())
         self.node.get_learner().set_P2PFLModel(agg_model)
 
+        # Evaluate the model
+        await EvaluateStage.execute(
+            node=self.node,
+        )
+
         await self.next_stage()
 
     async def on_enter_network_updating_finishing(self):
@@ -236,6 +242,10 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
 
     async def on_enter_training_finished(self):
         """Finish the training."""
+        await EvaluateStage.execute(
+            node=self.node,
+        )
+
         # Communication Protocol
         self.node.get_communication_protocol().remove_command(self.node.workflow_factory.create_commands(self))
 

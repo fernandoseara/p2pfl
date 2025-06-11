@@ -35,8 +35,7 @@ class VirtualNodeLearner(Learner):
 
     def __init__(self, learner: Learner) -> None:
         """Initialize the learner."""
-        self.learner = learner
-        self.actor_pool = SuperActorPool()
+        self.actor_pool = SuperActorPool(learner)
 
     def set_addr(self, addr: str) -> str:
         """Set the addr of the node."""

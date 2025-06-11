@@ -1,4 +1,4 @@
-description: "Example of using P2PFL with the MNIST dataset, a collection of handwritten digits commonly used for training image processing systems."
+description: "Example of using P2PFL with the EMNIST dataset, a collection of handwritten letters commonly used for training image processing systems."
 
 # Web logger configuration
 web_logger:
@@ -19,7 +19,7 @@ network:
 # Defines experiment settings
 experiment:
   name: "my_experiment"
-  rounds: 40
+  rounds: 4
   epochs: 1
   trainset_size: 4
   seed: 666
@@ -28,7 +28,7 @@ experiment:
   # Dataset settings
   dataset:
     source: "huggingface" # Dataset source: "huggingface", "csv", etc.
-    name: "p2pfl/MNIST"
+    name: "tanganke/emnist_letters" 
     batch_size: 128
     partitioning:
       package: "p2pfl.learning.dataset.partition_strategies"
@@ -44,7 +44,7 @@ experiment:
 
   # Learning algorithm configuration
   model:
-    package: "p2pfl.examples.mnist.model.mlp_tensorflow" # mlp_pytorch | mlp_tensorflow
+    package: "p2pfl.examples.mnist.model.vgg16_tensorflow" # mlp_pytorch | mlp_tensorflow
     model_build_fn: "model_build_fn"
     params: {}  
     # Learning algorithm parameters (algorithm-specific)
@@ -107,4 +107,4 @@ settings:
 profiling:
   enabled: false
   measure_time: true
-  output_dir: "profile/mnist"
+  output_dir: "profile/emnist"
