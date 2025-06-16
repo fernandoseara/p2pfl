@@ -46,7 +46,9 @@ experiment:
   model:
     package: "p2pfl.examples.mnist.model.vgg16_tensorflow" # mlp_pytorch | mlp_tensorflow
     model_build_fn: "model_build_fn"
-    params: {}  
+    params: 
+      input_shape: [28, 28, 1]  # Input shape for EMNIST letters
+      out_channels: 26            # Number of classes for EMNIST letters (A-Z)  
     # Learning algorithm parameters (algorithm-specific)
     #compression:
     ptq:

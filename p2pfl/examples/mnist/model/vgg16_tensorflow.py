@@ -19,7 +19,7 @@
 """Simple MLP on Tensorflow Keras for MNIST."""
 
 import tensorflow as tf  # type: ignore
-from tensorflow.keras.layers import Conv2D, Dense, Flatten, MaxPooling2D  # type: ignore
+from tensorflow.keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, Resizing  # type: ignore
 from tensorflow.keras.losses import SparseCategoricalCrossentropy  # type: ignore
 from tensorflow.keras.optimizers import Adam  # type: ignore
 
@@ -35,7 +35,7 @@ from p2pfl.utils.seed import set_seed
 class VGG16(tf.keras.Model):
     """VGG16-like CNN model for image classification using Keras."""
 
-    def __init__(self, input_shape=(32, 32, 3), out_channels=10, lr_rate=0.001, **kwargs):
+    def __init__(self, input_shape=(224, 224, 3), out_channels=10, lr_rate=0.001, **kwargs):
         """
         Initialize the VGG16-like CNN.
 
@@ -44,11 +44,15 @@ class VGG16(tf.keras.Model):
             out_channels (int): Number of output classes.
             lr_rate (float): Learning rate for the Adam optimizer.
             kwargs: Additional keyword arguments.
+
         """
         super().__init__()
         set_seed(Settings.general.SEED, "tensorflow")
         # VGG16-like architecture
         self.conv_blocks = [
+            tf.keras.Sequential([
+                Resizing(224, 224)
+            ]),
             tf.keras.Sequential([
                 Conv2D(64, (3, 3), activation='relu', padding='same'),
                 Conv2D(64, (3, 3), activation='relu', padding='same'),
