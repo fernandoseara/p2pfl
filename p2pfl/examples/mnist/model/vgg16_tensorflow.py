@@ -46,58 +46,76 @@ class VGG16(tf.keras.Model):
             kwargs: Additional keyword arguments.
 
         """
-        super().__init__()
-        set_seed(Settings.general.SEED, "tensorflow")
-        # VGG16-like architecture
-        self.conv_blocks = [
-            tf.keras.Sequential([
-                Resizing(224, 224)
-            ]),
-            tf.keras.Sequential([
-                Conv2D(64, (3, 3), activation='relu', padding='same'),
-                Conv2D(64, (3, 3), activation='relu', padding='same'),
-                MaxPooling2D((2, 2))
-            ]),
-            tf.keras.Sequential([
-                Conv2D(128, (3, 3), activation='relu', padding='same'),
-                Conv2D(128, (3, 3), activation='relu', padding='same'),
-                MaxPooling2D((2, 2))
-            ]),
-            tf.keras.Sequential([
-                Conv2D(256, (3, 3), activation='relu', padding='same'),
-                Conv2D(256, (3, 3), activation='relu', padding='same'),
-                Conv2D(256, (3, 3), activation='relu', padding='same'),
-                MaxPooling2D((2, 2))
-            ]),
-            tf.keras.Sequential([
-                Conv2D(512, (3, 3), activation='relu', padding='same'),
-                Conv2D(512, (3, 3), activation='relu', padding='same'),
-                Conv2D(512, (3, 3), activation='relu', padding='same'),
-                MaxPooling2D((2, 2))
-            ]),
-            tf.keras.Sequential([
-                Conv2D(512, (3, 3), activation='relu', padding='same'),
-                Conv2D(512, (3, 3), activation='relu', padding='same'),
-                Conv2D(512, (3, 3), activation='relu', padding='same'),
-                MaxPooling2D((2, 2))
-            ]),
-        ]
+        self.resize = Resizing(224, 224)
+
+        # Block 1
+        self.conv1_1 = Conv2D(64, (3, 3), activation='relu', padding='same')
+        self.conv1_2 = Conv2D(64, (3, 3), activation='relu', padding='same')
+        self.pool1 = MaxPooling2D((2, 2))
+
+        # Block 2
+        self.conv2_1 = Conv2D(128, (3, 3), activation='relu', padding='same')
+        self.conv2_2 = Conv2D(128, (3, 3), activation='relu', padding='same')
+        self.pool2 = MaxPooling2D((2, 2))
+
+        # Block 3
+        self.conv3_1 = Conv2D(256, (3, 3), activation='relu', padding='same')
+        self.conv3_2 = Conv2D(256, (3, 3), activation='relu', padding='same')
+        self.conv3_3 = Conv2D(256, (3, 3), activation='relu', padding='same')
+        self.pool3 = MaxPooling2D((2, 2))
+
+        # Block 4
+        self.conv4_1 = Conv2D(512, (3, 3), activation='relu', padding='same')
+        self.conv4_2 = Conv2D(512, (3, 3), activation='relu', padding='same')
+        self.conv4_3 = Conv2D(512, (3, 3), activation='relu', padding='same')
+        self.pool4 = MaxPooling2D((2, 2))
+
+        # Block 5
+        self.conv5_1 = Conv2D(512, (3, 3), activation='relu', padding='same')
+        self.conv5_2 = Conv2D(512, (3, 3), activation='relu', padding='same')
+        self.conv5_3 = Conv2D(512, (3, 3), activation='relu', padding='same')
+        self.pool5 = MaxPooling2D((2, 2))
+
+        # Fully connected layers
         self.flatten = Flatten()
         self.fc1 = Dense(4096, activation='relu')
         self.fc2 = Dense(4096, activation='relu')
         self.output_layer = Dense(out_channels)
 
+        # Compile config
         self.loss = SparseCategoricalCrossentropy(from_logits=True)
         self.optimizer = Adam(learning_rate=lr_rate)
 
-        # Build the model with a dummy input
-        self(tf.zeros((1, *input_shape)))
+        # Build model to register weights for serialization
+        self.build((None, *input_shape))
 
     def call(self, inputs):
         """Forward pass of the VGG16 model."""
-        x = inputs
-        for block in self.conv_blocks:
-            x = block(x)
+        x = self.resize(inputs)
+
+        x = self.conv1_1(x)
+        x = self.conv1_2(x)
+        x = self.pool1(x)
+
+        x = self.conv2_1(x)
+        x = self.conv2_2(x)
+        x = self.pool2(x)
+
+        x = self.conv3_1(x)
+        x = self.conv3_2(x)
+        x = self.conv3_3(x)
+        x = self.pool3(x)
+
+        x = self.conv4_1(x)
+        x = self.conv4_2(x)
+        x = self.conv4_3(x)
+        x = self.pool4(x)
+
+        x = self.conv5_1(x)
+        x = self.conv5_2(x)
+        x = self.conv5_3(x)
+        x = self.pool5(x)
+
         x = self.flatten(x)
         x = self.fc1(x)
         x = self.fc2(x)
