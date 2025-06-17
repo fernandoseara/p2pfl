@@ -46,6 +46,9 @@ class VGG16(tf.keras.Model):
             kwargs: Additional keyword arguments.
 
         """
+        super().__init__(**kwargs)
+        set_seed(Settings.general.SEED, "tensorflow")
+
         self.resize = Resizing(224, 224)
 
         # Block 1
@@ -86,11 +89,13 @@ class VGG16(tf.keras.Model):
         self.loss = SparseCategoricalCrossentropy(from_logits=True)
         self.optimizer = Adam(learning_rate=lr_rate)
 
-        # Build model to register weights for serialization
-        self.build((None, *input_shape))
+        # Force the model to be built
+        self(tf.zeros((1, *input_shape)))
 
     def call(self, inputs):
         """Forward pass of the VGG16 model."""
+        if tf.rank(inputs) == 3:
+            inputs = tf.expand_dims(inputs, axis=0)  # Add batch dimension
         x = self.resize(inputs)
 
         x = self.conv1_1(x)
