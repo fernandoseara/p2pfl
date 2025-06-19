@@ -19,14 +19,12 @@
 """Actor pool for distributed computing using Ray."""
 
 import asyncio
-import threading
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, List, Optional, Tuple
 
 import ray
 from ray.util.actor_pool import ActorPool
 
-from p2pfl.learning.frameworks.learner import Learner
-from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
+from p2pfl.learning.frameworks.learner import Learner, LearnerDecorator
 from p2pfl.learning.frameworks.simulation.utils import check_client_resources, pool_size_from_resources
 from p2pfl.management.logger import logger
 
@@ -38,7 +36,7 @@ from p2pfl.management.logger import logger
 
 
 @ray.remote
-class VirtualLearnerActor:
+class VirtualLearnerActor(LearnerDecorator):
     """Decorator for the learner to be used in the simulation."""
 
     def terminate(self) -> None:
@@ -46,17 +44,6 @@ class VirtualLearnerActor:
         logger.debug(self.__class__.__name__, f"Manually terminating {self.__class__.__name__}")
         ray.actor.exit_actor()
 
-    async def fit(self, addr: str, learner: Learner) -> Tuple[str, P2PFLModel]:
-        """Fit the model."""
-        return addr, await learner.fit()
-
-    async def train_on_batch(self, addr: str, learner: Learner) -> Tuple[str, P2PFLModel]:
-        """Train the model on a single batch."""
-        return addr, await learner.train_on_batch()
-
-    async def evaluate(self, addr: str, learner: Learner) -> Tuple[str, Dict[str, float]]:
-        """Evaluate the model."""
-        return addr, await learner.evaluate()
 
 
 class SuperActorPool(ActorPool):

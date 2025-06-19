@@ -18,7 +18,7 @@
 
 """Keras learner for P2PFL."""
 
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 import tensorflow as tf  # type: ignore
@@ -27,7 +27,6 @@ from p2pfl.learning.aggregators.aggregator import Aggregator
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.learner import Learner
-from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.tensorflow.callbacks.keras_logger import FederatedLogger
 from p2pfl.learning.frameworks.tensorflow.keras_dataset import KerasExportStrategy
 from p2pfl.learning.frameworks.tensorflow.keras_model import KerasP2PFLModel
@@ -103,7 +102,7 @@ class KerasLearner(Learner):
                     callbacks=self.callbacks,  # type: ignore
                     steps_per_epoch=self.steps_per_epoch,
                 )
-                model.last_training_loss = history.history["loss"][-1]
+                self.get_P2PFLModel().last_training_loss = history.history["loss"][-1]
 
             # Set model contribution
             self.get_P2PFLModel().set_contribution([self.address], self.get_data().get_num_samples(train=True))
@@ -137,7 +136,7 @@ class KerasLearner(Learner):
             inputs, targets = batch
 
             loss, _ = model.train_on_batch(inputs, targets)
-            model.last_training_loss = loss
+            self.get_P2PFLModel().last_training_loss = loss
 
             # Set model contribution
             self.get_P2PFLModel().set_contribution([self.address], self.get_data().get_num_samples(train=True))

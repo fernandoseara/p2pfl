@@ -39,11 +39,13 @@ class Learner(ABC, NodeComponent):
         model: The model of the learner.
         data: The data of the learner.
         self_addr: The address of the learner.
+        aggregator: The aggregator used in the learning process.
+        steps_per_epoch: The number of steps per epoch for the model.
 
     """
 
     def __init__(
-        self, model: Optional[P2PFLModel] = None, data: Optional[P2PFLDataset] = None, aggregator: Optional[Aggregator] = None,
+        self, address:str, model: Optional[P2PFLModel] = None, data: Optional[P2PFLDataset] = None, aggregator: Optional[Aggregator] = None,
         steps_per_epoch: Optional[int] = None,
     ) -> None:
         """Initialize the learner."""
@@ -62,6 +64,7 @@ class Learner(ABC, NodeComponent):
         self.__data: Optional[P2PFLDataset] = None
         if data:
             self.set_data(data)
+
 
     @allow_no_addr_check
     def set_P2PFLModel(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
@@ -238,3 +241,187 @@ class Learner(ABC, NodeComponent):
 
         """
         pass
+
+class LearnerDecorator(Learner):
+    """
+    Decorator class for Learner. Delegates calls to a wrapped Learner instance.
+
+    Allows for extension of Learner behavior without modifying the base class.
+    """
+
+    def __init__(self, learner: Learner):
+        """
+        Initialize the decorator with a Learner instance.
+
+        Args:
+            learner: The Learner instance to wrap.
+
+        """
+        self._learner = learner
+
+    def set_addr(self, address: str) -> str:
+        """
+        Set the address of the learner.
+
+        Args:
+            address: The address to set.
+
+        Returns:
+            The address of the learner.
+
+        """
+        return self._learner.set_addr(address)
+
+    def set_P2PFLModel(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
+        """
+        Set the P2PFLModel of the learner.
+
+        Args:
+            model: The P2PFLModel to set.
+
+        """
+        self._learner.set_P2PFLModel(model)
+
+    def get_P2PFLModel(self) -> P2PFLModel:
+        """
+        Get the P2PFLModel of the learner.
+
+        Returns:
+            The P2PFLModel of the learner.
+
+        """
+        return self._learner.get_P2PFLModel()
+
+    def set_data(self, data: P2PFLDataset) -> None:
+        """
+        Set the data of the learner.
+
+        Args:
+            data: The P2PFLDataset to set.
+
+        """
+        self._learner.set_data(data)
+
+    def get_data(self) -> P2PFLDataset:
+        """
+        Get the data of the learner.
+
+        Returns:
+            The P2PFLDataset of the learner.
+
+        """
+        return self._learner.get_data()
+
+    def indicate_aggregator(self, aggregator: Aggregator) -> None:
+        """
+        Indicate to the learner the aggregator being used.
+
+        Args:
+            aggregator: The Aggregator to indicate.
+
+        """
+        self._learner.indicate_aggregator(aggregator)
+
+    def get_epochs(self) -> int:
+        """
+        Get the number of epochs of the model.
+
+        Returns:
+            The number of epochs of the model.
+
+        """
+        return self._learner.get_epochs()
+
+    def set_epochs(self, epochs: int) -> None:
+        """
+        Set the number of epochs of the model.
+
+        Args:
+            epochs: The number of epochs to set.
+
+        """
+        self._learner.set_epochs(epochs)
+
+    def get_steps_per_epoch(self) -> int:
+        """
+        Get the number of steps per epoch of the model.
+
+        Returns:
+            The number of steps per epoch of the model.
+
+        """
+        return self._learner.get_steps_per_epoch()
+
+    def set_steps_per_epoch(self, steps_per_epoch: int) -> None:
+        """
+        Set the number of steps per epoch of the model.
+
+        Args:
+            steps_per_epoch: The number of steps per epoch to set.
+
+        """
+        self._learner.set_steps_per_epoch(steps_per_epoch)
+
+    def update_callbacks_with_model_info(self) -> None:
+        """
+        Update the callbacks with the model additional information.
+
+        This method retrieves the model's information and updates each callback with it.
+        """
+        self._learner.update_callbacks_with_model_info()
+
+    def add_callback_info_to_model(self) -> None:
+        """
+        Add the additional information from the callbacks to the model.
+
+        This method iterates through all callbacks and adds their information to the model.
+        """
+        self._learner.add_callback_info_to_model()
+
+    async def fit(self) -> P2PFLModel:
+        """
+        Fit the model using the learner's fit method.
+
+        Returns:
+            The P2PFLModel after fitting.
+
+        """
+        return await self._learner.fit()
+
+    async def train_on_batch(self) -> P2PFLModel:
+        """
+        Train the model on the next batch using the learner's train_on_batch method.
+
+        Returns:
+            The P2PFLModel after training on the batch.
+
+        """
+        return await self._learner.train_on_batch()
+
+    async def interrupt_fit(self) -> None:
+        """
+        Interrupt the fit process using the learner's interrupt_fit method.
+
+        This method allows for graceful interruption of the training process.
+        """
+        await self._learner.interrupt_fit()
+
+    async def evaluate(self) -> Dict[str, float]:
+        """
+        Evaluate the model using the learner's evaluate method.
+
+        Returns:
+            A dictionary containing the evaluation results, such as loss and accuracy.
+
+        """
+        return await self._learner.evaluate()
+
+    def get_framework(self) -> str:
+        """
+        Retrieve the framework name of the learner.
+
+        Returns:
+            The name of the framework used by the learner.
+
+        """
+        return self._learner.get_framework()

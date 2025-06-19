@@ -104,7 +104,7 @@ async def mnist(
         batch_size: The batch size for training.
 
     """
-    logger.set_level(level=logging.DEBUG)
+    logger.set_level(level=logging.INFO)
 
     if measure_time:
         start_time = time.time()
@@ -169,6 +169,11 @@ async def mnist(
 
         # Local Logs
         if show_metrics:
+            import os # noqa: I001
+            # Create directories to avoid clutter and overwrite
+            os.makedirs("plots/local", exist_ok=True)
+            os.makedirs("plots/global", exist_ok=True)
+
             local_logs = logger.get_local_logs()
             if local_logs != {}:
                 logs_l = list(local_logs.items())[0][1]
@@ -184,10 +189,12 @@ async def mnist(
                             plt.xlabel("Epoch")
                             plt.ylabel(metric)
                             plt.legend()
-                            plt.show()
+                            plt.savefig(f"plots/local/round{round_num}_{node_name}_{metric}.png")
+                            plt.close()
 
             # Global Logs
             global_logs = logger.get_global_logs()
+            print(f"Global logs: {global_logs}")
             if global_logs != {}:
                 logs_g = list(global_logs.items())[0][1]  # Accessing the nested dictionary directly
                 # Plot experiment metrics
@@ -201,7 +208,8 @@ async def mnist(
                         plt.xlabel("Epoch")
                         plt.ylabel(metric)
                         plt.legend()
-                        plt.show()
+                        plt.savefig(f"plots/global/{node_name}_{metric}.png")
+                        plt.close()
     except Exception as e:
         raise e
     finally:

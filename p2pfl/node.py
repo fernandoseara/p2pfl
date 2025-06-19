@@ -108,8 +108,8 @@ class Node:
         # Learner
         if learner is None:  # if no learner, use factory default
             learner = LearnerFactory.create_learner(model)()
+        learner.set_addr(address)
         self.learner = try_init_learner_with_ray(learner)
-        self.learner.set_addr(address)
         self.learner.set_P2PFLModel(model)
         self.learner.set_data(data)
         self.learner.indicate_aggregator(self.aggregator)
@@ -529,12 +529,12 @@ class Node:
         # Communication Protocol
         self.communication_protocol.remove_command(self.workflow_factory.create_commands(self))
 
+        # Workflow
+        self.learning_machine.remove_model(self.learning_workflow)
+        self.learning_workflow = LearningWorkflowModel(self)
+
         # Learner
         await self.learner.interrupt_fit()
         # State
         self.local_state.clear()
         logger.experiment_finished(self.address)
-
-        # Workflow
-        self.learning_machine.remove_model(self.learning_workflow)
-        self.learning_workflow = LearningWorkflowModel(self)

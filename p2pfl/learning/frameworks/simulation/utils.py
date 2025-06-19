@@ -93,4 +93,4 @@ def pool_size_from_resources(client_resources: Dict[str, Union[int, float]]) -> 
         )
         raise ValueError("ActorPool is empty. Stopping Simulation. " "Check 'client_resources'")
 
-    return total_num_actors
+    return 1

@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 from transitions.extensions.nesting import NestedState
@@ -29,10 +30,7 @@ from p2pfl.communication.commands.message.asyDFL.ctx_info_updating_command impor
 )
 from p2pfl.communication.commands.message.node_initialized_command import NodeInitializedCommand
 from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
-from p2pfl.learning.frameworks.custom_model_factory import CustomModelFactory
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
-from p2pfl.learning.frameworks.tensorflow.custom_models.asydfl_model import AsyDFLKerasP2PFLModel
-from p2pfl.learning.frameworks.tensorflow.custom_models.custom_model_factory import KerasCustomModelFactory
 from p2pfl.management.logger import logger
 from p2pfl.stages.asyDFL.compute_priority_stage import ComputePriorityStage
 from p2pfl.stages.asyDFL.gossip_model_stage import GossipModelStage
@@ -93,7 +91,6 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
 
         # Initialize asynchronous DFL variables
         logger.info(self.node.address, "Initializing local model and parameters...")
-        #learner.get_P2PFLModel().get_model().de_biased_model = learner.get_P2PFLModel().get_model().clone_model()  # χ(0) = ω(0)
         self.tau = 2  # τ
 
         await self.next_stage()
@@ -152,18 +149,19 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         communication_protocol = self.node.get_communication_protocol()
         local_state = self.node.get_local_state()
 
-        training_loss = self.node.get_learner().get_P2PFLModel().get_last_training_loss()
+        training_loss = self.node.get_learner().get_P2PFLModel().last_training_loss
         self.network_state.add_loss(self.node.address, local_state.round, training_loss)
 
         logger.info(self.node.address, "📢 Broadcasting loss values.")
         flattened_loss = [str(training_loss)]
-        await communication_protocol.broadcast(
-            communication_protocol.build_msg(
-                LossInformationUpdatingCommand.get_name(),
-                flattened_loss,
-                round=local_state.round,
+        with contextlib.suppress(Exception):
+            await communication_protocol.broadcast(
+                communication_protocol.build_msg(
+                    LossInformationUpdatingCommand.get_name(),
+                    flattened_loss,
+                    round=local_state.round,
+                )
             )
-        )
 
         await self.next_stage()
 
@@ -199,13 +197,14 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
             self.network_state.update_p2p_updating_idx(neighbor,local_state.round)
 
             # Send index of local iteration to neighbors
-            await communication_protocol.send(
-                nei=neighbor,
-                msg=communication_protocol.build_msg(
-                    IndexInformationUpdatingCommand.get_name(),
-                    round=local_state.round,
+            with contextlib.suppress(Exception):
+                await communication_protocol.send(
+                    nei=neighbor,
+                    msg=communication_protocol.build_msg(
+                        IndexInformationUpdatingCommand.get_name(),
+                        round=local_state.round,
+                    )
                 )
-            )
 
         # P2P updating of the model
         agg_model = self.node.get_aggregator().aggregate(self.network_state.get_all_models())
@@ -301,18 +300,27 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
     #########################
     async def create_peer(self, source: str):
         """Update the peer round."""
-        self.network_state.add_peer(source)
-        logger.debug(self.node.address, f"📡 {source} peer created")
+        try:
+            self.network_state.add_peer(source)
+            logger.debug(self.node.address, f"📡 {source} peer created")
+        except Exception as e:
+            logger.error(self.node.address, f"❌ Error creating peer {source}: {e}")
 
     async def save_started_node(self, source: str):
         """Save the votes."""
-        self.network_state.update_round(source, -1)
-        logger.debug(self.node.address, f"📦 Node started: {source}")
+        try:
+            self.network_state.update_round(source, -1)
+            logger.debug(self.node.address, f"📦 Node started: {source}")
+        except Exception as e:
+            logger.error(self.node.address, f"❌ Error saving started node {source}: {e}")
 
     async def save_loss_information(self, source: str, round: int, loss: float):
         """Save the loss information."""
-        self.network_state.add_loss(source, round, loss)
-        logger.debug(self.node.address, f"📡 {source} loss updated to {loss} for round {round}")
+        try:
+            self.network_state.add_loss(source, round, loss)
+            logger.debug(self.node.address, f"📡 {source} loss updated to {loss} for round {round}")
+        except Exception as e:
+            logger.error(self.node.address, f"❌ Error saving loss information from {source} for round {round}: {e}")
 
     async def save_model(self,
         source: str,
@@ -342,13 +350,19 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
                             index: int,
                             ):
         """Save the iteration index."""
-        self.network_state.update_round(source, index)
-        logger.debug(self.node.address, f"📡 {source} round updated to {index}")
+        try:
+            self.network_state.update_round(source, index)
+            logger.debug(self.node.address, f"📡 {source} round updated to {index}")
+        except Exception as e:
+            logger.error(self.node.address, f"❌ Error saving iteration index from {source}: {e}")
 
     async def save_push_sum_weight(self, source: str, push_sum_weight: float):
         """Save the push sum weight."""
-        self.network_state.update_push_sum_weight(source, push_sum_weight)
-        logger.debug(self.node.address, f"📡 {source} push sum weight updated to {push_sum_weight}")
+        try:
+            self.network_state.update_push_sum_weight(source, push_sum_weight)
+            logger.debug(self.node.address, f"📡 {source} push sum weight updated to {push_sum_weight}")
+        except Exception as e:
+            logger.error(self.node.address, f"❌ Error saving push sum weight from {source}: {e}")
 
 
 
