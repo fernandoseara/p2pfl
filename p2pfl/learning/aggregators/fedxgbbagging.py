@@ -39,7 +39,7 @@ class FedXgbBagging(Aggregator):
         """Initialize the aggregator."""
         super().__init__(disable_partial_aggregation=disable_partial_aggregation)
 
-    def aggregate(self, models: list[XGBoostModel]) -> P2PFLModel:
+    def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """
         Aggregate the models.
 
@@ -57,19 +57,27 @@ class FedXgbBagging(Aggregator):
         if len(models) == 0:
             raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there is no models")
 
+        # Runtime type check: ensure all models are XGBoostModel instances
+        for model in models:
+            if not isinstance(model, XGBoostModel):
+                raise TypeError(f"FedXgbBagging requires XGBoostModel instances, got {type(model)}")
+
         # Total Samples
         total_samples = sum([m.get_num_samples() for m in models])
 
+        # Cast to XGBoostModel for type safety (already validated above)
+        xgb_models: list[XGBoostModel] = [m for m in models if isinstance(m, XGBoostModel)]  # type: ignore[misc]
+
         # Add weighted models
-        global_model = models[0].get_file_name()
+        global_model = xgb_models[0].get_file_name()
         if global_model == "":
             return models[0]
         # Siempre cargar el JSON del primer modelo
         with open(global_model) as f:
             global_model_json = json.load(f)
         os.remove(global_model)  # Remove the file to avoid conflicts
-        if len(models) > 1:
-            for m in models[1:]:
+        if len(xgb_models) > 1:
+            for m in xgb_models[1:]:
                 model_file = m.get_file_name()
                 with open(model_file) as f:
                     current_model_json = json.load(f)
@@ -82,11 +90,11 @@ class FedXgbBagging(Aggregator):
             json.dump(global_model_json, f)
         # Get contributors
         contributors: list[str] = []
-        for m in models:
+        for m in xgb_models:
             contributors = contributors + m.get_contributors()
 
         # Return an aggregated p2pfl model
-        returned_model = models[0].build_copy(params=[np.array(global_model)], num_samples=total_samples, contributors=contributors)
+        returned_model = xgb_models[0].build_copy(params=[np.array(global_model)], num_samples=total_samples, contributors=contributors)
         # os.remove(global_model)  # Clean up the temporary file
         return returned_model
 

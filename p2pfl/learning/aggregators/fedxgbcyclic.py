@@ -36,10 +36,15 @@ class FedXgbCyclic(Aggregator):
         """Initialize the aggregator."""
         super().__init__(disable_partial_aggregation=disable_partial_aggregation)
 
-    def aggregate(self, models: list[XGBoostModel]) -> P2PFLModel:
+    def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """Cyclic aggregation: solo un cliente participa por ronda, el modelo se pasa secuencialmente."""
         if len(models) == 0:
             raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there is no models")
+
+        # Runtime type check: ensure all models are XGBoostModel instances
+        for model in models:
+            if not isinstance(model, XGBoostModel):
+                raise TypeError(f"FedXgbCyclic requires XGBoostModel instances, got {type(model)}")
 
         # En entrenamiento cíclico, solo se toma el modelo del cliente actual (el último de la lista)
         selected_model = models[-1]

@@ -48,6 +48,8 @@ flax = ["flax>=0.10.0,<0.11"]
 dp = ["opendp>=0.13.0"]
 wandb = ["wandb>=0.20.1,<0.21"]
 
+xgboost = ["xgboost>=3.0.5", "scikit-learn>=1.7.2"]
+
 [project.urls]
 Homepage = "https://p2pfl.com"
 Repository = "https://github.com/p2pfl/p2pfl"

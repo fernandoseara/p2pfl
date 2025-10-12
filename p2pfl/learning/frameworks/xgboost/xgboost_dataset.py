@@ -30,26 +30,32 @@ class XGBoostExportStrategy(DataExportStrategy):
 
     @staticmethod
     def export(
-        data: Dataset, train: bool = True, label_key: str = None, feature_keys: list[str] | None = None, **kwargs
+        data: Dataset, batch_size: int | None = None, **kwargs
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Export dataset to numpy arrays for XGBoost.
 
         Args:
             data: The dataset to export.
-            train: Whether this is training data.
-            label_key: The key for the label column.
-            feature_keys: List of feature column keys.
-            **kwargs: Additional keyword arguments.
+            batch_size: The batch size for the export (unused for XGBoost).
+            **kwargs: Additional keyword arguments:
+                - train (bool): Whether this is training data. Default: True.
+                - label_key (str | None): The key for the label column. Default: None (uses last column).
+                - feature_keys (list[str] | None): List of feature column keys. Default: None (uses all except label).
 
         Returns:
             Tuple of (features, labels) as numpy arrays.
 
         """
+        # Extract XGBoost-specific parameters from kwargs
+        train = kwargs.get('train', True)
+        label_key = kwargs.get('label_key', None)
+        feature_keys = kwargs.get('feature_keys', None)
+        
         # Convert to pandas and then numpy
         df = data.to_pandas()
         if label_key is None:
-            label_key = df.columns[-1] if label_key is None else label_key
+            label_key = df.columns[-1]
         keys = feature_keys or [c for c in df.columns if c != label_key]
         X = df[keys].to_numpy()
         y = df[label_key].to_numpy()

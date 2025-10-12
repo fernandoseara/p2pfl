@@ -116,13 +116,15 @@ class XGBoostModel(P2PFLModel):
         if params is None or len(params) == 0:
             pass
         else:
-            params = np.array2string(params[0]).replace("'", "")
-            file_name = params
-            type_of_model = file_name.replace(".json", "").split("_")[-1]  # Extract type from filename
+            # Type guard: at this point params should be list[np.ndarray]
+            if not isinstance(params, list):
+                raise TypeError(f"Expected params to be a list, got {type(params)}")
+            file_name_str = np.array2string(params[0]).replace("'", "")
+            type_of_model = file_name_str.replace(".json", "").split("_")[-1]  # Extract type from filename
             model = xgb.XGBClassifier() if type_of_model == "classifier" else xgb.XGBRegressor()
-            model.load_model(file_name)  # Load from JSON for compatibility
+            model.load_model(file_name_str)  # Load from JSON for compatibility
             self.model = model
-            os.remove(file_name)
+            os.remove(file_name_str)
 
     def get_framework(self) -> str:
         """Return the framework name identifier."""
