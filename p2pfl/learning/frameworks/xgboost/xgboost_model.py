@@ -18,8 +18,6 @@
 
 """XGBoost model wrapper for P2PFL."""
 
-import os
-import uuid
 from typing import Any
 
 import numpy as np
@@ -69,35 +67,18 @@ class XGBoostModel(P2PFLModel):
         Extract model parameters as numpy arrays.
 
         Returns:
-            List of parameter arrays corresponding to each model attribute.
+            List containing a single numpy array with serialized model bytes.
 
         """
         try:
-            temp_dir = "temp_xgboost_json"
-            os.makedirs(temp_dir, exist_ok=True)
-            rand = uuid.uuid4().hex
-            file_name = os.path.join(temp_dir, f"temp_model{self.id}_{rand}_{self.model._estimator_type}.json")
-            self.model.save_model(file_name)  # Save to JSON for compatibility
-            arr = [np.array(file_name)]
-            return arr
+            # Get underlying booster and serialize to JSON bytes
+            booster = self.model.get_booster()
+            model_bytes = booster.save_raw(raw_format="json")
+            # Convert to numpy array for compatibility with P2PFL
+            model_np = np.frombuffer(model_bytes, dtype=np.uint8)
+            return [model_np]
         except NotFittedError:
             return []
-
-    def get_file_name(self) -> str:
-        """
-        Get the file name of the model.
-
-        This is used to identify the model in federated learning.
-        """
-        temp_dir = "temp_xgboost_json"
-        os.makedirs(temp_dir, exist_ok=True)
-        rand = uuid.uuid4().hex
-        file_name = os.path.join(temp_dir, f"temp_model{self.id}_{rand}_{self.model._estimator_type}.json")
-        try:
-            self.model.save_model(file_name)  # Save to JSON for compatibility
-            return file_name
-        except NotFittedError as err:
-            raise NotFittedError("Model is not fitted, cannot get file name.") from err
 
     def set_parameters(self, params: list[np.ndarray] | bytes) -> None:
         """
@@ -113,18 +94,19 @@ class XGBoostModel(P2PFLModel):
         # If bytes, decode compression first
         if isinstance(params, bytes):
             params, _ = self.decode_parameters(params)
+
         if params is None or len(params) == 0:
-            pass
-        else:
-            # Type guard: at this point params should be list[np.ndarray]
-            if not isinstance(params, list):
-                raise TypeError(f"Expected params to be a list, got {type(params)}")
-            file_name_str = np.array2string(params[0]).replace("'", "")
-            type_of_model = file_name_str.replace(".json", "").split("_")[-1]  # Extract type from filename
-            model = xgb.XGBClassifier() if type_of_model == "classifier" else xgb.XGBRegressor()
-            model.load_model(file_name_str)  # Load from JSON for compatibility
-            self.model = model
-            os.remove(file_name_str)
+            return
+
+        # Type guard: at this point params should be list[np.ndarray]
+        if not isinstance(params, list):
+            raise TypeError(f"Expected params to be a list, got {type(params)}")
+
+        # Convert numpy array back to bytearray
+        model_bytes = bytearray(params[0].tobytes())
+
+        # Load into the existing model (no need to create new instance or detect type)
+        self.model.load_model(model_bytes)
 
     def get_framework(self) -> str:
         """Return the framework name identifier."""

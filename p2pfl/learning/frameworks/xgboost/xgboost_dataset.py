@@ -18,7 +18,6 @@
 
 """XGBoost DMatrix export integration."""
 
-
 import numpy as np
 from datasets import Dataset
 
@@ -29,9 +28,7 @@ class XGBoostExportStrategy(DataExportStrategy):
     """Export strategy for XGBoost."""
 
     @staticmethod
-    def export(
-        data: Dataset, batch_size: int | None = None, **kwargs
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def export(data: Dataset, batch_size: int | None = None, **kwargs) -> tuple[np.ndarray, np.ndarray]:
         """
         Export dataset to numpy arrays for XGBoost.
 
@@ -48,10 +45,9 @@ class XGBoostExportStrategy(DataExportStrategy):
 
         """
         # Extract XGBoost-specific parameters from kwargs
-        train = kwargs.get('train', True)
-        label_key = kwargs.get('label_key', None)
-        feature_keys = kwargs.get('feature_keys', None)
-        
+        label_key = kwargs.get("label_key", None)
+        feature_keys = kwargs.get("feature_keys", None)
+
         # Convert to pandas and then numpy
         df = data.to_pandas()
         if label_key is None:

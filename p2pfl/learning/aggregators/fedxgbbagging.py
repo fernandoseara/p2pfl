@@ -19,7 +19,6 @@
 """Federated Averaging (FedAvg) Aggregator."""
 
 import json
-import os
 
 import numpy as np
 
@@ -27,7 +26,14 @@ from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregat
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.xgboost.xgboost_model import XGBoostModel
 
-# TODO: añadir mención a flower
+# TODO: add datasets to Huggingface
+
+# Inspired by the implementation of flower. Thank you so much for taking FL to another level :)
+#     Original implementation:
+#
+# Hay que añadir robustez a la hora de usar un agregador, se propone meter un campo en el modelo type y que se compruebe aqui, hacemos un enum y un get para pillarlo de cada modelo y metemos un decorador en cada agregator.
+#
+# meter datasets en hf
 
 
 class FedXgbBagging(Aggregator):
@@ -68,34 +74,32 @@ class FedXgbBagging(Aggregator):
         # Cast to XGBoostModel for type safety (already validated above)
         xgb_models: list[XGBoostModel] = [m for m in models if isinstance(m, XGBoostModel)]  # type: ignore[misc]
 
-        # Add weighted models
-        global_model = xgb_models[0].get_file_name()
-        if global_model == "":
+        # Get the first model as JSON bytes and parse
+        params = xgb_models[0].get_parameters()
+        if len(params) == 0:
             return models[0]
-        # Siempre cargar el JSON del primer modelo
-        with open(global_model) as f:
-            global_model_json = json.load(f)
-        os.remove(global_model)  # Remove the file to avoid conflicts
+
+        model_bytes = params[0].tobytes()
+        global_model_json = json.loads(model_bytes.decode("utf-8"))
+
+        # Aggregate models from the rest of the clients
         if len(xgb_models) > 1:
             for m in xgb_models[1:]:
-                model_file = m.get_file_name()
-                with open(model_file) as f:
-                    current_model_json = json.load(f)
-                os.remove(model_file)
+                model_bytes = m.get_parameters()[0].tobytes()
+                current_model_json = json.loads(model_bytes.decode("utf-8"))
                 global_model_json = aggregate_boosters(global_model_json, current_model_json)
 
-        # Save aggregated model to a temporary file
-        global_model = global_model
-        with open(global_model, "w") as f:
-            json.dump(global_model_json, f)
+        # Convert aggregated JSON back to bytes
+        aggregated_bytes = json.dumps(global_model_json).encode("utf-8")
+        model_np = np.frombuffer(aggregated_bytes, dtype=np.uint8)
+
         # Get contributors
         contributors: list[str] = []
         for m in xgb_models:
             contributors = contributors + m.get_contributors()
 
         # Return an aggregated p2pfl model
-        returned_model = xgb_models[0].build_copy(params=[np.array(global_model)], num_samples=total_samples, contributors=contributors)
-        # os.remove(global_model)  # Clean up the temporary file
+        returned_model = xgb_models[0].build_copy(params=[model_np], num_samples=total_samples, contributors=contributors)
         return returned_model
 
 

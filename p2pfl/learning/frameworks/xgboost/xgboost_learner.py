@@ -18,8 +18,6 @@
 
 """XGBoost Learner for P2PFL."""
 
-import os
-
 import numpy as np
 import xgboost as xgb
 from sklearn.exceptions import NotFittedError
@@ -45,9 +43,7 @@ class XGBoostLearner(Learner):
 
     """
 
-    def __init__(
-        self, model: P2PFLModel | None = None, data: P2PFLDataset | None = None, aggregator: Aggregator | None = None
-    ) -> None:
+    def __init__(self, model: P2PFLModel | None = None, data: P2PFLDataset | None = None, aggregator: Aggregator | None = None) -> None:
         """Initialize the XGBoost learner."""
         super().__init__(model=model, data=data, aggregator=aggregator)
         # self.__model = model
@@ -73,15 +69,14 @@ class XGBoostLearner(Learner):
                 xgb_callbacks.append(cb.to_xgb_callback())
 
         try:
-            # Try to get the file name of the current model to continue training
-            previous_model_file = self.get_model().get_file_name()
+            # Try to get the booster from the current model to continue training
+            previous_booster = self.get_model().get_model().get_booster()
             model.fit(
                 X_train,
                 y_train,
                 verbose=True,
-                xgb_model=previous_model_file,  # Load previous model if exists
+                xgb_model=previous_booster,  # Load previous model if exists
             )
-            os.remove(previous_model_file)  # Clean up the temporary file after training
         except (NotFittedError, Exception):
             # If no previous model exists or there's an error, start fresh
             model.fit(X_train, y_train, verbose=True)
