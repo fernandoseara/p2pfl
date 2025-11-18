@@ -82,17 +82,16 @@ Refs:
 
 """
 
-from __future__ import annotations
+from typing import Any
 
 import numpy as np
 
 from p2pfl.learning.compression.base_compression_strategy import TensorCompressor
 
-# Try to import opendp - it's an optional dependency
+dp: Any
 try:
     import opendp.prelude as dp
 
-    # Allows you to use features added by the community
     dp.enable_features("contrib")
     HAS_OPENDP = True
 except ImportError:
@@ -122,9 +121,7 @@ class DifferentialPrivacyCompressor(TensorCompressor):
 
     """
 
-    def _get_noise_mechanism(
-        self, noise_type: str, clip_norm: float, epsilon: float, delta: float, vec_len: int
-    ) -> tuple[dp.Measurement, float]:
+    def _get_noise_mechanism(self, noise_type: str, clip_norm: float, epsilon: float, delta: float, vec_len: int) -> tuple[Any, float]:
         """Create an OpenDP noise mechanism."""
         if noise_type == "laplace":
             scale = clip_norm / epsilon
