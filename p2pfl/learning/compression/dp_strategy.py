@@ -82,17 +82,22 @@ Refs:
 
 """
 
-try:
-    import opendp.prelude as dp
-except ImportError as err:
-    raise ImportError("Please install with `pip install p2pfl[dp]`") from err
+from __future__ import annotations
 
 import numpy as np
 
 from p2pfl.learning.compression.base_compression_strategy import TensorCompressor
 
-# Allows you to use features added by the community
-dp.enable_features("contrib")
+# Try to import opendp - it's an optional dependency
+try:
+    import opendp.prelude as dp
+
+    # Allows you to use features added by the community
+    dp.enable_features("contrib")
+    HAS_OPENDP = True
+except ImportError:
+    HAS_OPENDP = False
+    dp = None
 
 
 class DifferentialPrivacyCompressor(TensorCompressor):
@@ -162,6 +167,13 @@ class DifferentialPrivacyCompressor(TensorCompressor):
             Tuple of (dp_params, dp_info) where dp_info contains privacy parameters
 
         """
+        # Check if opendp is available
+        if not HAS_OPENDP:
+            raise ImportError(
+                "opendp is required for differential privacy compression. "
+                "Please install with `pip install p2pfl[dp]` or `pip install opendp`"
+            )
+
         # Handle empty input
         if not params:
             raise ValueError("DifferentialPrivacyCompressor: list 'params' must not be empty")
