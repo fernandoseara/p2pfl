@@ -35,12 +35,28 @@ from p2pfl.learning.frameworks.xgboost.xgboost_model import XGBoostModel
 
 @compatible_with(ModelType.BOOSTING_TREE)
 class FedXgbBagging(Aggregator):
-    """Paper: https://arxiv.org/abs/1602.05629."""
+    """
+    Federated XGBoost Bagging Aggregator.
+
+    Implements bagging-based aggregation for XGBoost models in federated learning.
+    Trees from different clients are combined into a single ensemble.
+
+    Attributes:
+        SUPPORTS_PARTIAL_AGGREGATION (bool): Whether partial aggregation is supported.
+
+    """
 
     SUPPORTS_PARTIAL_AGGREGATION: bool = True
 
     def __init__(self, disable_partial_aggregation: bool = False) -> None:
-        """Initialize the aggregator."""
+        """
+        Initialize the FedXgbBagging aggregator.
+
+        Args:
+            disable_partial_aggregation (bool): Whether to disable partial aggregation
+                (default is False).
+
+        """
         super().__init__(disable_partial_aggregation=disable_partial_aggregation)
 
     def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
@@ -97,6 +113,16 @@ class FedXgbBagging(Aggregator):
 
 
 def _get_tree_nums(xgb_model: dict) -> tuple[int, int]:
+    """
+    Get the number of trees and parallel trees from an XGBoost model.
+
+    Args:
+        xgb_model (dict): The XGBoost model in JSON dictionary format.
+
+    Returns:
+        tuple[int, int]: A tuple containing (number of trees, number of parallel trees).
+
+    """
     # Get the number of trees
     tree_num = int(xgb_model["learner"]["gradient_booster"]["model"]["gbtree_model_param"]["num_trees"])
     # Get the number of parallel trees
@@ -108,7 +134,20 @@ def aggregate_boosters(
     bst_prev: dict | None,
     bst_curr: dict,
 ) -> dict:
-    """Conduct bagging aggregation for given trees."""
+    """
+    Conduct bagging aggregation for given XGBoost trees.
+
+    Combines trees from the current booster into the previous booster's ensemble.
+
+    Args:
+        bst_prev (dict | None): The previous aggregated booster in JSON format,
+            or None if this is the first booster.
+        bst_curr (dict): The current booster to aggregate in JSON format.
+
+    Returns:
+        dict: The aggregated booster containing trees from both inputs.
+
+    """
     if not bst_prev:
         return bst_curr
 

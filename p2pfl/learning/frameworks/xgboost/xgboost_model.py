@@ -33,16 +33,28 @@ class XGBoostModel(P2PFLModel):
     """
     P2PFL model abstraction for XGBoost.
 
-    Wraps an XGBoost Booster or XGBClassifier for federated updates.
+    Wraps an XGBoost Booster or XGBClassifier for federated updates,
+    providing serialization and deserialization of model parameters.
 
     Args:
-        model: The XGBoost model to encapsulate (Booster or XGBClassifier).
-        params: Serialized parameters (list of ndarrays or bytes).
-        num_samples: Number of samples used in training.
-        contributors: List of contributor IDs.
-        additional_info: Extra metadata.
-        compression: Optional compression settings.
-        id: Model identifier.
+        model (xgb.XGBModel): The XGBoost model to encapsulate.
+        params (list[np.ndarray] | bytes | None): Serialized parameters
+            (default is None).
+        num_samples (int | None): Number of samples used in training
+            (default is None).
+        contributors (list[str] | None): List of contributor IDs
+            (default is None).
+        additional_info (dict[str, Any] | None): Extra metadata
+            (default is None).
+        compression (dict[str, dict[str, Any]] | None): Optional compression settings
+            (default is None).
+        id (int | None): Model identifier (default is None).
+
+    Attributes:
+        id (int): The model identifier.
+
+    Raises:
+        ModelNotMatchingError: If the provided model is not an XGBoost sklearn model.
 
     """
 
@@ -56,7 +68,27 @@ class XGBoostModel(P2PFLModel):
         compression: dict[str, dict[str, Any]] | None = None,
         id: int | None = None,
     ) -> None:
-        """Initialize the XGBoost model wrapper."""
+        """
+        Initialize the XGBoost model wrapper.
+
+        Args:
+            model (xgb.XGBModel): The XGBoost model to encapsulate.
+            params (list[np.ndarray] | bytes | None): Serialized parameters
+                (default is None).
+            num_samples (int | None): Number of samples used in training
+                (default is None).
+            contributors (list[str] | None): List of contributor IDs
+                (default is None).
+            additional_info (dict[str, Any] | None): Extra metadata
+                (default is None).
+            compression (dict[str, dict[str, Any]] | None): Optional compression settings
+                (default is None).
+            id (int | None): Model identifier (default is None).
+
+        Raises:
+            ModelNotMatchingError: If the provided model is not an XGBoost sklearn model.
+
+        """
         if not isinstance(model, xgb.XGBModel):
             raise ModelNotMatchingError("Provided model is not an XGBoost sklearn model")
         super().__init__(model, params, num_samples, contributors, additional_info, compression)
@@ -67,7 +99,8 @@ class XGBoostModel(P2PFLModel):
         Extract model parameters as numpy arrays.
 
         Returns:
-            List containing a single numpy array with serialized model bytes.
+            list[np.ndarray]: List containing a single numpy array with serialized
+                model bytes, or empty list if model is not fitted.
 
         """
         try:
@@ -85,10 +118,12 @@ class XGBoostModel(P2PFLModel):
         Set model parameters from numpy arrays or serialized bytes.
 
         Args:
-            params: List of ndarrays or serialized bytes.
+            params (list[np.ndarray] | bytes): List of ndarrays or serialized bytes
+                containing the model parameters.
 
         Raises:
-            ModelNotMatchingError: if loading fails.
+            ModelNotMatchingError: If loading fails.
+            TypeError: If params is not a list after decoding.
 
         """
         # If bytes, decode compression first
@@ -109,7 +144,13 @@ class XGBoostModel(P2PFLModel):
         self.model.load_model(model_bytes)
 
     def get_framework(self) -> str:
-        """Return the framework name identifier."""
+        """
+        Return the framework name identifier.
+
+        Returns:
+            str: The framework name ('xgboost').
+
+        """
         return Framework.XGBOOST.value
 
     def get_model_type(self) -> str:
@@ -117,7 +158,7 @@ class XGBoostModel(P2PFLModel):
         Retrieve the model type for aggregator compatibility.
 
         Returns:
-            The model type.
+            str: The model type identifier for boosting trees.
 
         """
         return ModelType.BOOSTING_TREE.value

@@ -36,19 +36,46 @@ class XGBoostLearner(Learner):
     """
     Learner implementation using XGBoost boosting framework.
 
+    Provides training and evaluation functionality for XGBoost models
+    in the P2PFL federated learning system.
+
     Args:
-        model: Wrapped XGBoostModel instance.
-        data: P2PFLDataset for train/eval split.
-        aggregator: Aggregator to use for model updates.
+        model (P2PFLModel | None): Wrapped XGBoostModel instance.
+        data (P2PFLDataset | None): P2PFLDataset for train/eval split.
+        aggregator (Aggregator | None): Aggregator to use for model updates.
 
     """
 
     def __init__(self, model: P2PFLModel | None = None, data: P2PFLDataset | None = None, aggregator: Aggregator | None = None) -> None:
-        """Initialize the XGBoost learner."""
+        """
+        Initialize the XGBoost learner.
+
+        Args:
+            model (P2PFLModel | None): The model to train (default is None).
+            data (P2PFLDataset | None): The dataset for training and evaluation
+                (default is None).
+            aggregator (Aggregator | None): The aggregator for model updates
+                (default is None).
+
+        """
         super().__init__(model=model, data=data, aggregator=aggregator)
-        # self.__model = model
 
     def __get_xgb_model_data(self, train: bool = True) -> tuple[xgb.XGBModel, np.ndarray, np.ndarray]:
+        """
+        Get the XGBoost model and data arrays.
+
+        Args:
+            train (bool): Whether to get training data or test data
+                (default is True).
+
+        Returns:
+            tuple[xgb.XGBModel, np.ndarray, np.ndarray]: A tuple containing
+                (XGBoost model, features array, labels array).
+
+        Raises:
+            ValueError: If the model is not an XGBoost model.
+
+        """
         # Get Model
         xgb_model = self.get_model().get_model()
         if not isinstance(xgb_model, xgb.XGBModel):
@@ -59,7 +86,16 @@ class XGBoostLearner(Learner):
 
     @allow_no_addr_check
     def fit(self) -> P2PFLModel:
-        """Fit the XGBoost sklearn model on training data for the configured number of epochs."""
+        """
+        Fit the XGBoost sklearn model on training data.
+
+        Trains the model for the configured number of epochs, continuing
+        from a previous booster if available.
+
+        Returns:
+            P2PFLModel: The trained model with updated parameters.
+
+        """
         model, X_train, y_train = self.__get_xgb_model_data(train=True)
         # prepare callbacks
         xgb_callbacks = []
@@ -88,7 +124,13 @@ class XGBoostLearner(Learner):
 
     @allow_no_addr_check
     def interrupt_fit(self) -> None:
-        """Interrupting an in-progress XGBoost training is not supported via sklearn API."""
+        """
+        Interrupt an in-progress XGBoost training.
+
+        Raises:
+            NotImplementedError: XGBoost sklearn API does not support interruption.
+
+        """
         # Placeholder: XGBoost sklearn does not support interrupt; could set a flag for custom callback
         raise NotImplementedError("Interrupting XGBoost sklearn fit is not supported")
 
@@ -98,7 +140,18 @@ class XGBoostLearner(Learner):
 
     @allow_no_addr_check
     def evaluate(self) -> dict[str, float]:
-        """Evaluate the model on test data, returning metrics."""
+        """
+        Evaluate the model on test data.
+
+        Computes accuracy and F1 score for classification tasks,
+        or MSE for regression tasks.
+
+        Returns:
+            dict[str, float]: Dictionary containing evaluation metrics.
+                For classification: 'accuracy' and 'f1'.
+                For regression: 'mse'.
+
+        """
         model, X_test, y_test = self.__get_xgb_model_data(train=False)
         results: dict[str, float] = {}
         try:
@@ -120,5 +173,11 @@ class XGBoostLearner(Learner):
 
     @allow_no_addr_check
     def get_framework(self) -> str:
-        """Return framework identifier."""
+        """
+        Return the framework identifier.
+
+        Returns:
+            str: The framework name ('xgboost').
+
+        """
         return Framework.XGBOOST.value

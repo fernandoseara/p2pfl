@@ -32,16 +32,31 @@ class XGBoostLogger(xgb.callback.TrainingCallback):
     Logs evaluation metrics per iteration to the P2PFL centralized logger.
 
     Args:
-        addr: Address or node identifier for logging.
+        addr (str): Address or node identifier for logging.
+
+    Attributes:
+        _addr (str): The node address used for logging identification.
 
     """
 
     def __init__(self, addr: str) -> None:
-        """Initialize the XGBoost logger."""
+        """
+        Initialize the XGBoost logger.
+
+        Args:
+            addr (str): Address or node identifier for logging.
+
+        """
         self._addr = addr
 
     def before_training(self, model: xgb.core.Booster) -> None:
-        """Execute before training starts."""
+        """
+        Execute before training starts.
+
+        Args:
+            model (xgb.core.Booster): The XGBoost booster model.
+
+        """
         P2PLogger.info(self._addr, "Starting XGBoost training...")
 
     def after_iteration(
@@ -54,12 +69,13 @@ class XGBoostLogger(xgb.callback.TrainingCallback):
         Execute after each training iteration.
 
         Args:
-            model: The booster.
-            epoch: Current boosting round.
-            evals_log: Evaluation results as nested dict: data_name -> metric_name -> list of values.
+            model (xgb.core.Booster): The XGBoost booster model.
+            epoch (int): Current boosting round.
+            evals_log (dict[str, dict[str, list]]): Evaluation results as nested dict
+                with format: data_name -> metric_name -> list of values.
 
         Returns:
-            False to indicate training should continue.
+            bool: False to indicate training should continue.
 
         """
         for data_name, metrics in evals_log.items():
@@ -71,17 +87,35 @@ class XGBoostLogger(xgb.callback.TrainingCallback):
         return False
 
     def after_training(self, model: xgb.core.Booster) -> None:
-        """Execute after training is finished."""
+        """
+        Execute after training is finished.
+
+        Args:
+            model (xgb.core.Booster): The XGBoost booster model.
+
+        """
         P2PLogger.info(self._addr, "XGBoost training completed.")
 
     def log_hyperparams(self, params: dict[str, Any]) -> None:
-        """Log hyperparameters before training."""
+        """
+        Log hyperparameters before training.
+
+        Args:
+            params (dict[str, Any]): Dictionary of hyperparameters to log.
+
+        """
         pass
 
     def save(self) -> None:
-        """No-op for XGBoostLogger."""
+        """Save logger state (no-op for XGBoostLogger)."""
         pass
 
     def finalize(self, status: str) -> None:
-        """Finalize logging with status (e.g., 'success' or 'failure')."""
+        """
+        Finalize logging with status.
+
+        Args:
+            status (str): The final status of training (e.g., 'success' or 'failure').
+
+        """
         P2PLogger.info(self._addr, f"Training finalized with status: {status}")

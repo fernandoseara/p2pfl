@@ -28,16 +28,48 @@ from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 @compatible_with(ModelType.BOOSTING_TREE)
 class FedXgbCyclic(Aggregator):
-    """Paper: https://arxiv.org/abs/1602.05629."""
+    """
+    Federated XGBoost Cyclic Aggregator.
+
+    Implements cyclic training for XGBoost models in federated learning.
+    In cyclic training, only one client participates per round and the model
+    is passed sequentially between clients.
+
+    Attributes:
+        SUPPORTS_PARTIAL_AGGREGATION (bool): Whether partial aggregation is supported.
+
+    """
 
     SUPPORTS_PARTIAL_AGGREGATION: bool = True
 
     def __init__(self, disable_partial_aggregation: bool = False) -> None:
-        """Initialize the aggregator."""
+        """
+        Initialize the FedXgbCyclic aggregator.
+
+        Args:
+            disable_partial_aggregation (bool): Whether to disable partial aggregation
+                (default is False).
+
+        """
         super().__init__(disable_partial_aggregation=disable_partial_aggregation)
 
     def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
-        """Cyclic aggregation: solo un cliente participa por ronda, el modelo se pasa secuencialmente."""
+        """
+        Perform cyclic aggregation on XGBoost models.
+
+        In cyclic training, only the model from the current client (last in the list)
+        is selected and passed to the next round.
+
+        Args:
+            models (list[P2PFLModel]): List of models to aggregate.
+
+        Returns:
+            P2PFLModel: The selected model (last model in the list) as the aggregated result.
+
+        Raises:
+            NoModelsToAggregateError: If there are no models to aggregate.
+
+        """
         if len(models) == 0:
             raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there is no models")
 
