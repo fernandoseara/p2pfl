@@ -22,10 +22,12 @@ from typing import Any
 
 import numpy as np
 
-from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError
+from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError, compatible_with
+from p2pfl.learning.frameworks import ModelType
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
+@compatible_with(ModelType.NEURAL_NETWORK)
 class Scaffold(Aggregator):
     """
     SCAFFOLD Aggregator.

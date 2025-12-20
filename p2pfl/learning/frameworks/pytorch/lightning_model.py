@@ -24,7 +24,7 @@ import lightning as L
 import numpy as np
 import torch
 
-from p2pfl.learning.frameworks import Framework
+from p2pfl.learning.frameworks import Framework, ModelType
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
@@ -107,3 +107,13 @@ class LightningModel(P2PFLModel):
 
         """
         return Framework.PYTORCH.value
+
+    def get_model_type(self) -> str:
+        """
+        Retrieve the model type for aggregator compatibility.
+
+        Returns:
+            The model type.
+
+        """
+        return ModelType.NEURAL_NETWORK.value

@@ -18,13 +18,15 @@
 
 """Federated Averaging (FedAvg) Aggregator."""
 
-from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError
+from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError, compatible_with
+from p2pfl.learning.frameworks import ModelType
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
-from p2pfl.learning.frameworks.xgboost.xgboost_model import XGBoostModel
 
-# TODO: añadir mención a flower
+# Inspired by the implementation of flower. Thank you so much for taking FL to another level :)
+#     Original implementation: https://flower.ai/blog/2024-02-14-federated-xgboost-with-flower/
 
 
+@compatible_with(ModelType.BOOSTING_TREE)
 class FedXgbCyclic(Aggregator):
     """Paper: https://arxiv.org/abs/1602.05629."""
 
@@ -38,11 +40,6 @@ class FedXgbCyclic(Aggregator):
         """Cyclic aggregation: solo un cliente participa por ronda, el modelo se pasa secuencialmente."""
         if len(models) == 0:
             raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there is no models")
-
-        # Runtime type check: ensure all models are XGBoostModel instances
-        for model in models:
-            if not isinstance(model, XGBoostModel):
-                raise TypeError(f"FedXgbCyclic requires XGBoostModel instances, got {type(model)}")
 
         # En entrenamiento cíclico, solo se toma el modelo del cliente actual (el último de la lista)
         selected_model = models[-1]

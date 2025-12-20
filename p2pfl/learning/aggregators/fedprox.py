@@ -18,10 +18,13 @@
 
 """FedProx Aggregator - Federated Proximal."""
 
+from p2pfl.learning.aggregators.aggregator import compatible_with
 from p2pfl.learning.aggregators.fedavg import FedAvg
+from p2pfl.learning.frameworks import ModelType
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
+@compatible_with(ModelType.NEURAL_NETWORK)
 class FedProx(FedAvg):
     """
     FedProx - Federated Proximal [Li et al., 2018].

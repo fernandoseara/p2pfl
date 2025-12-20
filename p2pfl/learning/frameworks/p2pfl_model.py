@@ -192,3 +192,13 @@ class P2PFLModel:
 
         """
         raise NotImplementedError
+
+    def get_model_type(self) -> str:
+        """
+        Retrieve the model type for aggregator compatibility.
+
+        Returns:
+            The model type (e.g., 'neural_network', 'boosting_tree').
+
+        """
+        raise NotImplementedError

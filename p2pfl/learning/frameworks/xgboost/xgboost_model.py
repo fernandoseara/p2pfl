@@ -24,7 +24,7 @@ import numpy as np
 import xgboost as xgb
 from sklearn.exceptions import NotFittedError
 
-from p2pfl.learning.frameworks import Framework
+from p2pfl.learning.frameworks import Framework, ModelType
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
@@ -111,3 +111,13 @@ class XGBoostModel(P2PFLModel):
     def get_framework(self) -> str:
         """Return the framework name identifier."""
         return Framework.XGBOOST.value
+
+    def get_model_type(self) -> str:
+        """
+        Retrieve the model type for aggregator compatibility.
+
+        Returns:
+            The model type.
+
+        """
+        return ModelType.BOOSTING_TREE.value

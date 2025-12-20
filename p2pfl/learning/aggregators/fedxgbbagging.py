@@ -22,20 +22,18 @@ import json
 
 import numpy as np
 
-from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError
+from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError, compatible_with
+from p2pfl.learning.frameworks import ModelType
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.xgboost.xgboost_model import XGBoostModel
 
 # TODO: add datasets to Huggingface
 
 # Inspired by the implementation of flower. Thank you so much for taking FL to another level :)
-#     Original implementation:
-#
-# Hay que añadir robustez a la hora de usar un agregador, se propone meter un campo en el modelo type y que se compruebe aqui, hacemos un enum y un get para pillarlo de cada modelo y metemos un decorador en cada agregator.
-#
-# meter datasets en hf
+#     Original implementation: https://flower.ai/blog/2023-11-29-federated-xgboost-with-bagging-aggregation/
 
 
+@compatible_with(ModelType.BOOSTING_TREE)
 class FedXgbBagging(Aggregator):
     """Paper: https://arxiv.org/abs/1602.05629."""
 
@@ -62,11 +60,6 @@ class FedXgbBagging(Aggregator):
         # Check if there are models to aggregate
         if len(models) == 0:
             raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there is no models")
-
-        # Runtime type check: ensure all models are XGBoostModel instances
-        for model in models:
-            if not isinstance(model, XGBoostModel):
-                raise TypeError(f"FedXgbBagging requires XGBoostModel instances, got {type(model)}")
 
         # Total Samples
         total_samples = sum([m.get_num_samples() for m in models])

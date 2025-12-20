@@ -25,7 +25,7 @@ from typing import Any
 import numpy as np
 from flax import linen as nn
 
-from p2pfl.learning.frameworks import Framework
+from p2pfl.learning.frameworks import Framework, ModelType
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
@@ -162,3 +162,13 @@ class FlaxModel(P2PFLModel):
 
         """
         return Framework.FLAX.value
+
+    def get_model_type(self) -> str:
+        """
+        Retrieve the model type for aggregator compatibility.
+
+        Returns:
+            The model type.
+
+        """
+        return ModelType.NEURAL_NETWORK.value

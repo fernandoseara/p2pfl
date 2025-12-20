@@ -19,7 +19,10 @@
 """Abstract aggregator."""
 
 import threading
+from collections.abc import Callable
+from typing import TypeVar
 
+from p2pfl.learning.frameworks import ModelType
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
@@ -32,6 +35,56 @@ class NoModelsToAggregateError(Exception):
     pass
 
 
+class IncompatibleModelError(Exception):
+    """Exception raised when a model type is incompatible with the aggregator."""
+
+    pass
+
+
+# Type variable for the decorator
+T = TypeVar("T", bound=type)
+
+
+def compatible_with(*model_types: ModelType) -> Callable[[T], T]:
+    """
+    Mark which model types an aggregator supports.
+
+    This decorator automatically wraps the `aggregate` method to validate
+    model compatibility before aggregation.
+
+    Args:
+        *model_types: The model types that the aggregator is compatible with.
+
+    Returns:
+        A decorator that sets the COMPATIBLE_MODEL_TYPES attribute on the class
+        and wraps the aggregate method with validation.
+
+    Example:
+        @compatible_with(ModelType.NEURAL_NETWORK)
+        class FedAvg(Aggregator):
+            ...
+
+    """
+
+    def decorator(cls: T) -> T:
+        cls.COMPATIBLE_MODEL_TYPES = list(model_types)  # type: ignore[attr-defined]
+
+        # Store the original aggregate method
+        original_aggregate = cls.aggregate  # type: ignore[attr-defined]
+
+        def aggregate_with_validation(self, models: list[P2PFLModel]) -> P2PFLModel:
+            """Validate model compatibility and perform aggregation."""
+            self._validate_model_compatibility(models)
+            return original_aggregate(self, models)
+
+        # Replace the aggregate method with the wrapped version
+        cls.aggregate = aggregate_with_validation  # type: ignore[attr-defined]
+
+        return cls
+
+    return decorator
+
+
 class Aggregator(NodeComponent):
     """
     Class to manage the aggregation of models.
@@ -42,6 +95,7 @@ class Aggregator(NodeComponent):
     """
 
     SUPPORTS_PARTIAL_AGGREGATION: bool = False  # Default, subclasses should override
+    COMPATIBLE_MODEL_TYPES: list = []  # Default, subclasses should use @compatible_with decorator
 
     def __init__(self, disable_partial_aggregation: bool = False) -> None:
         """Initialize the aggregator."""
@@ -65,6 +119,30 @@ class Aggregator(NodeComponent):
 
         # Unhandled models
         self.__unhandled_models: list[P2PFLModel] = []
+
+    def _validate_model_compatibility(self, models: list[P2PFLModel]) -> None:
+        """
+        Validate that all models are compatible with this aggregator.
+
+        Args:
+            models: List of models to validate.
+
+        Raises:
+            IncompatibleModelError: If any model type is incompatible with this aggregator.
+
+        """
+        compatible_types = getattr(self.__class__, "COMPATIBLE_MODEL_TYPES", [])
+        if not compatible_types:
+            return  # No restriction if not specified
+
+        compatible_values = [mt.value for mt in compatible_types]
+        for model in models:
+            model_type = model.get_model_type()
+            if model_type not in compatible_values:
+                raise IncompatibleModelError(
+                    f"Aggregator {self.__class__.__name__} is not compatible with "
+                    f"model type '{model_type}'. Supported types: {compatible_values}"
+                )
 
     def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """
