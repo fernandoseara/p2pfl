@@ -82,17 +82,21 @@ Refs:
 
 """
 
-try:
-    import opendp.prelude as dp
-except ImportError as err:
-    raise ImportError("Please install with `pip install p2pfl[dp]`") from err
+from typing import Any
 
 import numpy as np
 
 from p2pfl.learning.compression.base_compression_strategy import TensorCompressor
 
-# Allows you to use features added by the community
-dp.enable_features("contrib")
+dp: Any
+try:
+    import opendp.prelude as dp
+
+    dp.enable_features("contrib")
+    HAS_OPENDP = True
+except ImportError:
+    HAS_OPENDP = False
+    dp = None
 
 
 class DifferentialPrivacyCompressor(TensorCompressor):
@@ -117,9 +121,7 @@ class DifferentialPrivacyCompressor(TensorCompressor):
 
     """
 
-    def _get_noise_mechanism(
-        self, noise_type: str, clip_norm: float, epsilon: float, delta: float, vec_len: int
-    ) -> tuple[dp.Measurement, float]:
+    def _get_noise_mechanism(self, noise_type: str, clip_norm: float, epsilon: float, delta: float, vec_len: int) -> tuple[Any, float]:
         """Create an OpenDP noise mechanism."""
         if noise_type == "laplace":
             scale = clip_norm / epsilon
@@ -162,6 +164,13 @@ class DifferentialPrivacyCompressor(TensorCompressor):
             Tuple of (dp_params, dp_info) where dp_info contains privacy parameters
 
         """
+        # Check if opendp is available
+        if not HAS_OPENDP:
+            raise ImportError(
+                "opendp is required for differential privacy compression. "
+                "Please install with `pip install p2pfl[dp]` or `pip install opendp`"
+            )
+
         # Handle empty input
         if not params:
             raise ValueError("DifferentialPrivacyCompressor: list 'params' must not be empty")
