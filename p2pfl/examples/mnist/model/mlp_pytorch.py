@@ -80,8 +80,8 @@ class MLP(L.LightningModule):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass of the MLP."""
-        # Flatten the input
-        batch_size, _, _ = x.size()
+        # Flatten the input (handles both (B, H, W) and (B, C, H, W))
+        batch_size = x.size(0)
         x = x.view(batch_size, -1)
 
         for layer in self.layers:

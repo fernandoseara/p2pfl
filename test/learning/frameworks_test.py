@@ -258,8 +258,9 @@ def test_pytorch_export_strategy():
     assert "label" in sample
 
     # Check if the data is loaded correctly
+    # datasets 4+ adds channel dimension: (B, C, H, W) = (1, 1, 28, 28)
     assert isinstance(sample["image"], torch.Tensor)
-    assert sample["image"].size() == (1, 28, 28)
+    assert sample["image"].size() == (1, 1, 28, 28)
 
 
 def test_tensorflow_export_strategy():
