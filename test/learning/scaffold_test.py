@@ -26,6 +26,7 @@ import pytest
 
 from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError
 from p2pfl.learning.aggregators.scaffold import Scaffold
+from p2pfl.learning.frameworks import ModelType
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
@@ -75,6 +76,10 @@ class MockP2PFLModel(P2PFLModel):
     def get_contributors(self) -> list[str]:
         """Return the contributors."""
         return self._contributors
+
+    def get_model_type(self) -> str:
+        """Return the model type."""
+        return ModelType.NEURAL_NETWORK.value
 
 
 def test_scaffold_correct_aggregation():
