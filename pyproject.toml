@@ -114,7 +114,9 @@ select = [
     # isort
     "I",
     # comprehensions
-    "C4"
+    "C4",
+    # numpy 2.0 compatibility
+    "NPY201"
 ]
 fixable = ["E", "F", "W", "B", "SIM", "I", "C4"]
 ignore = ["B027", "D203", "D212", "D406", "D407"]
