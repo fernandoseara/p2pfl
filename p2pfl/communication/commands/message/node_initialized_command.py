@@ -54,6 +54,6 @@ class NodeInitializedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        await self._node.get_learning_workflow().node_started(
+        await self._node.get_event_handler().node_started(
             source
         )

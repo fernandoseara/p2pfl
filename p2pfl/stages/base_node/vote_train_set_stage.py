@@ -57,7 +57,7 @@ class VoteTrainSetStage(Stage):
         # Add self vote (send it to itself)
         self_vote = list(zip(nodes_voted, weights))
         logger.debug(node.address, f"🪞🗳️ Self Vote: {self_vote}")
-        await node.learning_workflow.vote(node.address, state.round, self_vote)
+        await node.node_workflow.vote(node.address, state.round, self_vote)
 
         # Convert self vote to a plain list
         votes_list = []

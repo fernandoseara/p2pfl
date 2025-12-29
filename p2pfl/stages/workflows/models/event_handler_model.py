@@ -19,7 +19,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING
 
 from p2pfl.stages.workflows.models.workflow_model import WorkflowModel
@@ -27,29 +26,9 @@ from p2pfl.stages.workflows.models.workflow_model import WorkflowModel
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
-class LearningWorkflowModel(WorkflowModel):
-    """Base for the training workflow."""
+class EventHandlerWorkflowModel(WorkflowModel):
+    """Base for the event handler workflow."""
 
     def __init__(self, *args, **kwargs) -> None:
-        """Initialize the learning workflow model."""
-        self._background_tasks: set[asyncio.Task] = set()
+        """Initialize the event handler model."""
         super().__init__(*args, **kwargs)
-
-    async def setup(self,
-        experiment_name: str,
-        rounds: int,
-        epochs: int,
-        trainset_size: int,
-    ) -> bool:
-        """Handle the setup event."""
-        raise RuntimeError("Should be overridden!")
-
-    async def stop_learning(self) -> bool:
-        """Handle the stop learning event."""
-        raise RuntimeError("Should be overridden!")
-
-    def _fire_next_stage(self, trigger_name: str, *args, **kwargs):
-        """Schedule a state machine trigger as a background task."""
-        task = asyncio.create_task(getattr(self, trigger_name)(*args, **kwargs))
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)

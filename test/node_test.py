@@ -242,7 +242,7 @@ def test_framework_node(build_model_fn):
 
     # Check if execution is correct
     for node in [n1, n2]:
-        assert "RoundFinishedStage" in node.learning_workflow.history
+        assert "RoundFinishedStage" in node.node_workflow.history
 
     check_equal_models([n1, n2])
 

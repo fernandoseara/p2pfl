@@ -52,4 +52,4 @@ class ModelsAggregatedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        await self._node.get_learning_workflow().aggregated_models_received(source, round, list(args))
+        await self._node.get_event_handler().aggregated_models_received(source, round, list(args))

@@ -54,4 +54,4 @@ class StopLearningCommand(Command):
         """
         logger.info(self._node.address, "Stopping learning received")
 
-        await self._node.__stop_learning()
+        await self._node.get_node_workflow().stop_node()

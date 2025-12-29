@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
-from p2pfl.stages.workflows.event_handler_workflow import BasicEventHandlerWorkflow
+from p2pfl.stages.workflows.event_handler_workflow_old import BasicEventHandlerWorkflow
 from p2pfl.stages.workflows.models import BasicLearningWorkflowModel
 from p2pfl.stages.workflows.training_workflow import BasicTrainingWorkflow
 from p2pfl.stages.workflows.workflows import LearningWorkflow

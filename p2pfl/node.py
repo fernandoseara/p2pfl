@@ -17,12 +17,13 @@
 
 """P2PFL Node."""
 
-import asyncio
+from __future__ import annotations
+
 import os
 import random
 import time
 import traceback
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from p2pfl.communication.commands.message.metrics_command import MetricsCommand
 from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
@@ -40,11 +41,12 @@ from p2pfl.learning.frameworks.simulation import try_init_learner_with_ray
 from p2pfl.management.logger import logger
 from p2pfl.node_state import LocalNodeState
 from p2pfl.settings import Settings
-from p2pfl.stages.workflow_factory import WorkflowFactory, WorkflowFactoryProducer
 from p2pfl.stages.workflow_type import WorkflowType
-from p2pfl.stages.workflows.models.basic_learning_workflow_model import LearningWorkflowModel
-from p2pfl.stages.workflows.workflows import LearningWorkflow
-from p2pfl.utils.asyncio import dualmethod
+from p2pfl.stages.workflows.node_workflow import NodeWorkflow
+from p2pfl.utils.asyncio import sync_or_async
+
+if TYPE_CHECKING:
+    from p2pfl.stages.workflows.models.event_handler_model import EventHandlerWorkflowModel
 
 # Disbalbe grpc log (pytorch causes warnings)
 if logger.get_level_name(logger.get_level()) != "DEBUG":
@@ -121,9 +123,7 @@ class Node:
         self.local_state = LocalNodeState(address)
 
         # Workflow
-        self.workflow_factory: type[WorkflowFactory] | None = None
-        self.learning_workflow: LearningWorkflowModel = LearningWorkflowModel(self)
-        self.learning_machine: LearningWorkflow = LearningWorkflow(self.learning_workflow)
+        self.node_workflow: NodeWorkflow = NodeWorkflow(self)
 
         # Commands
         self.communication_protocol.add_command([
@@ -153,12 +153,7 @@ class Node:
             True if the node was connected, False otherwise.
 
         """
-        # Check running
-        if not self.is_running():
-            raise NodeRunningException("Node is not running.")
-
-        # Connect
-        return self.communication_protocol.connect(addr)
+        return self.node_workflow.connect_node(addr)
 
     def get_neighbors(self, only_direct: bool = False) -> Dict[str, Any]:
         """
@@ -173,7 +168,7 @@ class Node:
         """
         return self.communication_protocol.get_neighbors(only_direct)
 
-    def disconnect(self, addr: str) -> None:
+    def disconnect(self, addr: str, close_code: int) -> None:
         """
         Disconnects a node from another.
 
@@ -181,31 +176,11 @@ class Node:
             addr: The address of the node to disconnect from.
 
         """
-        # Check running
-        if not self.is_running():
-            raise NodeRunningException("Node is not running.")
-
-        # Disconnect
-        logger.info(self.address, f"Removing {addr}...")
-        self.communication_protocol.disconnect(addr, disconnect_msg=True)
+        self.node_workflow.disconnect_node(addr)
 
     #######################################
     #   Node Management (servicer loop)   #
     #######################################
-
-    """
-    -> reemplazarlo por un decorador (y esto creo que se puede reemplazar por el estado del comm proto -> incluso importarlo de ahí)
-    """
-    def is_running(self) -> bool:
-        """
-        Check if the node is running.
-
-        Returns:
-            True if the node is running, False otherwise.
-
-        """
-        return self.running
-
     async def start(self, wait: bool = False) -> None:
         """
         Start the node: server and neighbors(gossip and heartbeat).
@@ -214,43 +189,20 @@ class Node:
             wait: If True, the function will wait until the server is terminated.
 
         Raises:
-            NodeRunningException: If the node is already running.
+            MachineError: If the node is already running.
 
         """
-        # Check not running
-        if self.is_running():
-            raise NodeRunningException("Node already running.")
-
-        # P2PFL Web Services
-        logger.register_node(self.address)
-        # Communication Protocol
-        await self.communication_protocol.start()
-        if wait:
-            self.communication_protocol.wait_for_termination()
-            logger.info(self.address, "gRPC terminated.")
-
-        self.running = True
+        await self.node_workflow.start_node(wait)
 
     async def stop(self) -> None:
         """
-        Stop the node: server and neighbors(gossip and heartbeat).
+        Stop the node: server and neighbors (gossip and heartbeat).
 
         Raises:
-            NodeRunningException: If the node is not running.
+            MachineError: If the node is not running.
 
         """
-        logger.info(self.address, "🛑 Stopping node...")
-        try:
-            # Stop server
-            await self.communication_protocol.stop()
-            # State
-            self.local_state.clear()
-            # Unregister node
-            logger.unregister_node(self.address)
-        except Exception:
-            pass
-
-        self.running = False
+        await self.node_workflow.stop_node()
 
     ##########################
     #    Learning Setters    #
@@ -356,25 +308,33 @@ class Node:
         """
         return self.learner
 
-    def get_learning_workflow(self) -> LearningWorkflowModel:
+    def get_node_workflow(self) -> NodeWorkflow:
         """
-        Get the learning workflow.
+        Get the node workflow.
 
         Returns:
-            The current learning workflow of the node.
+            The current node workflow of the node.
 
         """
-        return self.learning_workflow
+        return self.node_workflow
 
-    def get_workflow_type(self) -> WorkflowType:
+    def get_event_handler(self) -> EventHandlerWorkflowModel:
         """
-        Get the workflow type.
+        Get the event handler.
 
         Returns:
-            The current workflow type of the node.
+            The current event handler of the node.
+
+        Raises:
+            NodeRunningException: If the node workflow is not initialized.
 
         """
-        return self.workflow_type
+        event_handler = self.node_workflow.get_event_handler()
+        if event_handler is not None:
+            return event_handler
+        else:
+            raise NodeRunningException("Node workflow is not initialized")
+
 
     #######################
     #    State Getters    #
@@ -389,6 +349,7 @@ class Node:
 
         """
         return self.local_state
+
 
     def get_generator(self) -> random.Random:
         """
@@ -421,43 +382,8 @@ class Node:
     ###############################################
     #         Network Learning Management         #
     ###############################################
-    async def run_workflow_loop(self):
-        """Continuously checks and steps through the workflow."""
-        try:
-            while not self.learning_workflow.finished:
-                stepped = await self.learning_workflow.next_stage()
-                if not stepped:
-                    await asyncio.sleep(1)  # Prevent tight loop on no transition
-        except asyncio.CancelledError:
-            logger.info(self.address, "⛔ Workflow loop cancelled.")
-        except Exception as e:
-            logger.error(self.address, f"🔥 Unexpected error in workflow loop: {type(e).__name__}: {e}")
 
-    def set_learning_workflow(self,
-        workflow: WorkflowType
-        ) -> None:
-        """
-        Set the learning workflow.
-
-        Args:
-            workflow: The type of workflow to be used.
-
-        """
-        if not self.learning_workflow.waiting_for_learning_start:
-            raise NodeRunningException("Cannot set learning workflow while learning is in progress.")
-
-        # Workflow factory
-        self.workflow_factory = WorkflowFactoryProducer.get_factory(workflow)
-
-        # Create workflow
-        self.learning_workflow, self.learning_machine = self.workflow_factory.create_training_workflow(self)
-        self.communication_protocol.add_command(self.workflow_factory.create_commands(self))
-
-        # Set custom model
-        model = self.learner.get_P2PFLModel()
-        self.learner.set_P2PFLModel(self.workflow_factory.create_model(model))
-
-    @dualmethod
+    @sync_or_async
     async def set_start_learning(self,
         rounds: int = 1,
         epochs: int = 1,
@@ -478,28 +404,19 @@ class Node:
             ZeroRoundsException: If rounds is less than 1.
 
         """
-        # Check is running
-        if not self.is_running():
-            raise NodeRunningException("Node is not running.")
-
         if rounds < 1:
             raise ZeroRoundsException("Rounds must be greater than 0.")
-
-        self.set_learning_workflow(workflow)
 
         experiment_name = f"{experiment_name}-{time.time()}"
 
         try:
-            await self.learning_workflow.start_learning(
+            await self.node_workflow.start_learning(
+                workflow_type=workflow,
                 experiment_name=experiment_name,
                 rounds=rounds,
                 epochs=epochs,
                 trainset_size=trainset_size,
-                workflow_type=workflow.value,
             )
-
-            # Start automatic workflow loop
-            #self._workflow_task = asyncio.create_task(self.run_workflow_loop())
 
             return experiment_name
 
@@ -507,34 +424,13 @@ class Node:
             logger.error(self.address, f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
             raise
 
-    @dualmethod
+    @sync_or_async
     async def set_stop_learning(self) -> None:
         """Stop the learning process in the entire network."""
         if self.local_state.round is not None:
             # send stop msg
             await self.communication_protocol.broadcast_gossip(self.communication_protocol.build_msg(StopLearningCommand.get_name()))
             # stop learning
-            await self.__stop_learning()
+            #await self.__stop_learning()
         else:
             logger.info(self.address, "🛑 No learning in progress to stop.")
-
-    ##################################
-    #         Local Learning         #
-    ##################################
-
-    async def __stop_learning(self) -> None:
-        # TODO: Use the workflow to clean up the learning process
-        logger.info(self.address, "🛑 Stopping learning")
-
-        # Communication Protocol
-        self.communication_protocol.remove_command(self.workflow_factory.create_commands(self))
-
-        # Workflow
-        self.learning_machine.remove_model(self.learning_workflow)
-        self.learning_workflow = LearningWorkflowModel(self)
-
-        # Learner
-        await self.learner.interrupt_fit()
-        # State
-        self.local_state.clear()
-        logger.experiment_finished(self.address)

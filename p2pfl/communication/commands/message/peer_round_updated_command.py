@@ -52,6 +52,6 @@ class PeerRoundUpdatedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        await self._node.get_learning_workflow().peer_round_updated(
+        await self._node.get_event_handler().peer_round_updated(
             source, round
         )

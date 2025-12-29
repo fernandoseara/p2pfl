@@ -48,8 +48,8 @@ def run_async(coro):
     else:
         return loop.run_until_complete(coro)
 
-def dualmethod(async_func):
-    """Decorator to support both sync and async calling of a method."""
+def sync_or_async(async_func):
+    """Support both sync and async calling of a method."""
 
     @wraps(async_func)
     def wrapper(self, *args, **kwargs):

@@ -68,19 +68,17 @@ class StartLearningCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        if learning_rounds is None or learning_epochs is None or trainset_size is None or experiment_name is None:
-            raise ValueError("Learning rounds and epochs are required")
+        if learning_rounds is None or learning_epochs is None or trainset_size is None or experiment_name is None or workflow is None:
+            raise ValueError("Learning rounds and epochs, trainset size, experiment name, and workflow are required")
 
         try:
-            self.__node.set_learning_workflow(workflow=WorkflowType(workflow))
-            await self.__node.get_learning_workflow().peer_learning_initiated(
-                experiment_name,
+            await self.__node.get_node_workflow().peer_learning_initiated(
+                workflow_type=WorkflowType(workflow),
+                experiment_name=experiment_name,
                 rounds=int(learning_rounds),
                 epochs=int(learning_epochs),
                 trainset_size=int(trainset_size),
-                workflow_type=workflow,
                 source=source
             )
         except NodeRunningException as e:
-            logger.debug(self.__node.local_state.address, e)
-
+            logger.debug(self.__node.local_state.address, str(e))

@@ -10,7 +10,7 @@ web_logger:
 network:
   package: "p2pfl.communication.protocols.protobuff.memory"
   protocol: "MemoryCommunicationProtocol"
-  nodes: 10
+  nodes: 2
   topology: "random_3"   # Network topology: "line", "ring", "star", "full", null for custom
   #additional_connections:
   #  - [0, 2]              # Connect node 0 to Node 2 (indices)
@@ -73,7 +73,7 @@ experiment:
 # General experiment settings
 settings:
   general:
-    log_level: "INFO" # Logging verbosity: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+    log_level: "DEBUG" # Logging verbosity: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
     grpc_timeout: 2
     disable_ray: False
 

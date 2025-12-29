@@ -130,3 +130,9 @@ def model_build_fn(*args, **kwargs) -> KerasP2PFLModel:
     """Export the model build function."""
     compression = kwargs.pop("compression", None)
     return KerasP2PFLModel(VGG16(*args, **kwargs), compression=compression)
+
+if __name__ == "__main__":
+    # Example usage
+    model = model_build_fn(input_shape=(224, 224, 3), out_channels=10, lr_rate=0.001)
+    model.get_model().compile(optimizer="adam", metrics=['accuracy'])
+    print(model.get_model().summary())

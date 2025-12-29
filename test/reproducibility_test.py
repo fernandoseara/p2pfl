@@ -87,7 +87,7 @@ def __fl_without_training(seed):
     nodes = sorted(nodes, key=lambda x: x.address)
     print([node.address for node in nodes])
 
-    return [node.learning_workflow.history for node in nodes]
+    return [node.node_workflow.history for node in nodes]
 
 
 # TODO: Merge this test with the global training one

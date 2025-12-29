@@ -42,12 +42,12 @@ class PeerNodeState:
 class AsyncNetworkState(NetworkState):
     """Network state to keep track of peer nodes and their states."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the network state."""
         # address -> PeerNodeState
         self._peer_states: dict[str, PeerNodeState] = {}
 
-    def add_peer(self, address: str):
+    def add_peer(self, address: str) -> None:
         """Add a new peer to the network state."""
         if address not in self._peer_states:
             self._peer_states[address] = PeerNodeState(
@@ -62,60 +62,60 @@ class AsyncNetworkState(NetworkState):
         else:
             raise ValueError(f"Address {address} already exists in network state.")
 
-    def add_peer_state(self, address: str, state: PeerNodeState):
+    def add_peer_state(self, address: str, state: PeerNodeState) -> None:
         """Add or update a peer's state."""
         self._peer_states[address] = state
 
-    def add_model(self, model: P2PFLModel, source: str):
+    def add_model(self, model: P2PFLModel, source: str) -> None:
         """Add a model to a peer's state."""
         if source in self._peer_states:
             self._peer_states[source].model_updated = model
         else:
             raise ValueError(f"Address {source} not found in network state.")
 
-    def add_loss(self, address: str, round: int, loss: float):
+    def add_loss(self, address: str, round: int, loss: float) -> None:
         """Add a loss to a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].losses.insert(round, loss)
         else:
             raise ValueError(f"Address {address} not found in network state.")
 
-    def update_push_time(self, address: str, time: int):
+    def update_push_time(self, address: str, time: int) -> None:
         """Add the last push time for a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].push_time = time
         else:
             raise ValueError(f"Address {address} not found in network state.")
 
-    def update_p2p_updating_idx(self, address: str, idx: int):
+    def update_p2p_updating_idx(self, address: str, idx: int) -> None:
         """Add the P2P updating index for a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].p2p_updating_idx = idx
         else:
             raise ValueError(f"Address {address} not found in network state.")
 
-    def update_round(self, address: str, round_number: int):
+    def update_round(self, address: str, round_number: int) -> None:
         """Update the round number for a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].round_number = round_number
         else:
             raise ValueError(f"Address {address} not found in network state.")
 
-    def update_push_sum_weight(self, address: str, weight: float):
+    def update_push_sum_weight(self, address: str, weight: float) -> None:
         """Update the push sum weight for a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].push_sum_weight = weight
         else:
             raise ValueError(f"Address {address} not found in network state.")
 
-    def update_mixing_weight(self, address: str, mixing_weight: float):
+    def update_mixing_weight(self, address: str, mixing_weight: float) -> None:
         """Update the mixing weight for a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].mixing_weight = mixing_weight
         else:
             raise ValueError(f"Address {address} not found in network state.")
 
-    def set_mixing_weights(self, mixing_weights: dict[str, float]):
+    def set_mixing_weights(self, mixing_weights: dict[str, float]) -> None:
         """Update the mixing weights for all peers."""
         for address, weights in mixing_weights.items():
             if address in self._peer_states:
@@ -123,7 +123,7 @@ class AsyncNetworkState(NetworkState):
             else:
                 raise ValueError(f"Address {address} not found in network state.")
 
-    def set_push_times(self, push_times: dict[str, int]):
+    def set_push_times(self, push_times: dict[str, int]) -> None:
         """Update the push times for all peers."""
         for address, time in push_times.items():
             if address in self._peer_states:
@@ -131,26 +131,26 @@ class AsyncNetworkState(NetworkState):
             else:
                 raise ValueError(f"Address {address} not found in network state.")
 
-    def reset_round(self, address: str):
+    def reset_round(self, address: str) -> None:
         """Reset the round number for a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].round_number = 0
         else:
             raise ValueError(f"Address {address} not found in network state.")
 
-    def remove_model(self, address: str):
+    def remove_model(self, address: str) -> None:
         """Remove a model from a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].model_updated = None
         else:
             raise ValueError(f"Address {address} not found in network state.")
 
-    def clear_all_models(self):
+    def clear_all_models(self) -> None:
         """Clear all models from the network state."""
         for address in self._peer_states:
             self.remove_model(address=address)
 
-    def clear_losses(self, address: str):
+    def clear_losses(self, address: str) -> None:
         """Clear the losses of a peer's state."""
         if address in self._peer_states:
             self._peer_states[address].losses = []
@@ -250,18 +250,18 @@ class AsyncNetworkState(NetworkState):
         """List all Addresss in the network state."""
         return list(self._peer_states.keys())
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear the network state."""
         self._peer_states.clear()
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Get the number of peers in the network state."""
         return len(self._peer_states)
 
-    def __contains__(self, address: str):
+    def __contains__(self, address: str) -> bool:
         """Check if a Address is in the network state."""
         return address in self._peer_states
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Representation of the network state."""
         return f"<NetworkState: {len(self._peer_states)} peer nodes>"

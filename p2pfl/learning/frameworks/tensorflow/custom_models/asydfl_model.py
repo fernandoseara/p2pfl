@@ -214,7 +214,7 @@ class AsyDFLKerasP2PFLModel(P2PFLModelDecorator):
         """
         return self.get_model().push_sum_weight.numpy()
 
-    def set_push_sum_weight(self, weight: float) -> None:
+    def set_push_sum_weight(self, weight: float|int) -> None:
         """
         Set the push sum weight.
 
