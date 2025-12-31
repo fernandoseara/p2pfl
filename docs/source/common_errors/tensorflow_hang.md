@@ -1,10 +1,6 @@
-# ⚠️ Common Errors
+# TensorFlow Data Pipeline Hangs When Used with Ray or OpenDP
 
-This page documents common errors you may encounter when using P2PFL and how to resolve them.
-
-## TensorFlow Data Pipeline Hangs When Used with Ray
-
-### Problem
+## Problem
 
 When using TensorFlow's `tf.data.Dataset` (via HuggingFace's `to_tf_dataset()`) with p2pfl, the program hangs at:
 
@@ -12,9 +8,9 @@ When using TensorFlow's `tf.data.Dataset` (via HuggingFace's `to_tf_dataset()`) 
 sample = next(iter(tf_dataset))
 ```
 
-### Root Cause
+## Root Cause
 
-**Import order conflict**: Ray is initialized before TensorFlow is imported, causing a threading deadlock.
+**Import order conflict**: Ray or OpenDP is initialized before TensorFlow is imported, causing a threading deadlock.
 
 1. Importing `p2pfl.management.logger` triggers `ray.init()` at module level
 2. TensorFlow is imported afterwards
@@ -48,32 +44,66 @@ tf_dataset = dataset.to_tf_dataset(batch_size=1, columns=["x"], label_cols=["y"]
 next(iter(tf_dataset))  # Works
 ```
 
-### Solutions
+## Solutions
 
-**Option 1: Import TensorFlow first**
+**Option 1: Import TensorFlow first (Quick Fix)**
+
+Import TensorFlow before Ray or OpenDP:
 
 ```python
 import tensorflow as tf  # FIRST
 from p2pfl.management.logger import logger  # After TensorFlow
 ```
 
-**Option 2: Disable Ray**
+This is how p2pfl's test suite handles it in `test/conftest.py`:
+
+```python
+with contextlib.suppress(ImportError):
+    import tensorflow
+```
+
+**Option 2: Don't install Ray**
+
+Ray is an optional dependency. If you don't need distributed computing features:
+
+```bash
+pip install "p2pfl[tensorflow]"  # Without Ray
+```
+
+**Option 3: Disable Ray at runtime**
 
 ```python
 from p2pfl.settings import Settings
 Settings.general.DISABLE_RAY = True
-# Then import other p2pfl modules
 ```
 
-### Environment
+## Environment
 
 - TensorFlow 2.20.0
 - Ray 2.53.0
 - Python 3.12
 - macOS (Darwin)
 
-### Status
+## Status
 
-**Open Issue** - Requires lazy Ray initialization or import order changes.
+**Fixed on macOS** - p2pfl now uses a Ray worker setup hook to import TensorFlow before Ray workers start.
 
-Tracked at: [ray-project/ray#59661](https://github.com/ray-project/ray/issues/59661)
+The fix is in `p2pfl/utils/check_ray.py`:
+
+```python
+def _worker_setup() -> None:
+    """Import ML frameworks first in Ray workers to avoid deadlocks on macOS."""
+    if sys.platform != "darwin":
+        return
+    import contextlib
+    with contextlib.suppress(ImportError):
+        import tensorflow
+    with contextlib.suppress(ImportError):
+        import torch
+
+# In ray.init():
+if sys.platform == "darwin":
+    init_kwargs["runtime_env"] = {"worker_process_setup_hook": _worker_setup}
+```
+
+Related: [ray-project/ray#59661](https://github.com/ray-project/ray/issues/59661)

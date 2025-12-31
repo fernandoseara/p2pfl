@@ -1,6 +1,6 @@
 [project]
 name = "p2pfl"
-version = "0.4.4"
+version = "0.5.0"
 description = "A p2p federated learning framework"
 authors = [{ name = "Pedro Guijas", email = "pguijas@gmail.com" }]
 requires-python = ">=3.10.0, <3.13"
@@ -23,7 +23,6 @@ dependencies = [
     "psutil>=5.9.8,<6",
     "numpy>=1.20,<2.0",
     "typer>=0.12.3,<0.13",
-    "ray>=2.43.0,<3",
     "datasets>=4.0.0",
     "pandas>=2.2.3,<3",
     "tqdm>=4.67.0,<5",
@@ -49,6 +48,7 @@ dp = ["opendp>=0.13.0"]
 wandb = ["wandb>=0.20.1,<0.21"]
 
 xgboost = ["xgboost>=3.0.5", "scikit-learn>=1.7.2"]
+ray = ["ray>=2.10.0,<3"]
 
 [project.urls]
 Homepage = "https://p2pfl.com"
