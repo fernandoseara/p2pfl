@@ -22,12 +22,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from p2pfl.stages.workflow_type import WorkflowType
-from p2pfl.stages.workflows.machine_manager import EventHandlerMachineManager, WorkflowMachineManager
 
 if TYPE_CHECKING:
+    from transitions import Machine
+
     from p2pfl.communication.commands.command import Command
+    from p2pfl.stages.local_state.node_state import LocalNodeState
     from p2pfl.stages.network_state.network_state import NetworkState
-    from p2pfl.stages.workflows.models.event_handler_model import EventHandlerWorkflowModel
     from p2pfl.stages.workflows.models.learning_workflow_model import LearningWorkflowModel
 
 class WorkflowStateManager:
@@ -37,8 +38,9 @@ class WorkflowStateManager:
         """Initialize the node state."""
         self._workflow_type: WorkflowType = workflow_type
 
+        self._workflow_machine: Machine | None = None
         self._learning_workflow: LearningWorkflowModel | None = None
-        self._event_handler_workflow: EventHandlerWorkflowModel | None = None
+        self._local_state: LocalNodeState | None = None
         self._network_state: NetworkState | None = None
         self._commands: list[Command] = []
 
@@ -52,37 +54,52 @@ class WorkflowStateManager:
         """Set workflow type."""
         self._workflow_type = workflow_type
 
+    def get_workflow_machine(self) -> Machine:
+        """Get workflow machine."""
+        if self._workflow_machine is None:
+            raise ValueError("Workflow machine is not set.")
+        return self._workflow_machine
+
+    def set_workflow_machine(self, workflow_machine: Machine) -> None:
+        """Set workflow machine."""
+        self._workflow_machine = workflow_machine
+
     def get_learning_workflow(self) -> LearningWorkflowModel:
         """Get learning workflow."""
         if self._learning_workflow is None:
             raise ValueError("Learning workflow is not set.")
         return self._learning_workflow
 
-    def add_learning_workflow(self, learning_workflow: LearningWorkflowModel) -> None:
-        """Set learning workflow."""
-        if self._workflow_type is None:
+    def add_learning_workflow(self, learning_workflow: LearningWorkflowModel, initialState: str) -> None:
+        """
+        Set learning workflow.
+
+        Args:
+            learning_workflow: The learning workflow model.
+            initialState: The initial state of the learning workflow.
+
+        """
+        if self._workflow_type is None or self._workflow_machine is None:
             raise ValueError("Workflow type is not set.")
-        machine = WorkflowMachineManager().get_machine(self._workflow_type)
-        if machine is None:
-            raise ValueError("Workflow machine is not set.")
-        machine.add_model(learning_workflow, initial="waitingSetup")
+        self._workflow_machine.add_model(learning_workflow, initial=initialState)
         self._learning_workflow = learning_workflow
 
-    def get_event_handler_workflow(self) -> EventHandlerWorkflowModel:
-        """Get event handler workflow."""
-        if self._event_handler_workflow is None:
-            raise ValueError("Event handler workflow is not set.")
-        return self._event_handler_workflow
+    def remove_learning_workflow(self) -> None:
+        """Remove learning workflow."""
+        if self._workflow_machine is None or self._learning_workflow is None:
+            raise ValueError("Workflow machine is not set.")
+        self._workflow_machine.remove_model(self.get_learning_workflow())
+        self._learning_workflow = None
 
-    def add_event_handler_workflow(self, event_handler_workflow: EventHandlerWorkflowModel) -> None:
-        """Set event handler workflow."""
-        if self._workflow_type is None:
-            raise ValueError("Workflow type is not set.")
-        machine = EventHandlerMachineManager().get_machine(self._workflow_type)
-        if machine is None:
-            raise ValueError("Event handler machine is not set.")
-        machine.add_model(event_handler_workflow, initial="waitingContextUpdate")
-        self._event_handler_workflow = event_handler_workflow
+    def get_local_state(self) -> LocalNodeState:
+        """Get local state."""
+        if self._local_state is None:
+            raise ValueError("Local state is not set.")
+        return self._local_state
+
+    def set_local_state(self, local_state: LocalNodeState) -> None:
+        """Set local state."""
+        self._local_state = local_state
 
     def get_network_state(self) -> NetworkState:
         """Get network state."""
@@ -97,7 +114,7 @@ class WorkflowStateManager:
     def get_commands(self) -> list[Command]:
         """Get commands."""
         return self._commands
-    
+
     def add_commands(self, commands: list[Command]) -> None:
         """Add commands."""
         self._commands.extend(commands)

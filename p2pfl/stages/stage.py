@@ -18,7 +18,7 @@
 """Stage."""
 
 from p2pfl.management.logger import logger
-from p2pfl.node_state import LocalNodeState
+from p2pfl.stages.local_state.node_state import LocalNodeState
 
 
 class Stage:

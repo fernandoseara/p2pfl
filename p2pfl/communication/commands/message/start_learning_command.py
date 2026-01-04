@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Optional
 
 from p2pfl.communication.commands.command import Command
@@ -80,5 +81,6 @@ class StartLearningCommand(Command):
                 trainset_size=int(trainset_size),
                 source=source
             )
+
         except NodeRunningException as e:
             logger.debug(self.__node.local_state.address, str(e))

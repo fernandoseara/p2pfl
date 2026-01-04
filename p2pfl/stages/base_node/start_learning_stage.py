@@ -43,5 +43,6 @@ class StartLearningStage:
         state = node.get_local_state()
         learner = node.get_learner()
 
+        # Set the experiment parameters
         state.set_experiment(experiment_name, rounds, epochs, trainset_size)
         learner.set_epochs(state.epochs)

@@ -53,7 +53,7 @@ class LossInformationUpdatingCommand(Command):
         if loss is None:
             raise ValueError("Loss is required")
 
-        await self.__node.get_event_handler().loss_information_received(source, round, float(loss))
+        await self.__node.get_learning_workflow().loss_information_received(source, round, float(loss))
 
 
 class IndexInformationUpdatingCommand(Command):
@@ -83,7 +83,7 @@ class IndexInformationUpdatingCommand(Command):
         if round is None:
             raise ValueError("Index is required")
 
-        await self.__node.get_event_handler().iteration_index_received(source,
+        await self.__node.get_learning_workflow().iteration_index_received(source,
                                                                     index=round)
 
 
@@ -119,7 +119,7 @@ class ModelInformationUpdatingCommand(Command):
         if weights is None or contributors is None or num_samples is None:
             raise ValueError("Weights, contributors and weight are required")
 
-        await self.__node.get_event_handler().model_received(source, round, weights, num_samples, list(contributors))
+        await self.__node.get_learning_workflow().model_received(source, round, weights, num_samples, list(contributors))
 
 class PushSumWeightInformationUpdatingCommand(Command):
     """PushSumWeightInformationUpdatingCommand."""
@@ -149,5 +149,5 @@ class PushSumWeightInformationUpdatingCommand(Command):
         if push_sum_weight is None:
             raise ValueError("Push-sum weight is required")
 
-        await self.__node.get_event_handler().push_sum_weight_received(source,
+        await self.__node.get_learning_workflow().push_sum_weight_received(source,
                 push_sum_weight=float(push_sum_weight))

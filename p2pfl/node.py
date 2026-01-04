@@ -39,14 +39,14 @@ from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.simulation import try_init_learner_with_ray
 from p2pfl.management.logger import logger
-from p2pfl.node_state import LocalNodeState
+from p2pfl.stages.local_state.node_state import LocalNodeState
 from p2pfl.settings import Settings
 from p2pfl.stages.workflow_type import WorkflowType
-from p2pfl.stages.workflows.node_workflow import NodeWorkflow
+from p2pfl.stages.workflows.node_workflow import NodeWorkflowModel
 from p2pfl.utils.asyncio import sync_or_async
 
 if TYPE_CHECKING:
-    from p2pfl.stages.workflows.models.event_handler_model import EventHandlerWorkflowModel
+    from p2pfl.stages.workflows.models.learning_workflow_model import LearningWorkflowModel
 
 # Disbalbe grpc log (pytorch causes warnings)
 if logger.get_level_name(logger.get_level()) != "DEBUG":
@@ -119,11 +119,9 @@ class Node:
         # Simulation
         self.generator: random.Random = random.Random(Settings.general.SEED)
 
-        # State
-        self.local_state = LocalNodeState(address)
-
         # Workflow
-        self.node_workflow: NodeWorkflow = NodeWorkflow(self)
+        self.address: str = address
+        self.node_workflow: NodeWorkflowModel = NodeWorkflowModel(self)
 
         # Commands
         self.communication_protocol.add_command([
@@ -155,7 +153,7 @@ class Node:
         """
         return self.node_workflow.connect_node(addr)
 
-    def get_neighbors(self, only_direct: bool = False) -> Dict[str, Any]:
+    def get_neighbors(self, only_direct: bool = False) -> dict[str, Any]:
         """
         Return the neighbors of the node.
 
@@ -219,7 +217,7 @@ class Node:
             LearnerRunningException: If the learner is already set.
 
         """
-        if self.local_state.round is not None:
+        if self.get_local_state().round is not None:
             raise LearnerRunningException("Learner cannot be set after learning is started.")
         self.learner = learner
 
@@ -234,7 +232,7 @@ class Node:
             LearnerRunningException: If the learner is already set.
 
         """
-        if self.local_state.round is not None:
+        if self.get_local_state().round is not None:
             raise LearnerRunningException("Data cannot be set after learner is set.")
         self.learner.set_P2PFLModel(model)
 
@@ -250,7 +248,7 @@ class Node:
 
         """
         # Cannot change during training (raise)
-        if self.local_state.round is not None:
+        if self.get_local_state().round is not None:
             raise LearnerRunningException("Data cannot be set after learner is set.")
         self.learner.set_data(data)
 
@@ -308,7 +306,7 @@ class Node:
         """
         return self.learner
 
-    def get_node_workflow(self) -> NodeWorkflow:
+    def get_node_workflow(self) -> NodeWorkflowModel:
         """
         Get the node workflow.
 
@@ -318,20 +316,20 @@ class Node:
         """
         return self.node_workflow
 
-    def get_event_handler(self) -> EventHandlerWorkflowModel:
+    def get_learning_workflow(self) -> LearningWorkflowModel:
         """
-        Get the event handler.
+        Get the learning workflow.
 
         Returns:
-            The current event handler of the node.
+            The current learning workflow of the node.
 
         Raises:
             NodeRunningException: If the node workflow is not initialized.
 
         """
-        event_handler = self.node_workflow.get_event_handler()
-        if event_handler is not None:
-            return event_handler
+        learning_workflow = self.node_workflow.get_learning_workflow()
+        if learning_workflow is not None:
+            return learning_workflow
         else:
             raise NodeRunningException("Node workflow is not initialized")
 
@@ -348,7 +346,7 @@ class Node:
             The current local state of the node.
 
         """
-        return self.local_state
+        return self.node_workflow.get_local_state()
 
 
     def get_generator(self) -> random.Random:
@@ -361,23 +359,6 @@ class Node:
         """
         return self.generator
 
-    @property
-    def address(self) -> str:
-        """The node address."""
-        return self.get_local_state().address
-
-    #######################
-    #    State Setters    #
-    #######################
-    def set_local_state(self, state: LocalNodeState) -> None:
-        """
-        Set the local state.
-
-        Args:
-            state: The local state to be set.
-
-        """
-        self.local_state = state
 
     ###############################################
     #         Network Learning Management         #

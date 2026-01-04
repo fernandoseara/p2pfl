@@ -40,7 +40,6 @@ class WorkflowModel:
     ######################
     def finalize_logging(self, *args, **kwargs) -> None:
         """Logging callback."""
-        pass
         logger.debug(self.node.address, f"🏃 Running stage: {(self.state)}")
 
     def test(self, *args, **kwargs) -> None:

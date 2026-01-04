@@ -68,7 +68,7 @@ class PartialModelCommand(Command):
                 contributors=list(contributors)
             )
 
-            await self.__node.get_event_handler().aggregate(model, source)
+            await self.__node.get_learning_workflow().aggregate(model, source)
 
         except MachineError:
             logger.debug(self.__node.address, "Invalid state.")

@@ -41,6 +41,7 @@ class BasicNetworkState(NetworkState):
 
     def __init__(self) -> None:
         """Initialize the network state."""
+        super().__init__()
         # address -> PeerNodeState
         self._peer_states: dict[str, PeerNodeState] = {}
 

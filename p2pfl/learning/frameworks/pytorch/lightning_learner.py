@@ -27,7 +27,6 @@ import torch
 from lightning import Trainer
 from torch.utils.data import DataLoader
 
-from p2pfl.experiment import Experiment
 from p2pfl.learning.aggregators.aggregator import Aggregator
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks import Framework
@@ -37,6 +36,7 @@ from p2pfl.learning.frameworks.pytorch.lightning_dataset import PyTorchExportStr
 from p2pfl.learning.frameworks.pytorch.lightning_logger import FederatedLogger
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
+from p2pfl.stages.local_state.experiment import Experiment
 from p2pfl.utils.check_ray import ray_installed
 from p2pfl.utils.seed import set_seed
 

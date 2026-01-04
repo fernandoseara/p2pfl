@@ -55,6 +55,11 @@ class WorkflowBuilder(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def create_local_state(self, node: Node) -> None:
+        """Create local state."""
+        raise NotImplementedError
+
+    @abstractmethod
     def create_network_state(self) -> None:
         """Create network state."""
         raise NotImplementedError
@@ -65,18 +70,8 @@ class WorkflowBuilder(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_event_handler_machine(self) -> None:
-        """Create event handler machine."""
-        raise NotImplementedError
-
-    @abstractmethod
     def create_training_workflow_model(self, node: Node) -> None:
         """Create a workflow model."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def create_event_handler_workflow_model(self, node: Node) -> None:
-        """Create event handler workflow model."""
         raise NotImplementedError
 
     @abstractmethod

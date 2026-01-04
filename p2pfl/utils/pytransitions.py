@@ -104,8 +104,8 @@ class TransitionAdapter:
     """Transition adapter for defining transitions."""
 
     trigger: str
-    source: str
-    dest: str
+    source: str | list[str]
+    dest: str | None
     conditions: Action | None = None
     prepare: Action | None = None
     before: Action | None = None
@@ -116,6 +116,7 @@ class TransitionAdapter:
         object.__setattr__(self, "conditions", self._normalize(self.conditions))
         object.__setattr__(self, "prepare", self._normalize(self.prepare))
         object.__setattr__(self, "before", self._normalize(self.before))
+        object.__setattr__(self, "after", self._normalize(self.after))
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TransitionAdapter":
@@ -136,6 +137,7 @@ class TransitionAdapter:
             conditions=data.get("conditions"),
             prepare=data.get("prepare"),
             before=data.get("before"),
+            after=data.get("after"),
         )
 
     def _normalize(self, value: Action | None) -> list[str] | None:
@@ -173,5 +175,10 @@ class TransitionAdapter:
         if self.before:
             data["before"] = (
                 self.before[0] if len(self.before) == 1 else self.before
+            )
+
+        if self.after:
+            data["after"] = (
+                self.after[0] if len(self.after) == 1 else self.after
             )
         return data

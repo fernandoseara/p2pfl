@@ -56,7 +56,7 @@ class VoteTrainSetCommand(Command):
         # build vote dict
         votes = VoteTrainSetCommand.parse_votes_list(args)
 
-        await self._node.get_event_handler().vote(source, round, votes)
+        await self._node.get_learning_workflow().vote(source, round, votes)
 
     @staticmethod
     def parse_votes_list(votes_list: list[str]) -> list[tuple[str, int]]:

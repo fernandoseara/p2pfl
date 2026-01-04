@@ -52,4 +52,4 @@ class FullModelCommand(Command):
             logger.error(self.__node.address, "❌ FullModelCommand: Weights are None.")
             return
 
-        await self.__node.get_event_handler().full_model_received(source, round, weights)
+        await self.__node.get_learning_workflow().full_model_received(source, round, weights)

@@ -23,6 +23,18 @@ from abc import ABC, abstractmethod
 class NetworkState(ABC):
     """Network state to keep track of peer nodes and their states."""
 
+    def __init__(self) -> None:
+        """Initialize the network state."""
+        self.is_initiator: bool = False
+
+    def check_is_initiator(self) -> bool:
+        """Check if the node is the initiator of the network."""
+        return self.is_initiator
+
+    def set_initiator(self, is_initiator: bool) -> None:
+        """Set the node as the initiator of the network."""
+        self.is_initiator = is_initiator
+
     @abstractmethod
     def add_peer(self, address: str):
         """Add a new peer to the network state."""

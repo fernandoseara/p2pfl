@@ -35,7 +35,20 @@ class LearningWorkflowModel(WorkflowModel):
         self._background_tasks: set[asyncio.Task] = set()
         super().__init__(*args, **kwargs)
 
+
+    async def is_finished(self) -> bool:
+        """Check if the workflow has finished."""
+        raise NotImplementedError("Should be overridden by subclasses.")
+
+    ########################################
+    # EVENTS (Overridden by pytransitions) #
+    ########################################
+    async def next_stage(self) -> bool:
+        """Handle the next stage event."""
+        raise RuntimeError("Should be overridden!")
+
     async def setup(self,
+        is_initiator: bool,
         experiment_name: str,
         rounds: int,
         epochs: int,
@@ -47,9 +60,3 @@ class LearningWorkflowModel(WorkflowModel):
     async def stop_learning(self) -> bool:
         """Handle the stop learning event."""
         raise RuntimeError("Should be overridden!")
-
-    def _fire_next_stage(self, trigger_name: str, *args, **kwargs):
-        """Schedule a state machine trigger as a background task."""
-        task = asyncio.create_task(getattr(self, trigger_name)(*args, **kwargs))
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)

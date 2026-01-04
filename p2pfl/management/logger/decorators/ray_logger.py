@@ -23,10 +23,10 @@ from typing import Any, Callable, Dict, Optional, Union
 
 import ray
 
-from p2pfl.experiment import Experiment
 from p2pfl.management.logger.decorators.logger_decorator import LoggerDecorator
 from p2pfl.management.logger.logger import P2PFLogger
 from p2pfl.management.metric_storage import GlobalLogsType, LocalLogsType
+from p2pfl.stages.local_state.experiment import Experiment
 
 
 @ray.remote

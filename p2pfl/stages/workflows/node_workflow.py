@@ -20,11 +20,8 @@
 from __future__ import annotations
 
 import asyncio
-import collections
-
-# Set up logging; The basic log level will be DEBUG
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from p2pfl.communication.commands.message.stop_learning_command import StopLearningCommand
 from p2pfl.management.logger import logger
@@ -34,14 +31,17 @@ from p2pfl.stages.workflows.builder.workflow_director import WorkflowDirector
 from p2pfl.stages.workflows.workflow_state_manager import WorkflowStateManager
 from p2pfl.utils.asyncio import sync_or_async
 from p2pfl.utils.pytransitions import StateAdapter, TimeoutMachine, TransitionAdapter
+from p2pfl.utils.singleton import SingletonMeta
 
-# Set transitions' log level to INFO; DEBUG messages will be omitted
+# Set transitions' log level
 logging.getLogger('transitions').setLevel(logging.ERROR)
 
 if TYPE_CHECKING:
+    from transitions import Machine
+
     from p2pfl.node import Node
+    from p2pfl.stages.local_state.node_state import LocalNodeState
     from p2pfl.stages.network_state.network_state import NetworkState
-    from p2pfl.stages.workflows.models.event_handler_model import EventHandlerWorkflowModel
     from p2pfl.stages.workflows.models.learning_workflow_model import LearningWorkflowModel
 
 def get_states() -> list[dict]:
@@ -51,7 +51,7 @@ def get_states() -> list[dict]:
         StateAdapter(name='stopped'),
         StateAdapter(name="waitingForLearningStart"),
         # Learning state
-        StateAdapter(name="learning", on_enter=['on_enter_learning'], on_exit=['on_final_learning']),
+        StateAdapter(name="learning"),
         # Final state
         StateAdapter(name="learningFinished", final=True)
     ]
@@ -63,7 +63,7 @@ def get_transitions() -> list[dict]:
     transitions: list[TransitionAdapter] = [
         TransitionAdapter(trigger='start_node', source='stopped', dest='waitingForLearningStart', before='start'),
         # Starting the learning process
-        TransitionAdapter(trigger='start_learning', source='waitingForLearningStart', dest='learning', after='set_model_initialized'),
+        TransitionAdapter(trigger='start_learning', source='waitingForLearningStart', dest='learning', before='set_initiator'),
         TransitionAdapter(trigger='peer_learning_initiated', source='waitingForLearningStart', dest='learning'),
 
         # Learning process finished
@@ -79,33 +79,32 @@ def get_transitions() -> list[dict]:
 
     return [transition.to_dict() for transition in transitions]
 
-class NodeWorkflow(TimeoutMachine):
-    """Base for the training workflow."""
+class NodeWorkflowModel:
+    """Base for the node workflow."""
+
+    state : str
 
     def __init__(self, node: Node, state_history_length: int = 10):
         """Initialize the workflow model."""
         self._candidates: list = []
+        self._background_tasks: set[asyncio.Task] = set()
+
         self.node = node
+        self.is_initiator: bool = False
 
         #self.event_log: list = []
-        self.state_log: collections.deque = collections.deque(maxlen=state_history_length)
+        #self.state_log: collections.deque = collections.deque(maxlen=state_history_length)
 
         self.workflow_state_manager: WorkflowStateManager|None = None
+        WorkflowMachineManager().add_model(self)
 
-        super().__init__(
-            states=get_states(),
-            transitions=get_transitions(),
-            initial='stopped',
-            queued='model',
-            ignore_invalid_triggers=True,
-            finalize_event='finalize_logging',
-            model_override=True,
-        )
+    def __remove__(self):
+        """Cleanup the workflow model."""
+        WorkflowMachineManager().remove_model(self)
 
     #################
     #    Getters    #
     #################
-
     def get_learning_workflow(self) -> LearningWorkflowModel:
         """
         Get the learning workflow.
@@ -117,18 +116,6 @@ class NodeWorkflow(TimeoutMachine):
         if self.workflow_state_manager is None:
             raise RuntimeError("Workflow is not initialized")
         return self.workflow_state_manager.get_learning_workflow()
-
-    def get_event_handler(self) -> EventHandlerWorkflowModel:
-        """
-        Get the event handler.
-
-        Returns:
-            The current event handler of the node.
-
-        """
-        if self.workflow_state_manager is None:
-            raise RuntimeError("Workflow is not initialized")
-        return self.workflow_state_manager.get_event_handler_workflow()
 
     def get_workflow_type(self) -> WorkflowType:
         """
@@ -153,6 +140,18 @@ class NodeWorkflow(TimeoutMachine):
         if self.workflow_state_manager is None:
             raise RuntimeError("Workflow is not initialized")
         return self.workflow_state_manager.get_commands()
+
+    def get_local_state(self) -> LocalNodeState:
+        """
+        Get the local state.
+
+        Returns:
+            The current local state.
+
+        """
+        if self.workflow_state_manager is None:
+            raise RuntimeError("Workflow is not initialized")
+        return self.workflow_state_manager.get_local_state()
 
     def get_network_state(self) -> NetworkState:
         """
@@ -239,15 +238,15 @@ class NodeWorkflow(TimeoutMachine):
     # PROPERTIES #
     ##############
 
-    @property
-    def state(self):
-        """Get the current state of the workflow."""
-        return self.state_log[-1]
+    # @property
+    # def state(self):
+    #     """Get the current state of the workflow."""
+    #     return self.state_log[-1]
 
-    @state.setter
-    def state(self, value):
-        """Set the current state of the workflow."""
-        self.state_log.append(value)
+    # @state.setter
+    # def state(self, value):
+    #     """Set the current state of the workflow."""
+    #     self.state_log.append(value)
 
     @property
     def waiting_for_learning_start(self) -> bool:
@@ -258,7 +257,7 @@ class NodeWorkflow(TimeoutMachine):
             bool: True if the workflow is waiting for the learning start, False otherwise.
 
         """
-        return self.state == 'waiting_for_learning_start'
+        return self.state == 'waitingForLearningStart'
 
     @property
     def running(self) -> bool:
@@ -280,12 +279,12 @@ class NodeWorkflow(TimeoutMachine):
             bool: True if the workflow is finished, False otherwise.
 
         """
-        return self.state == 'learning_finished'
+        return self.state == 'learningFinished'
 
-    async def set_model_initialized(self, *args, **kwargs) -> None:
+    async def set_initiator(self, *args, **kwargs) -> None:
         """Set the model initialized."""
-        # Set the model initialized
-        self.node.get_learner().get_P2PFLModel().set_round(0)
+        # Set the initiator flag in the network state
+        self.is_initiator = True
 
 
     ###################
@@ -312,11 +311,27 @@ class NodeWorkflow(TimeoutMachine):
         # Start learning
         if self.workflow_state_manager is None:
             raise RuntimeError("Workflow is not initialized")
-        learning_workflow = self.get_learning_workflow()
-        await learning_workflow.setup(*args, **kwargs)
+        await self.get_learning_workflow().setup(self.is_initiator, *args, **kwargs)
 
-    async def on_final_learning(self):
-        """Finish the learning workflow."""
+        # Run learning in background
+        await self._fire_task(self.run)
+
+    async def on_enter_learningFinished(self, *args, **kwargs) -> None:
+        """Finish the learning."""
+        logger.info(self.node.address, "✅ Learning finished.")
+        if self.workflow_state_manager is None:
+            raise RuntimeError("Workflow is not initialized")
+        self.workflow_state_manager.remove_learning_workflow()
+        self.workflow_state_manager = None
+
+    async def run(self) -> None:
+        """Run the learning workflow."""
+        learning_workflow = self.get_learning_workflow()
+
+        # Loop until the learning workflow is finished
+        while await learning_workflow.is_finished() is False:
+            await learning_workflow.next_stage()
+
         await self.learning_finished()
 
     ##############
@@ -414,3 +429,37 @@ class NodeWorkflow(TimeoutMachine):
     def test(self, *args, **kwargs) -> None:
         """Test function for debugging."""
         logger.info(self.node.address, "Test function called.")
+
+    async def _fire_task(self, func: Callable, *args, **kwargs) -> None:
+        """Schedule a state machine trigger as a background task."""
+        task = asyncio.create_task(func(*args, **kwargs))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+
+class WorkflowMachineManager(metaclass=SingletonMeta):
+    """Manager for workflow state machines."""
+
+    def __init__(self) -> None:
+        """Initialize the node state."""
+        self._machine: Machine = TimeoutMachine(
+            states=get_states(),
+            transitions=get_transitions(),
+            initial='stopped',
+            queued='model',
+            ignore_invalid_triggers=True,
+            finalize_event='finalize_logging',
+            model_override=True,
+        )
+
+    def get_machine(self) -> Machine | None:
+        """Get the state machine for a given workflow type."""
+        return self._machine
+
+    def add_model(self, model: NodeWorkflowModel) -> None:
+        """Add a model to the state machine."""
+        self._machine.add_model(model)
+
+    def remove_model(self, model: NodeWorkflowModel) -> None:
+        """Remove the model from the state machine."""
+        self._machine.remove_model(model)

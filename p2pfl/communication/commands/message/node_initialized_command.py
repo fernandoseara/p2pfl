@@ -22,8 +22,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from transitions import MachineError
-
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
 
@@ -54,6 +52,6 @@ class NodeInitializedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        await self._node.get_event_handler().node_started(
+        await self._node.get_learning_workflow().node_started(
             source
         )

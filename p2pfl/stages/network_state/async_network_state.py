@@ -52,12 +52,12 @@ class AsyncNetworkState(NetworkState):
         if address not in self._peer_states:
             self._peer_states[address] = PeerNodeState(
                 round_number=0,
-                push_sum_weight=1.0, # μ(0)
-                model_updated=None, # w(0)
-                losses=[], # f_i(ω(0))
-                push_time=0, # tp_j,i(0)
-                mixing_weight=1.0, # pt_j,i(0)
-                p2p_updating_idx=0,  # t_j(0)
+                push_sum_weight=1.0,        # μ(0)
+                model_updated=None,         # w(0)
+                losses=[],                  # f_i(ω(0))
+                push_time=0,                # tp_j,i(0)
+                mixing_weight=1.0,          # pt_j,i(0)
+                p2p_updating_idx=0,         # t_j(0)
             )
         else:
             raise ValueError(f"Address {address} already exists in network state.")

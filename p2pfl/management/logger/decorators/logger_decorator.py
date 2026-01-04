@@ -22,9 +22,9 @@ import datetime
 import logging
 from typing import Any, Callable, Dict, Union
 
-from p2pfl.experiment import Experiment
 from p2pfl.management.logger.logger import P2PFLogger
 from p2pfl.management.metric_storage import GlobalLogsType, LocalLogsType
+from p2pfl.stages.local_state.experiment import Experiment
 
 
 class LoggerDecorator(P2PFLogger):

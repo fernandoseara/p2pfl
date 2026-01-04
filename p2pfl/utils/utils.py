@@ -127,7 +127,7 @@ async def wait_to_finish(nodes: List[Node], timeout=60):
     # Wait untill all nodes finised the workflow
     start = time.time()
     while True:
-        if all(n.node_workflow.finished for n in nodes):
+        if all(n.get_node_workflow().finished for n in nodes):
             break
         await asyncio.sleep(1)
         if time.time() - start > timeout:

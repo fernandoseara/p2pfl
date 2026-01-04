@@ -28,7 +28,7 @@ import datetime
 import logging
 from typing import Any, Dict, Optional, Union
 
-from p2pfl.experiment import Experiment
+from p2pfl.stages.local_state.experiment import Experiment
 from p2pfl.management.metric_storage import GlobalLogsType, GlobalMetricStorage, LocalLogsType, LocalMetricStorage
 from p2pfl.settings import Settings
 

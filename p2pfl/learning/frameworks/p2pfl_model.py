@@ -50,7 +50,6 @@ class P2PFLModel:
         contributors: Optional[list[str]] = None,
         additional_info: Optional[dict[str, Any]] = None,
         compression: Optional[dict[str, dict[str, Any]]] = None,
-        round: Optional[int] = None,
     ) -> None:
         """Initialize the model."""
         self.model = model
@@ -69,8 +68,6 @@ class P2PFLModel:
             self.compression = compression
         else:
             self.compression = {}
-
-        self.round = round
 
     def get_model(self) -> Any:
         """Get the model."""
@@ -196,39 +193,6 @@ class P2PFLModel:
         """
         raise NotImplementedError
 
-    def get_round(self) -> Optional[int]:
-        """
-        Get the round of the model.
-
-        Returns:
-            The round of the model.
-
-        """
-        return self.round
-
-    def set_round(self, round: int) -> None:
-        """
-        Set the round of the model.
-
-        Args:
-            round: The round of the model.
-
-        """
-        self.round = round
-
-    def increment_round(self) -> None:
-        """
-        Increment the round of the model.
-
-        Raises:
-            ValueError: If the round is not set.
-
-        """
-        if self.round is not None:
-            self.round += 1
-
-        raise ValueError("Round not set. Cannot increment round.")
-
     def clone_model(self) -> Any:
         """
         Clone the model.
@@ -298,36 +262,6 @@ class P2PFLModelDecorator(P2PFLModel):
 
         """
         return self._wrapped_model.get_model()
-
-    def get_round(self) -> Optional[int]:
-        """
-        Get the round of the wrapped model.
-
-        Returns:
-            The round of the wrapped model.
-
-        """
-        return self._wrapped_model.get_round()
-
-    def set_round(self, round: int) -> None:
-        """
-        Set the round of the wrapped model.
-
-        Args:
-            round: The round to set in the wrapped model.
-
-        """
-        self._wrapped_model.set_round(round)
-
-    def increment_round(self) -> None:
-        """
-        Increment the round of the wrapped model.
-
-        Raises:
-            ValueError: If the round is not set in the wrapped model.
-
-        """
-        self._wrapped_model.increment_round()
 
     def build_copy(self, **kwargs) -> "P2PFLModel":
         """

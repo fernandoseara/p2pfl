@@ -24,12 +24,12 @@ import numpy as np
 import pytest
 from datasets import DatasetDict, load_dataset  # type: ignore
 
-from p2pfl.experiment import Experiment
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
+from p2pfl.stages.local_state.experiment import Experiment
 
 with contextlib.suppress(ImportError):
     import tensorflow as tf
