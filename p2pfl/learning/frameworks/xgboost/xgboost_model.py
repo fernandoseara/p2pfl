@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2024 Pedro Guijas Bravo.
 #
@@ -18,18 +18,18 @@
 
 """XGBoost model wrapper for P2PFL."""
 
+import json
 from typing import Any
 
-import numpy as np
 import xgboost as xgb
 from sklearn.exceptions import NotFittedError
 
-from p2pfl.learning.frameworks import Framework, ModelType
+from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
-from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
+from p2pfl.learning.frameworks.p2pfl_model import TreeBasedModel
 
 
-class XGBoostModel(P2PFLModel):
+class XGBoostModel(TreeBasedModel):
     """
     P2PFL model abstraction for XGBoost.
 
@@ -38,7 +38,7 @@ class XGBoostModel(P2PFLModel):
 
     Args:
         model (xgb.XGBModel): The XGBoost model to encapsulate.
-        params (list[np.ndarray] | bytes | None): Serialized parameters
+        params (dict[str, Any] | bytes | None): Tree structure dict or serialized bytes
             (default is None).
         num_samples (int | None): Number of samples used in training
             (default is None).
@@ -61,7 +61,7 @@ class XGBoostModel(P2PFLModel):
     def __init__(
         self,
         model: xgb.XGBModel,
-        params: list[np.ndarray] | bytes | None = None,
+        params: dict[str, Any] | bytes | None = None,
         num_samples: int | None = None,
         contributors: list[str] | None = None,
         additional_info: dict[str, Any] | None = None,
@@ -73,7 +73,7 @@ class XGBoostModel(P2PFLModel):
 
         Args:
             model (xgb.XGBModel): The XGBoost model to encapsulate.
-            params (list[np.ndarray] | bytes | None): Serialized parameters
+            params (dict[str, Any] | bytes | None): Tree structure dict or serialized bytes
                 (default is None).
             num_samples (int | None): Number of samples used in training
                 (default is None).
@@ -94,36 +94,33 @@ class XGBoostModel(P2PFLModel):
         super().__init__(model, params, num_samples, contributors, additional_info, compression)
         self.id = id if id is not None else 0  # Default ID if not provided
 
-    def get_parameters(self) -> list[np.ndarray]:
+    def get_parameters(self) -> dict[str, Any]:
         """
-        Extract model parameters as numpy arrays.
+        Extract model parameters as a parsed tree structure.
 
         Returns:
-            list[np.ndarray]: List containing a single numpy array with serialized
-                model bytes, or empty list if model is not fitted.
+            Parsed XGBoost JSON structure, or empty dict if model is not fitted.
 
         """
         try:
-            # Get underlying booster and serialize to JSON bytes
+            # Get underlying booster and serialize to JSON
             booster = self.model.get_booster()
             model_bytes = booster.save_raw(raw_format="json")
-            # Convert to numpy array for compatibility with P2PFL
-            model_np = np.frombuffer(model_bytes, dtype=np.uint8)
-            return [model_np]
+            # Parse JSON to get workable dict structure
+            return json.loads(model_bytes.decode("utf-8"))
         except NotFittedError:
-            return []
+            return {}
 
-    def set_parameters(self, params: list[np.ndarray] | bytes) -> None:
+    def set_parameters(self, params: dict[str, Any] | bytes) -> None:
         """
-        Set model parameters from numpy arrays or serialized bytes.
+        Set model parameters from tree structure dict or serialized bytes.
 
         Args:
-            params (list[np.ndarray] | bytes): List of ndarrays or serialized bytes
-                containing the model parameters.
+            params: Tree structure dict or serialized bytes.
 
         Raises:
             ModelNotMatchingError: If loading fails.
-            TypeError: If params is not a list after decoding.
+            TypeError: If params is not a dict after decoding.
 
         """
         # If bytes, decode compression first
@@ -133,15 +130,15 @@ class XGBoostModel(P2PFLModel):
         if params is None or len(params) == 0:
             return
 
-        # Type guard: at this point params should be list[np.ndarray]
-        if not isinstance(params, list):
-            raise TypeError(f"Expected params to be a list, got {type(params)}")
+        # Type guard: at this point params should be dict
+        if not isinstance(params, dict):
+            raise TypeError(f"Expected params to be a dict, got {type(params)}")
 
-        # Convert numpy array back to bytearray
-        model_bytes = bytearray(params[0].tobytes())
+        # Convert dict to JSON bytes for loading
+        model_bytes = json.dumps(params).encode("utf-8")
 
-        # Load into the existing model (no need to create new instance or detect type)
-        self.model.load_model(model_bytes)
+        # Load into the existing model
+        self.model.load_model(bytearray(model_bytes))
 
     def get_framework(self) -> str:
         """
@@ -152,13 +149,3 @@ class XGBoostModel(P2PFLModel):
 
         """
         return Framework.XGBOOST.value
-
-    def get_model_type(self) -> str:
-        """
-        Retrieve the model type for aggregator compatibility.
-
-        Returns:
-            str: The model type identifier for boosting trees.
-
-        """
-        return ModelType.BOOSTING_TREE.value

@@ -18,6 +18,9 @@ class AddrRequiredMeta(ABCMeta):
     def __new__(cls, name: str, bases: tuple[type, ...], dct: dict[str, Any]) -> Any:
         """Create a new class with methods wrapped to ensure the addr is set."""
         for attr_name, attr_value in dct.items():
+            # Skip staticmethod and classmethod - they don't have 'self'
+            if isinstance(attr_value, staticmethod | classmethod):
+                continue
             if callable(attr_value) and attr_name != "set_addr" and attr_name != "__init__":
                 dct[attr_name] = cls.ensure_addr_set(attr_value)
         return super().__new__(cls, name, bases, dct)

@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,15 +20,16 @@
 
 import numpy as np
 
-from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError, compatible_with
-from p2pfl.learning.frameworks import ModelType
+from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError, WeightAggregator
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
-@compatible_with(ModelType.NEURAL_NETWORK)
-class FedAvg(Aggregator):
+class FedAvg(WeightAggregator):
     """
     Federated Averaging (FedAvg) [McMahan et al., 2016].
+
+    Inherits from ``WeightAggregator`` as FedAvg works with neural network
+    weight tensors that can be averaged.
 
     Paper: https://arxiv.org/abs/1602.05629.
     """
@@ -39,15 +40,15 @@ class FedAvg(Aggregator):
         """Initialize the aggregator."""
         super().__init__(disable_partial_aggregation=disable_partial_aggregation)
 
-    def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
+    def _aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """
-        Aggregate the models.
+        Aggregate the models using weighted averaging.
 
         Args:
-            models: Dictionary with the models (node: model,num_samples).
+            models: List of models to aggregate.
 
         Returns:
-            A P2PFLModel with the aggregated.
+            A P2PFLModel with the aggregated weights.
 
         Raises:
             NoModelsToAggregateError: If there are no models to aggregate.

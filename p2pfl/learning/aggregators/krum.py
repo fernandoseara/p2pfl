@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,15 +20,16 @@
 
 import numpy as np
 
-from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError, compatible_with
-from p2pfl.learning.frameworks import ModelType
+from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError, WeightAggregator
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
-@compatible_with(ModelType.NEURAL_NETWORK)
-class Krum(Aggregator):
+class Krum(WeightAggregator):
     """
     Krum [Blanchard et al., 2017].
+
+    Inherits from ``WeightAggregator`` as Krum works with neural network
+    weight tensors.
 
     Paper: https://arxiv.org/pdf/1703.02757
     """
@@ -39,14 +40,14 @@ class Krum(Aggregator):
         """Initialize the aggregator."""
         super().__init__(disable_partial_aggregation=disable_partial_aggregation)
 
-    def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
+    def _aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """
         Aggregate using Krum algorithm.
 
         Krum selects the model with the minimum sum of distances to all other models.
 
         Args:
-            models: List of P2PFLModel objects to aggregate.
+            models: List of validated models to aggregate.
 
         Returns:
             A P2PFLModel with the selected model (lowest distance sum).

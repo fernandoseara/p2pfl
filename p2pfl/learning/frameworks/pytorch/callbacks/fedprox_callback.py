@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -43,6 +43,7 @@ class FedProxCallback(Callback, P2PFLCallback):
         super().__init__()
         self.proximal_mu: float | None = None
         self.initial_params: list[torch.Tensor] | None = None
+        self._is_first_round: bool = True
 
     @staticmethod
     def get_name() -> str:
@@ -51,23 +52,27 @@ class FedProxCallback(Callback, P2PFLCallback):
 
     def on_train_start(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
         """
-        Store the initial model parameters and proximal coefficient.
+        Snapshot the model parameters at training start for proximal term.
 
         Args:
             trainer: The trainer
             pl_module: The model.
 
-        """
-        # Get proximal_mu from additional_info if available
-        if hasattr(pl_module, "p2pfl_model") and hasattr(pl_module.p2pfl_model, "additional_info"):
-            self.proximal_mu = pl_module.p2pfl_model.additional_info.get("proximal_mu")
-            initial_params_np = pl_module.p2pfl_model.additional_info.get("initial_round_params")
+        Raises:
+            ValueError: If not first round and proximal_mu is missing.
 
-            if initial_params_np is not None:
-                # Convert numpy arrays to tensors on the same device as the model
-                self.initial_params = [
-                    torch.tensor(param_np, dtype=torch.float32, device=pl_module.device) for param_np in initial_params_np
-                ]
+        """
+        if self._is_first_round:
+            # First round: no global model, skip proximal term
+            self._is_first_round = False
+            return
+
+        # After first round, proximal_mu is required
+        if self.additional_info is None or "proximal_mu" not in self.additional_info:
+            raise ValueError("FedProxCallback: proximal_mu required after first round.")
+
+        self.proximal_mu = self.additional_info["proximal_mu"]
+        self.initial_params = [param.clone().detach() for param in pl_module.parameters()]
 
     def on_before_optimizer_step(self, trainer: L.Trainer, pl_module: L.LightningModule, optimizer: "Optimizer") -> None:
         """
@@ -99,5 +104,7 @@ class FedProxCallback(Callback, P2PFLCallback):
                         continue
 
                     # Add proximal gradient: mu * (w - w_global)
-                    proximal_grad = self.proximal_mu * (model_param.data - initial_param)
+                    # Ensure initial_param is on the same device as model_param
+                    initial_param_device = initial_param.to(model_param.device)
+                    proximal_grad = self.proximal_mu * (model_param.data - initial_param_device)
                     model_param.grad.add_(proximal_grad)
