@@ -96,6 +96,7 @@ class Aggregator(NodeComponent):
         """
         raise NotImplementedError
 
+    @allow_no_addr_check
     def validate_models(self, models: list[P2PFLModel]) -> None:
         """
         Validate that all models are compatible with this aggregator.
