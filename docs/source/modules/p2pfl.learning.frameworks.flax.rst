@@ -3,8 +3,8 @@ p2pfl.learning.frameworks.flax package
 
 .. automodule:: p2pfl.learning.frameworks.flax
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------

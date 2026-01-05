@@ -3,8 +3,8 @@ p2pfl.learning.compression package
 
 .. automodule:: p2pfl.learning.compression
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------

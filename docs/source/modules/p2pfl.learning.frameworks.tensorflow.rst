@@ -3,8 +3,8 @@ p2pfl.learning.frameworks.tensorflow package
 
 .. automodule:: p2pfl.learning.frameworks.tensorflow
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Subpackages
 -----------

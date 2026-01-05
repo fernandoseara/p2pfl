@@ -3,8 +3,8 @@ p2pfl.learning package
 
 .. automodule:: p2pfl.learning
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Subpackages
 -----------

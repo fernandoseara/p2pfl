@@ -3,8 +3,8 @@ p2pfl.learning.frameworks.pytorch.callbacks package
 
 .. automodule:: p2pfl.learning.frameworks.pytorch.callbacks
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------

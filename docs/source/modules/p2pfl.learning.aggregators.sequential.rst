@@ -1,7 +1,7 @@
-p2pfl.learning.aggregators.aggregator module
+p2pfl.learning.aggregators.sequential module
 ============================================
 
-.. automodule:: p2pfl.learning.aggregators.aggregator
+.. automodule:: p2pfl.learning.aggregators.sequential
    :members:
    :undoc-members:
    :show-inheritance:
