@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2022 Pedro Guijas Bravo.
 #
@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""ML Framework tests."""
+"""Weight-based framework tests (PyTorch, TensorFlow, Flax)."""
 
 import contextlib
 from collections.abc import Generator
@@ -38,7 +38,6 @@ with contextlib.suppress(ImportError):
     from p2pfl.learning.frameworks.tensorflow.keras_dataset import KerasExportStrategy
     from p2pfl.learning.frameworks.tensorflow.keras_model import KerasModel
 
-
 with contextlib.suppress(ImportError):
     import jax
     import jax.numpy as jnp
@@ -55,9 +54,9 @@ with contextlib.suppress(ImportError):
     from p2pfl.learning.frameworks.pytorch.lightning_dataset import PyTorchExportStrategy, TorchvisionDatasetFactory
     from p2pfl.learning.frameworks.pytorch.lightning_model import LightningModel
 
-####
-# Params & Model
-####
+############################
+#    PyTorch Model Tests
+############################
 
 
 def test_get_set_params_torch():
@@ -76,6 +75,37 @@ def test_get_set_params_torch():
         assert np.all(layer_og + 1 == layer_new)
 
 
+def test_encoding_torch():
+    """Test encoding and decoding of parameters."""
+    p2pfl_model1 = model_build_fn_torch()
+    encoded_params = p2pfl_model1.encode_parameters()
+
+    p2pfl_model2 = model_build_fn_torch()
+    decoded_params, additional_info = p2pfl_model2.decode_parameters(encoded_params)
+    p2pfl_model2.set_parameters(decoded_params)
+    p2pfl_model2.additional_info = additional_info
+
+    assert encoded_params == p2pfl_model1.encode_parameters()
+    assert additional_info == p2pfl_model1.additional_info
+
+
+def test_wrong_encoding_torch():
+    """Test wrong encoding of parameters."""
+    p2pfl_model1 = model_build_fn_torch()
+    encoded_params = p2pfl_model1.encode_parameters()
+    mobile_net = torch.hub.load("pytorch/vision:v0.10.0", "mobilenet_v2", pretrained=False)
+    p2pfl_model2 = LightningModel(mobile_net)
+    decoded_params, _ = p2pfl_model2.decode_parameters(encoded_params)
+    # Check that raises
+    with pytest.raises(ModelNotMatchingError):
+        p2pfl_model2.set_parameters(decoded_params)
+
+
+###############################
+#    TensorFlow Model Tests
+###############################
+
+
 def test_get_set_params_tensorflow():
     """Test setting and getting parameters."""
     # Create the model
@@ -90,6 +120,35 @@ def test_get_set_params_tensorflow():
     # Check if the parameters are different (+1)
     for layer_og, layer_new in zip(params_og, p2pfl_model.get_parameters(), strict=False):
         assert np.all(layer_og + 1 == layer_new)
+
+
+def test_encoding_tensorflow():
+    """Test encoding and decoding of parameters."""
+    p2pfl_model1 = model_build_fn_tensorflow()
+    encoded_params = p2pfl_model1.encode_parameters()
+    p2pfl_model2 = model_build_fn_tensorflow()
+    decoded_params, additional_info = p2pfl_model2.decode_parameters(encoded_params)
+    p2pfl_model2.set_parameters(decoded_params)
+
+    assert encoded_params == p2pfl_model1.encode_parameters()
+    assert additional_info == p2pfl_model1.additional_info
+
+
+def test_wrong_encoding_tensorflow():
+    """Test wrong encoding of parameters."""
+    p2pfl_model1 = model_build_fn_tensorflow()
+    encoded_params = p2pfl_model1.encode_parameters()
+    mobile_net = tf.keras.applications.MobileNetV2((32, 32, 3), classes=10, weights=None)
+    p2pfl_model2 = KerasModel(mobile_net)
+    decoded_params = p2pfl_model2.decode_parameters(encoded_params)
+    # Check that raises
+    with pytest.raises(ModelNotMatchingError):
+        p2pfl_model2.set_parameters(decoded_params)
+
+
+####################################
+#    Flax Model Tests (disabled)
+####################################
 
 
 def __test_get_set_params_flax():
@@ -124,32 +183,6 @@ def __test_get_set_params_flax():
         assert np.all(layer_og + 1 == layer_new)
 
 
-def test_encoding_torch():
-    """Test encoding and decoding of parameters."""
-    p2pfl_model1 = model_build_fn_torch()
-    encoded_params = p2pfl_model1.encode_parameters()
-
-    p2pfl_model2 = model_build_fn_torch()
-    decoded_params, additional_info = p2pfl_model2.decode_parameters(encoded_params)
-    p2pfl_model2.set_parameters(decoded_params)
-    p2pfl_model2.additional_info = additional_info
-
-    assert encoded_params == p2pfl_model1.encode_parameters()
-    assert additional_info == p2pfl_model1.additional_info
-
-
-def test_encoding_tensorflow():
-    """Test encoding and decoding of parameters."""
-    p2pfl_model1 = model_build_fn_tensorflow()
-    encoded_params = p2pfl_model1.encode_parameters()
-    p2pfl_model2 = model_build_fn_tensorflow()
-    decoded_params, additional_info = p2pfl_model2.decode_parameters(encoded_params)
-    p2pfl_model2.set_parameters(decoded_params)
-
-    assert encoded_params == p2pfl_model1.encode_parameters()
-    assert additional_info == p2pfl_model1.additional_info
-
-
 def __test_encoding_flax():
     """Test encoding and decoding of parameters."""
     model1 = MLP_FLASK()
@@ -170,30 +203,6 @@ def __test_encoding_flax():
         assert p2pfl_model1.additional_info == p2pfl_model2.additional_info
 
 
-def test_wrong_encoding_torch():
-    """Test wrong encoding of parameters."""
-    p2pfl_model1 = model_build_fn_torch()
-    encoded_params = p2pfl_model1.encode_parameters()
-    mobile_net = torch.hub.load("pytorch/vision:v0.10.0", "mobilenet_v2", pretrained=False)
-    p2pfl_model2 = LightningModel(mobile_net)
-    decoded_params, _ = p2pfl_model2.decode_parameters(encoded_params)
-    # Check that raises
-    with pytest.raises(ModelNotMatchingError):
-        p2pfl_model2.set_parameters(decoded_params)
-
-
-def test_wrong_encoding_tensorflow():
-    """Test wrong encoding of parameters."""
-    p2pfl_model1 = model_build_fn_tensorflow()
-    encoded_params = p2pfl_model1.encode_parameters()
-    mobile_net = tf.keras.applications.MobileNetV2((32, 32, 3), classes=10, weights=None)
-    p2pfl_model2 = KerasModel(mobile_net)
-    decoded_params = p2pfl_model2.decode_parameters(encoded_params)
-    # Check that raises
-    with pytest.raises(ModelNotMatchingError):
-        p2pfl_model2.set_parameters(decoded_params)
-
-
 def __test_wrong_encoding_flax():
     """Test wrong encoding of parameters."""
     model1 = MLP_FLASK()
@@ -211,9 +220,9 @@ def __test_wrong_encoding_flax():
         p2pfl_model2.set_parameters(decoded_params)
 
 
-####
-# Data
-####
+###########################
+#    PyTorch Data Tests
+###########################
 
 
 def test_torchvision_dataset_factory_mnist():
@@ -263,8 +272,13 @@ def test_pytorch_export_strategy():
     assert sample["image"].size() == (1, 1, 28, 28)
 
 
+##############################
+#    TensorFlow Data Tests
+##############################
+
+
 def test_tensorflow_export_strategy():
-    """Test the PyTorchExportStrategy."""
+    """Test the KerasExportStrategy."""
     dataset = TorchvisionDatasetFactory.get_mnist(cache_dir=".", train=True, download=True)
     dataset.set_batch_size(1)
 
@@ -286,6 +300,11 @@ def test_tensorflow_export_strategy():
     # Check if the data is loaded correctly
     assert isinstance(sample[0], tf.Tensor)
     assert sample[0].shape == (1, 28, 28)
+
+
+###################################
+#    Flax Data Tests (disabled)
+###################################
 
 
 def __test_flax_export_strategy():
@@ -314,6 +333,11 @@ def __test_flax_export_strategy():
     assert y.shape == (1,)
 
 
+################################
+#    Learner Training Tests
+################################
+
+
 @pytest.mark.parametrize("build_model_fn", [model_build_fn_torch, model_build_fn_tensorflow])  # TODO: Flax
 def test_learner_train(build_model_fn):
     """Test the training and testing of the learner."""
@@ -331,7 +355,7 @@ def test_learner_train(build_model_fn):
     p2pfl_model = build_model_fn()
 
     # Dont care about the seed
-    Settings.general.seed = None
+    Settings.general.SEED = None
 
     node_name = "unknown-node"
     with contextlib.suppress(Exception):

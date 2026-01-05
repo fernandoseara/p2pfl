@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2024 Pedro Guijas Bravo.
 #
@@ -20,6 +20,7 @@
 
 import pickle
 import zlib
+from typing import Any
 
 import numpy as np
 import pytest
@@ -385,7 +386,7 @@ def test_manager_multiple_byte_compressors(compression_manager: CompressionManag
 
 def test_manager_unknown_strategy(compression_manager: CompressionManager):
     """Test that an unknown strategy raises an error."""
-    techniques = {"unknown": {}}
+    techniques: dict[str, dict[str, Any]] = {"unknown": {}}
     with pytest.raises(ValueError):
         _ = compression_manager.apply([np.random.randn(10, 10) for i in range(3)], {"dummy": "info"}, techniques)
 
@@ -393,7 +394,7 @@ def test_manager_unknown_strategy(compression_manager: CompressionManager):
 def test_manager_no_techniques(compression_manager: CompressionManager):
     """Test that an empty dictionary of techniques raises an error."""
     original_params = [np.random.randn(10, 10) for i in range(3)]
-    original_add_info = {}
+    original_add_info: dict[str, dict[str, Any]] = {}
     compressed_data = compression_manager.apply(original_params, original_add_info, {})
     deserialized_data = pickle.loads(compressed_data)
     assert deserialized_data["byte_compressor"] is None
@@ -408,8 +409,9 @@ def test_manager_only_compressor(compression_manager: CompressionManager):
     """Test only compressor (loseless)."""
     original_params = [np.random.randn(10, 10) for i in range(3)]
 
-    techniques = {"zlib": {"level : 5"}}
-    compressed_data = compression_manager.apply(original_params, {}, techniques)
+    techniques: dict[str, dict[str, Any]] = {"zlib": {"level": 5}}
+    additional_info: dict[str, dict[str, Any]] = {}
+    compressed_data = compression_manager.apply(original_params, additional_info, techniques)
     deserialized_data = pickle.loads(compressed_data)
     assert deserialized_data["byte_compressor"] == "zlib"
 
@@ -425,13 +427,13 @@ def test_manager_only_compressor(compression_manager: CompressionManager):
 def test_manager_multiple_techniques(compression_manager: CompressionManager):
     """Test the manager with multiple techniques."""
     original_params = [np.random.randn(10, 10) for i in range(3)]
-    techniques = {
+    techniques: dict[str, dict[str, Any]] = {
         "topk": {"k": 0.5},
         "zlib": {"level": 5},
         "low_rank": {"threshold": 0.7},
     }
-
-    compressed_data = compression_manager.apply(original_params, {}, techniques)
+    additional_info: dict[str, dict[str, Any]] = {}
+    compressed_data = compression_manager.apply(original_params, additional_info, techniques)
     deserialized_data = pickle.loads(compressed_data)
     assert deserialized_data["byte_compressor"] == "zlib"
 

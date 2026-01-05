@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""XGBoost framework tests."""
+"""Tree-based framework tests (XGBoost)."""
 
 import os
 
@@ -28,12 +28,11 @@ xgb = pytest.importorskip("xgboost", reason="XGBoost not available or missing Op
 from sklearn.datasets import make_classification, make_regression  # noqa: E402
 
 from p2pfl.learning.aggregators.fedxgbbagging import FedXgbBagging  # noqa: E402
-from p2pfl.learning.aggregators.fedxgbcyclic import FedXgbCyclic  # noqa: E402
 from p2pfl.learning.frameworks.xgboost.xgboost_model import XGBoostModel  # noqa: E402
 
-####
-# Model Serialization Tests
-####
+####################################
+#    XGBoost Serialization Tests
+####################################
 
 
 def test_xgboost_get_set_params_classifier():
@@ -48,11 +47,29 @@ def test_xgboost_get_set_params_classifier():
     # Wrap in P2PFLModel
     p2pfl_model = XGBoostModel(model)
 
-    # Get parameters
+    # Get parameters - now returns dict (parsed JSON structure)
     params = p2pfl_model.get_parameters()
-    assert len(params) == 1
-    assert isinstance(params[0], np.ndarray)
-    assert params[0].dtype == np.uint8
+    assert isinstance(params, dict)
+
+    # Verify the tree structure is correct
+    assert "learner" in params
+    assert "gradient_booster" in params["learner"]
+    model_data = params["learner"]["gradient_booster"]["model"]
+    assert "trees" in model_data
+    assert "tree_info" in model_data
+    assert "gbtree_model_param" in model_data
+
+    # Verify correct number of trees
+    num_trees = int(model_data["gbtree_model_param"]["num_trees"])
+    assert num_trees == 5  # n_estimators=5
+    assert len(model_data["trees"]) == 5
+    assert len(model_data["tree_info"]) == 5
+
+    # Verify each tree has expected structure
+    for tree in model_data["trees"]:
+        assert "base_weights" in tree
+        assert "left_children" in tree
+        assert "right_children" in tree
 
     # Create a new model and set parameters
     new_model = xgb.XGBClassifier(n_estimators=5, max_depth=3, random_state=42)
@@ -67,23 +84,14 @@ def test_xgboost_get_set_params_classifier():
 
 def test_xgboost_get_set_params_regressor():
     """Test setting and getting parameters with XGBRegressor."""
-    # Create sample data
     X, y = make_regression(n_samples=100, n_features=20, random_state=42)
 
-    # Create and train a regressor
     model = xgb.XGBRegressor(n_estimators=5, max_depth=3, random_state=42)
     model.fit(X, y)
-
-    # Wrap in P2PFLModel
     p2pfl_model = XGBoostModel(model)
 
-    # Get parameters
+    # Get/set round-trip
     params = p2pfl_model.get_parameters()
-    assert len(params) == 1
-    assert isinstance(params[0], np.ndarray)
-    assert params[0].dtype == np.uint8
-
-    # Create a new model and set parameters
     new_model = xgb.XGBRegressor(n_estimators=5, max_depth=3, random_state=42)
     p2pfl_model2 = XGBoostModel(new_model)
     p2pfl_model2.set_parameters(params)
@@ -95,28 +103,23 @@ def test_xgboost_get_set_params_regressor():
 
 
 def test_xgboost_encoding_decoding():
-    """Test encoding and decoding of parameters with compression."""
-    # Create sample data
+    """Test encoding and decoding preserves model state."""
     X, y = make_classification(n_samples=100, n_features=20, n_classes=2, random_state=42)
 
-    # Create and train a model
     model = xgb.XGBClassifier(n_estimators=5, max_depth=3, random_state=42)
     model.fit(X, y)
-
-    # Wrap in P2PFLModel
     p2pfl_model1 = XGBoostModel(model)
-    encoded_params = p2pfl_model1.encode_parameters()
 
-    # Create a new model and decode
-    new_model = xgb.XGBClassifier(n_estimators=5, max_depth=3, random_state=42)
-    p2pfl_model2 = XGBoostModel(new_model)
-    decoded_params, additional_info = p2pfl_model2.decode_parameters(encoded_params)
+    # Encode -> decode -> set round-trip
+    encoded = p2pfl_model1.encode_parameters()
+    p2pfl_model2 = XGBoostModel(xgb.XGBClassifier())
+    decoded_params, additional_info = p2pfl_model2.decode_parameters(encoded)
     p2pfl_model2.set_parameters(decoded_params)
-    p2pfl_model2.additional_info = additional_info
 
-    # Verify encoding is consistent
-    assert encoded_params == p2pfl_model1.encode_parameters()
-    assert additional_info == p2pfl_model1.additional_info
+    # Verify predictions match
+    pred1 = p2pfl_model1.get_model().predict(X)
+    pred2 = p2pfl_model2.get_model().predict(X)
+    assert np.array_equal(pred1, pred2)
 
 
 def test_xgboost_params_preserve_model_state():
@@ -200,61 +203,9 @@ def test_xgboost_incremental_training():
     assert new_accuracy >= initial_accuracy
 
 
-####
-# Aggregation Tests
-####
-
-
-def test_fedxgbbagging_aggregation():
-    """Test FedXgbBagging with byte-based serialization."""
-    # Create sample data
-    X, y = make_classification(n_samples=100, n_features=20, n_classes=2, random_state=42)
-
-    # Create and train multiple models
-    models = []
-    for i in range(3):
-        model = xgb.XGBClassifier(n_estimators=3, max_depth=2, random_state=42 + i)
-        model.fit(X, y)
-        p2pfl_model = XGBoostModel(model, num_samples=100, contributors=[f"node{i}"])
-        models.append(p2pfl_model)
-
-    # Aggregate using FedXgbBagging
-    aggregator = FedXgbBagging()
-    aggregator.set_addr("test_aggregator")
-    aggregated_model = aggregator.aggregate(models)
-
-    # Verify aggregation worked
-    assert aggregated_model is not None
-    assert aggregated_model.get_num_samples() == 300
-    assert set(aggregated_model.get_contributors()) == {"node0", "node1", "node2"}
-
-    # Verify aggregated model can make predictions
-    pred = aggregated_model.get_model().predict(X)
-    assert len(pred) == len(y)
-
-
-def test_fedxgbcyclic_aggregation():
-    """Test FedXgbCyclic still works with updated serialization."""
-    # Create sample data
-    X, y = make_classification(n_samples=100, n_features=20, n_classes=2, random_state=42)
-
-    # Create and train multiple models
-    models = []
-    for i in range(3):
-        model = xgb.XGBClassifier(n_estimators=3, max_depth=2, random_state=42 + i)
-        model.fit(X, y)
-        p2pfl_model = XGBoostModel(model, num_samples=100, contributors=[f"node{i}"])
-        models.append(p2pfl_model)
-
-    # Aggregate using FedXgbCyclic
-    aggregator = FedXgbCyclic()
-    aggregator.set_addr("test_aggregator")
-    aggregated_model = aggregator.aggregate(models)
-
-    # Verify aggregation worked (should return last model)
-    assert aggregated_model is not None
-    assert aggregated_model.get_num_samples() == 100
-    assert aggregated_model.get_contributors() == ["node2"]
+##############################
+#    XGBoost Model Copy Tests
+##############################
 
 
 def test_xgboost_build_copy():
@@ -283,33 +234,80 @@ def test_xgboost_build_copy():
     assert np.array_equal(pred1, pred2)
 
 
-####
-# Learner Integration Tests
-####
+##################################
+#    XGBoost Metadata Tests
+##################################
 
 
 def test_xgboost_learner_fit():
-    """Test full learner workflow with XGBoost."""
-    # Create sample data directly (simpler than MNIST for XGBoost)
+    """Test XGBoostModel with metadata (num_samples, contributors)."""
     X, y = make_classification(n_samples=100, n_features=20, n_classes=2, random_state=42)
 
-    # Create a trained model
     model = xgb.XGBClassifier(n_estimators=5, max_depth=3, random_state=42)
     model.fit(X, y)
-
-    # Wrap in P2PFLModel
     p2pfl_model = XGBoostModel(model, num_samples=100, contributors=["node1"])
 
-    # Verify the model can be serialized and deserialized
-    params = p2pfl_model.get_parameters()
-    assert len(params) == 1
+    # Verify metadata
+    assert p2pfl_model.get_num_samples() == 100
+    assert p2pfl_model.get_contributors() == ["node1"]
 
-    # Create a new model and load params
-    new_model = xgb.XGBClassifier()
-    p2pfl_model2 = XGBoostModel(new_model)
+    # Verify round-trip preserves predictions
+    params = p2pfl_model.get_parameters()
+    p2pfl_model2 = XGBoostModel(xgb.XGBClassifier())
     p2pfl_model2.set_parameters(params)
+    assert np.array_equal(p2pfl_model.get_model().predict(X), p2pfl_model2.get_model().predict(X))
+
+
+##################################
+#    XGBoost End-to-End Tests
+##################################
+
+
+def test_xgboost_e2e_dict_params_workflow():
+    """End-to-end: train -> aggregate -> serialize -> deserialize -> predict."""
+    X, y = make_classification(n_samples=200, n_features=20, n_classes=2, random_state=42)
+    X_train, X_test = X[:150], X[150:]
+    y_train = y[:150]
+
+    # Train 3 models
+    trained_models = []
+    for i in range(3):
+        model = xgb.XGBClassifier(n_estimators=2, max_depth=2, random_state=42 + i)
+        model.fit(X_train, y_train)
+        trained_models.append(XGBoostModel(model, num_samples=50, contributors=[f"node{i}"]))
+
+    # Aggregate
+    aggregator = FedXgbBagging()
+    aggregator.set_addr("e2e_test")
+    aggregated_model = aggregator.aggregate(trained_models)
+
+    # Verify tree count: 2 + 1 + 1 = 4 trees
+    agg_params = aggregated_model.get_parameters()
+    assert len(agg_params["learner"]["gradient_booster"]["model"]["trees"]) == 4
+
+    # Serialize -> deserialize round-trip
+    serialized = aggregated_model.encode_parameters()
+    restored_model = XGBoostModel(xgb.XGBClassifier())
+    restored_model.set_parameters(serialized)
 
     # Verify predictions match
-    pred1 = p2pfl_model.get_model().predict(X)
-    pred2 = p2pfl_model2.get_model().predict(X)
-    assert np.array_equal(pred1, pred2)
+    pred_agg = aggregated_model.get_model().predict(X_test)
+    pred_restored = restored_model.get_model().predict(X_test)
+    assert np.array_equal(pred_agg, pred_restored)
+
+
+def test_xgboost_compression_with_dict_params():
+    """Test that ByteCompressor works with dict params (TensorCompressors skipped)."""
+    X, y = make_classification(n_samples=100, n_features=20, n_classes=2, random_state=42)
+
+    model = xgb.XGBClassifier(n_estimators=3, max_depth=2, random_state=42)
+    model.fit(X, y)
+
+    # Test with zlib compression (ByteCompressor - should work with dict params)
+    p2pfl_model = XGBoostModel(model, compression={"zlib": {}})
+    encoded = p2pfl_model.encode_parameters()
+
+    # Decode and verify predictions match
+    restored = XGBoostModel(xgb.XGBClassifier())
+    restored.set_parameters(encoded)
+    assert np.array_equal(p2pfl_model.get_model().predict(X), restored.get_model().predict(X))
