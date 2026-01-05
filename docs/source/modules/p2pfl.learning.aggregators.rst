@@ -3,8 +3,8 @@ p2pfl.learning.aggregators package
 
 .. automodule:: p2pfl.learning.aggregators
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Subpackages
 -----------
@@ -24,5 +24,7 @@ Submodules
    p2pfl.learning.aggregators.fedavg
    p2pfl.learning.aggregators.fedmedian
    p2pfl.learning.aggregators.fedprox
+   p2pfl.learning.aggregators.fedxgbbagging
    p2pfl.learning.aggregators.krum
    p2pfl.learning.aggregators.scaffold
+   p2pfl.learning.aggregators.sequential

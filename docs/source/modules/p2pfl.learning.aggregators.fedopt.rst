@@ -3,8 +3,8 @@ p2pfl.learning.aggregators.fedopt package
 
 .. automodule:: p2pfl.learning.aggregators.fedopt
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------

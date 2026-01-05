@@ -3,8 +3,8 @@ p2pfl.communication.commands package
 
 .. automodule:: p2pfl.communication.commands
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Subpackages
 -----------

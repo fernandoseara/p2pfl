@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -81,6 +81,8 @@ def log_test_start_and_end(request):
 #   Really important note: When training (pytorch) with a fixed seed and the process is shared, different training speeds affect to the
 #   stochastic process, so is not fully deterministic!.
 #
+@pytest.mark.e2e_train
+@pytest.mark.uses_ray
 @pytest.mark.parametrize("x", [(2, 2), (6, 3)])
 @pytest.mark.parametrize("model_build_fn", [model_build_fn_pytorch, model_build_fn_tensorflow])
 def test_convergence(x, model_build_fn):
@@ -147,7 +149,6 @@ def test_convergence(x, model_build_fn):
         global_logs = logger.get_global_logs()
         exp_logs = global_logs.get(exp_name)
         if exp_logs is None:
-            # raise: experiment logs not found
             raise ValueError(f"Experiment logs not found for exp={exp_name}")
 
         # collect per-node accuracy time series
@@ -238,47 +239,3 @@ def _test_node_down_on_learning(n):
 
     for node in nodes[:-1]:
         node.stop()
-
-
-#####
-# Training with other frameworks
-#####
-
-
-@pytest.mark.parametrize("build_model_fn", [model_build_fn_pytorch, model_build_fn_tensorflow])
-def test_framework_node(build_model_fn):
-    """Test a TensorFlow node."""
-    # Data
-    data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
-    partitions = data.generate_partitions(400, RandomIIDPartitionStrategy)
-
-    # Create the model
-    p2pfl_model = build_model_fn()
-
-    # Nodes
-    n1 = Node(p2pfl_model, partitions[0], protocol=MemoryCommunicationProtocol())
-    n2 = Node(p2pfl_model.build_copy(), partitions[1], protocol=MemoryCommunicationProtocol())
-
-    # Start
-    n1.start()
-    n2.start()
-
-    # Connect
-    n2.connect(n1.addr)
-    wait_convergence([n1, n2], 1, only_direct=True)
-
-    # Start Learning
-    n1.set_start_learning(rounds=1, epochs=1)
-
-    # Wait
-    wait_to_finish([n1, n2], timeout=120)
-
-    # Check if execution is correct
-    for node in [n1, n2]:
-        assert "RoundFinishedStage" in node.learning_workflow.history
-
-    check_equal_models([n1, n2])
-
-    # Stop
-    n1.stop()
-    n2.stop()

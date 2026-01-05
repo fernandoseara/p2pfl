@@ -106,6 +106,10 @@ class WebP2PFLogger(LoggerDecorator):
 
     def _load_env_file(self) -> None:
         """Load environment variables from ~/.p2pfl_env if it exists."""
+        # Skip loading in test mode to avoid interference with tests
+        if os.environ.get("P2PFL_TESTING", "").lower() in ("1", "true"):
+            return
+
         # Skip if environment variables are already set
         if "P2PFL_WEB_LOGGER_URL" in os.environ and "P2PFL_WEB_LOGGER_KEY" in os.environ:
             return

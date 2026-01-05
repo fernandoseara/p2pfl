@@ -3,8 +3,8 @@ p2pfl.communication.protocols.protobuff package
 
 .. automodule:: p2pfl.communication.protocols.protobuff
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Subpackages
 -----------

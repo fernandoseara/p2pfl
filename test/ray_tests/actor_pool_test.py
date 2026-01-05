@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2025 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,6 +21,9 @@ import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# All tests in this module require Ray
+pytestmark = pytest.mark.uses_ray
 
 with contextlib.suppress(ImportError):
     from p2pfl.learning.frameworks.simulation.actor_pool import SuperActorPool

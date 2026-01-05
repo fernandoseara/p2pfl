@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2025 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,33 +52,33 @@ class TopologyFactory:
             num_nodes: The number of nodes in the network.
 
         """
-        if isinstance(topology_type, str):
-            topology_type = TopologyType(topology_type)
+        # Use string value to be robust against different enum instantiations
+        topo_value = topology_type if isinstance(topology_type, str) else topology_type.value
 
         matrix = np.zeros((num_nodes, num_nodes), dtype=int)  # Initialize as NumPy array
 
-        if topology_type == TopologyType.STAR:
+        if topo_value == TopologyType.STAR.value:
             matrix[0, 1:] = 1
             matrix[1:, 0] = 1
-        elif topology_type == TopologyType.FULL:
+        elif topo_value == TopologyType.FULL.value:
             matrix[:] = 1  # Set all to 1
             np.fill_diagonal(matrix, 0)  # Set diagonal to 0
-        elif topology_type == TopologyType.LINE:
+        elif topo_value == TopologyType.LINE.value:
             for i in range(num_nodes - 1):
                 matrix[i, i + 1] = 1
                 matrix[i + 1, i] = 1
-        elif topology_type == TopologyType.RING:
+        elif topo_value == TopologyType.RING.value:
             for i in range(num_nodes):
                 matrix[i, (i + 1) % num_nodes] = 1
                 matrix[(i + 1) % num_nodes, i] = 1
-        elif topology_type in [TopologyType.RANDOM_2, TopologyType.RANDOM_3, TopologyType.RANDOM_4]:
+        elif topo_value in [TopologyType.RANDOM_2.value, TopologyType.RANDOM_3.value, TopologyType.RANDOM_4.value]:
             # Erdős–Rényi G(n, M) model: select M edges randomly
             if num_nodes <= 1:
                 return matrix  # No edges possible for 0 or 1 node
 
-            if topology_type == TopologyType.RANDOM_2:
+            if topo_value == TopologyType.RANDOM_2.value:
                 avg_degree = 2
-            elif topology_type == TopologyType.RANDOM_3:
+            elif topo_value == TopologyType.RANDOM_3.value:
                 avg_degree = 3
             else:  # RANDOM_4
                 avg_degree = 4
@@ -106,7 +106,7 @@ class TopologyFactory:
                     matrix[i, j] = 1
                     matrix[j, i] = 1
         else:
-            raise ValueError(f"Unsupported topology type: {topology_type}")
+            raise ValueError(f"Unsupported topology type: {topo_value}")
 
         return matrix
 

@@ -3,8 +3,8 @@ p2pfl.management package
 
 .. automodule:: p2pfl.management
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Subpackages
 -----------

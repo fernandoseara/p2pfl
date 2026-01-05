@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -278,7 +278,7 @@ def __train_with_seed(s, n, r, model_build_fn, disable_ray: bool = False):
 
     # Data
     data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
-    partitions = data.generate_partitions(n * 50, RandomIIDPartitionStrategy)
+    partitions = data.generate_partitions(n * 50, RandomIIDPartitionStrategy())
 
     # Node Creation
     nodes = []
@@ -298,7 +298,8 @@ def __train_with_seed(s, n, r, model_build_fn, disable_ray: bool = False):
     wait_to_finish(nodes, timeout=240)
 
     # Stop Nodes
-    [n.stop() for n in nodes]
+    for node in nodes:
+        node.stop()
 
     return exp_name
 

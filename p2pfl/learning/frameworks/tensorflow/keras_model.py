@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2024 Pedro Guijas Bravo.
 #
@@ -25,7 +25,7 @@ import tensorflow as tf  # type: ignore
 
 from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
-from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
+from p2pfl.learning.frameworks.p2pfl_model import WeightBasedModel
 
 #####################
 #    KerasModel     #
@@ -38,7 +38,7 @@ class ModelNotBuiltError(Exception):
     pass
 
 
-class KerasModel(P2PFLModel):
+class KerasModel(WeightBasedModel):
     """
     P2PFL model abstraction for TensorFlow/Keras.
 

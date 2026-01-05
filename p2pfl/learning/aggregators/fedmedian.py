@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,13 +20,16 @@
 
 import numpy as np
 
-from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError
+from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError, WeightAggregator
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
-class FedMedian(Aggregator):
+class FedMedian(WeightAggregator):
     """
     Federated Median (FedMedian) [Yin et al., 2018].
+
+    Inherits from ``WeightAggregator`` as FedMedian works with neural network
+    weight tensors.
 
     Paper: https://arxiv.org/pdf/1803.01498v1.pdf
     """
@@ -37,15 +40,15 @@ class FedMedian(Aggregator):
         """Initialize the aggregator."""
         super().__init__(disable_partial_aggregation=disable_partial_aggregation)
 
-    def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
+    def _aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """
         Compute the median of the models.
 
         Args:
-            models: Dict with the models (node: model, num_samples).
+            models: List models to aggregate.
 
         Returns:
-            A P2PFLModel with the aggregated
+            A P2PFLModel with the median weights.
 
         """
         # Check if there are models to aggregate

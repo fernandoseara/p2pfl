@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,6 +30,9 @@ from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 class FedOptBase(FedAvg):
     """
     Base class for Federated Optimization (FedOpt) family [Reddi et al., 2020].
+
+    Inherits from ``FedAvg`` (which inherits from ``WeightAggregator``)
+    as FedOpt algorithms work with neural network weight tensors.
 
     This class extends FedAvg to provide common functionality for adaptive
     federated optimization algorithms like FedAdagrad, FedAdam, and FedYogi.
@@ -61,20 +64,20 @@ class FedOptBase(FedAvg):
         self.current_weights: list[np.ndarray] = []  # x^t: current global model parameters
         self.m_t: list[np.ndarray] = []  # momentum (first moment)
 
-    def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
+    def _aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """
         Aggregate models using FedOpt algorithm.
 
         Args:
-            models: List of P2PFLModel objects to aggregate.
+            models: List of models to aggregate.
 
         Returns:
             A P2PFLModel with the optimized parameters.
 
         """
-        # Compute weighted average of client updates
+        # Compute weighted average of client updates using FedAvg
         # Δt = (1/|S|) Σ Δt_i where Δt_i = client_model - global_model
-        fedavg_model = super().aggregate(models)
+        fedavg_model = super()._aggregate(models)
         fedavg_weights = fedavg_model.get_parameters()
 
         # Initialize global model on first round

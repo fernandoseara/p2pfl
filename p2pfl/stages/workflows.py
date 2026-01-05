@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -31,10 +31,14 @@ class StageWokflow:
         self.current_stage = first_stage
         self.history: list[str] = []
         self.finished = False
+        self.failed = False
+        self.error: Exception | None = None
 
     def run(self, **kwargs) -> None:
         """Run the workflow."""
         self.finished = False
+        self.failed = False
+        self.error = None
         # get state (need info from state)
         state: NodeState | None = kwargs.get("state")
         if state:

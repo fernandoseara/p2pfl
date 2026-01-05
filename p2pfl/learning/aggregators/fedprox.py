@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,10 +26,21 @@ class FedProx(FedAvg):
     """
     FedProx - Federated Proximal [Li et al., 2018].
 
+    Inherits from ``FedAvg`` (which inherits from ``WeightAggregator``)
+    as FedProx works with neural network weight tensors.
+
     FedProx extends FedAvg by adding a proximal term to the local objective
     function to handle system and statistical heterogeneity.
 
-    Paper: https://arxiv.org/abs/1812.06127
+    Note:
+        Requires the ``fedprox`` callback (e.g., ``FedProxCallback`` for PyTorch).
+
+        - Aggregator passes ``proximal_mu`` via ``additional_info``
+        - Callback snapshots model params at training start as the global reference
+        - During training, callback adds proximal penalty: ``μ × (w - w_global)``
+
+        Paper: https://arxiv.org/abs/1812.06127
+
     """
 
     def __init__(self, proximal_mu: float = 0.01, disable_partial_aggregation: bool = False) -> None:
@@ -45,26 +56,23 @@ class FedProx(FedAvg):
         super().__init__(disable_partial_aggregation=disable_partial_aggregation)
         self.proximal_mu = proximal_mu
 
-    def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
+    def _aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """
         Aggregate models using FedAvg and pass the proximal coefficient.
 
         Args:
-            models: List of P2PFLModel objects to aggregate.
+            models: List of models to aggregate.
 
         Returns:
             A P2PFLModel with the aggregated parameters and proximal coefficient.
 
         """
         # Use FedAvg aggregation
-        aggregated_model = super().aggregate(models)
+        aggregated_model = super()._aggregate(models)
 
-        # Add proximal_mu to the model's additional info for client-side use
+        # Set the proximal_mu for the callback
+        # Note: initial params are captured by the callback at training start
         aggregated_model.add_info("fedprox", {"proximal_mu": self.proximal_mu})
-
-        # Also store the initial parameters for the proximal term calculation
-        aggregated_model.additional_info["initial_round_params"] = aggregated_model.get_parameters()
-        aggregated_model.additional_info["proximal_mu"] = self.proximal_mu
 
         return aggregated_model
 

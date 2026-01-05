@@ -3,8 +3,8 @@ p2pfl.management.logger package
 
 .. automodule:: p2pfl.management.logger
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------

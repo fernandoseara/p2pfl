@@ -3,8 +3,8 @@ p2pfl.learning.dataset package
 
 .. automodule:: p2pfl.learning.dataset
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------
