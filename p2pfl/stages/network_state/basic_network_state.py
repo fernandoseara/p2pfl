@@ -51,7 +51,7 @@ class BasicNetworkState(NetworkState):
         """Add a new peer to the network state."""
         if address not in self._peer_states:
             self._peer_states[address] = PeerNodeState(
-                round_number=-1,
+                round_number=0, # Initial round number
                 model_updated=None,
                 aggregated_from=[],
                 train_set_votes={},

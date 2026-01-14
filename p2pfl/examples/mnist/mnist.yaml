@@ -24,7 +24,7 @@ experiment:
   epochs: 1
   trainset_size: 4
   seed: 666
-  workflow: async
+  workflow: basic
   wait_timeout: 60  # Timeout in minutes for wait_to_finish (default: 60 minutes)
 
   # Dataset settings

@@ -29,7 +29,7 @@ dependencies = [
     "protobuf>=5.29.1",
     "pyyaml>=6.0.2,<7",
     "click==8.1.8",
-    "transitions>=0.9.2",
+    "transitions>=0.9.3",
 ]
 
 [project.optional-dependencies]
