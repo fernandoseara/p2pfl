@@ -18,7 +18,6 @@
 """In-memory server."""
 
 import threading
-from typing import Optional
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.communication.protocols.protobuff.gossiper import Gossiper
@@ -77,7 +76,7 @@ class MemoryServer(ProtobuffServer):
         self,
         gossiper: Gossiper,
         neighbors: Neighbors,
-        commands: Optional[list[Command]] = None,
+        commands: list[Command] | None = None,
     ) -> None:
         """Initialize the in-memory server."""
         # Super
@@ -87,9 +86,9 @@ class MemoryServer(ProtobuffServer):
         self.__singleton_dict = SingletonDict()
         self.__terminated = threading.Event()
 
-    def set_addr(self, addr: str) -> str:
-        """Set the addr of the node."""
-        return super().set_addr(AddressCounter().get(addr))
+    def set_address(self, address: str) -> str:
+        """Set the address of the node."""
+        return super().set_address(AddressCounter().get(address))
 
     ####
     # Management

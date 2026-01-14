@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING
 
 from p2pfl.stages.workflows.models.workflow_model import WorkflowModel
 
-if TYPE_CHECKING:
-    from p2pfl.node import Node
 
 class LearningWorkflowModel(WorkflowModel):
     """Base for the training workflow."""
@@ -34,7 +32,6 @@ class LearningWorkflowModel(WorkflowModel):
         """Initialize the learning workflow model."""
         self._background_tasks: set[asyncio.Task] = set()
         super().__init__(*args, **kwargs)
-
 
     async def is_finished(self) -> bool:
         """Check if the workflow has finished."""
@@ -47,7 +44,8 @@ class LearningWorkflowModel(WorkflowModel):
         """Handle the next stage event."""
         raise RuntimeError("Should be overridden!")
 
-    async def setup(self,
+    async def setup(
+        self,
         is_initiator: bool,
         experiment_name: str,
         rounds: int,

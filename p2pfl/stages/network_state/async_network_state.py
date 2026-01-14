@@ -27,17 +27,19 @@ from p2pfl.stages.network_state.network_state import NetworkState
 if TYPE_CHECKING:
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
+
 @dataclass
 class PeerNodeState:
     """Class to store the state of a peer node."""
 
-    round_number: int # The index of the local iteration of the peer (tl_j,i)
-    push_sum_weight: float # The weight of the push sum algorithm (μ)
-    model_updated: P2PFLModel|None # The model updated by this peer (w)
-    losses: list[float] # The loss of the model updated by this peer in all rounds (f_i(ω))
-    push_time: int # The last model push time (tp_j,i)
-    mixing_weight: float # Mixing weights for the push sum algorithm (pt_j,i)
-    p2p_updating_idx: int # Index of the latest P2P updating process (t_j)
+    round_number: int  # The index of the local iteration of the peer (tl_j,i)
+    push_sum_weight: float  # The weight of the push sum algorithm (μ)
+    model_updated: P2PFLModel | None  # The model updated by this peer (w)
+    losses: list[float]  # The loss of the model updated by this peer in all rounds (f_i(ω))
+    push_time: int  # The last model push time (tp_j,i)
+    mixing_weight: float  # Mixing weights for the push sum algorithm (pt_j,i)
+    p2p_updating_idx: int  # Index of the latest P2P updating process (t_j)
+
 
 class AsyncNetworkState(NetworkState):
     """Network state to keep track of peer nodes and their states."""
@@ -52,12 +54,12 @@ class AsyncNetworkState(NetworkState):
         if address not in self._peer_states:
             self._peer_states[address] = PeerNodeState(
                 round_number=0,
-                push_sum_weight=1.0,        # μ(0)
-                model_updated=None,         # w(0)
-                losses=[],                  # f_i(ω(0))
-                push_time=0,                # tp_j,i(0)
-                mixing_weight=1.0,          # pt_j,i(0)
-                p2p_updating_idx=0,         # t_j(0)
+                push_sum_weight=1.0,  # μ(0)
+                model_updated=None,  # w(0)
+                losses=[],  # f_i(ω(0))
+                push_time=0,  # tp_j,i(0)
+                mixing_weight=1.0,  # pt_j,i(0)
+                p2p_updating_idx=0,  # t_j(0)
             )
         else:
             raise ValueError(f"Address {address} already exists in network state.")
@@ -211,7 +213,7 @@ class AsyncNetworkState(NetworkState):
         for state in self._peer_states.values():
             if state.model_updated:
                 contributors.extend(state.model_updated.get_contributors())
-        return list(set(contributors)) # Remove duplicates
+        return list(set(contributors))  # Remove duplicates
 
     def get_all_rounds(self) -> dict[str, int]:
         """Return all rounds by peer."""

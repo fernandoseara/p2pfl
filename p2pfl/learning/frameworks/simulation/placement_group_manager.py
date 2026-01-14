@@ -64,10 +64,7 @@ class PlacementGroupManager:
         if bundles is None:
             available = ray.cluster_resources()
             # Filter out internal resources
-            filtered = {
-                k: v for k, v in available.items()
-                if not k.startswith("node:") and not k.startswith("object_store")
-            }
+            filtered = {k: v for k, v in available.items() if not k.startswith("node:") and not k.startswith("object_store")}
 
             bundles = []
             cpu = filtered.pop("CPU", 0)

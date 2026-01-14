@@ -18,9 +18,8 @@
 
 """Protocol agnostic neighbor management."""
 
-import threading
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from p2pfl.communication.protocols.exceptions import NeighborNotConnectedError
 from p2pfl.communication.protocols.protobuff.client import ProtobuffClient
@@ -141,14 +140,17 @@ class Neighbors(NodeComponent):
             return {k: v for k, v in neis.items() if v[0].is_connected() and not v[0].has_temporal_connection()}
         return neis
 
-    def exists(self, addr: str) -> bool:
+    def exists(self, addr: str, only_direct: bool = False) -> bool:
         """
         Check if a neighbor exists in the neighbors list.
 
         Args:
             addr: Address of the neighbor to check.
+            only_direct: Flag to check only direct neighbors.
 
         """
+        if only_direct:
+            return addr in self.neis and self.neis[addr][0].is_connected() and not self.neis[addr][0].has_temporal_connection()
         return addr in self.neis
 
     async def clear_neighbors(self) -> None:

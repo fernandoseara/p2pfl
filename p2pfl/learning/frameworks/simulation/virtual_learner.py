@@ -18,13 +18,9 @@
 """Virtual Node Learner."""
 
 import traceback
-from typing import Dict, List, Union
 
-import numpy as np
 import ray
 
-from p2pfl.learning.aggregators.aggregator import Aggregator
-from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.simulation.actor_pool import VirtualLearnerActor
@@ -44,7 +40,7 @@ class VirtualNodeLearner(Learner):
         self.actor = VirtualLearnerActor.options(
             placement_group=pg,
             placement_group_capture_child_tasks=True,
-        #).remote(learner_class(**learner_args))
+            # ).remote(learner_class(**learner_args))
         ).remote(learner)
 
     async def fit(self) -> None:
@@ -76,7 +72,7 @@ class VirtualNodeLearner(Learner):
         # TODO: Need to implement this!
         raise NotImplementedError
 
-    async def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> dict[str, float]:
         """
         Evaluate the model with actual parameters.
 
@@ -91,18 +87,51 @@ class VirtualNodeLearner(Learner):
             logger.error(self.address, f"An error occurred during remote evaluation: {ex}")
             raise ex
 
-
     # Proxy configuration & lifecycle methods
-    def set_P2PFLModel(self, model) -> None: ray.get(self.actor.set_P2PFLModel.remote(model))
-    def get_P2PFLModel(self) -> P2PFLModel: return ray.get(self.actor.get_P2PFLModel.remote())
-    def set_data(self, data) -> None: ray.get(self.actor.set_data.remote(data))
-    def get_data(self): return ray.get(self.actor.get_data.remote())
-    def indicate_aggregator(self, aggregator) -> None: ray.get(self.actor.indicate_aggregator.remote(aggregator))
-    def get_epochs(self) -> int: return ray.get(self.actor.get_epochs.remote())
-    def set_epochs(self, epochs: int) -> None: ray.get(self.actor.set_epochs.remote(epochs))
-    def get_steps_per_epoch(self) -> int: return ray.get(self.actor.get_steps_per_epoch.remote())
-    def set_steps_per_epoch(self, steps: int) -> None: ray.get(self.actor.set_steps_per_epoch.remote(steps))
-    def update_callbacks_with_model_info(self) -> None: ray.get(self.actor.update_callbacks_with_model_info.remote())
-    def add_callback_info_to_model(self) -> None: ray.get(self.actor.add_callback_info_to_model.remote())
-    def get_framework(self) -> str: return ray.get(self.actor.get_framework.remote())
-    def interrupt_fit(self) -> None: raise NotImplementedError
+    def set_model(self, model) -> None:
+        """Set the P2PFL model on the remote actor."""
+        ray.get(self.actor.set_model.remote(model))
+
+    def get_model(self) -> P2PFLModel:
+        """Get the P2PFL model from the remote actor."""
+        return ray.get(self.actor.get_model.remote())
+
+    def set_data(self, data) -> None:
+        """Set the data on the remote actor."""
+        ray.get(self.actor.set_data.remote(data))
+
+    def get_data(self):
+        """Get the data from the remote actor."""
+        return ray.get(self.actor.get_data.remote())
+
+    def indicate_aggregator(self, aggregator) -> None:
+        """Indicate the aggregator on the remote actor."""
+        ray.get(self.actor.indicate_aggregator.remote(aggregator))
+
+    def get_epochs(self) -> int:
+        """Get the number of epochs from the remote actor."""
+        return ray.get(self.actor.get_epochs.remote())
+
+    def set_epochs(self, epochs: int) -> None:
+        """Set the number of epochs on the remote actor."""
+        ray.get(self.actor.set_epochs.remote(epochs))
+
+    def get_steps_per_epoch(self) -> int:
+        """Get the steps per epoch from the remote actor."""
+        return ray.get(self.actor.get_steps_per_epoch.remote())
+
+    def set_steps_per_epoch(self, steps: int) -> None:
+        """Set the steps per epoch on the remote actor."""
+        ray.get(self.actor.set_steps_per_epoch.remote(steps))
+
+    def update_callbacks_with_model_info(self) -> None:
+        """Update callbacks with model info on the remote actor."""
+        ray.get(self.actor.update_callbacks_with_model_info.remote())
+
+    def add_callback_info_to_model(self) -> None:
+        """Add callback info to model on the remote actor."""
+        ray.get(self.actor.add_callback_info_to_model.remote())
+
+    def get_framework(self) -> str:
+        """Get the framework from the remote actor."""
+        return ray.get(self.actor.get_framework.remote())

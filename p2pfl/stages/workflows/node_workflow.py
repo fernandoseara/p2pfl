@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.message.stop_learning_command import StopLearningCommand
 from p2pfl.management.logger import logger
@@ -34,7 +35,7 @@ from p2pfl.utils.pytransitions import StateAdapter, TimeoutMachine, TransitionAd
 from p2pfl.utils.singleton import SingletonMeta
 
 # Set transitions' log level
-logging.getLogger('transitions').setLevel(logging.ERROR)
+logging.getLogger("transitions").setLevel(logging.ERROR)
 
 if TYPE_CHECKING:
     from transitions import Machine
@@ -44,45 +45,49 @@ if TYPE_CHECKING:
     from p2pfl.stages.network_state.network_state import NetworkState
     from p2pfl.stages.workflows.models.learning_workflow_model import LearningWorkflowModel
 
+
 def get_states() -> list[dict]:
     """Get the states for the NodeWorkflow."""
     states: list[StateAdapter] = [
         # Initial state
-        StateAdapter(name='stopped'),
+        StateAdapter(name="stopped"),
         StateAdapter(name="waitingForLearningStart"),
         # Learning state
         StateAdapter(name="learning"),
         # Final state
-        StateAdapter(name="learningFinished", final=True)
+        StateAdapter(name="learningFinished", final=True),
     ]
 
     return [state.to_dict() for state in states]
 
+
 def get_transitions() -> list[dict]:
     """Get the transitions for the NodeWorkflow."""
     transitions: list[TransitionAdapter] = [
-        TransitionAdapter(trigger='start_node', source='stopped', dest='waitingForLearningStart', before='start'),
+        TransitionAdapter(trigger="start_node", source="stopped", dest="waitingForLearningStart", before="start"),
         # Starting the learning process
-        TransitionAdapter(trigger='start_learning', source='waitingForLearningStart', dest='learning', before='set_initiator'),
-        TransitionAdapter(trigger='peer_learning_initiated', source='waitingForLearningStart', dest='learning'),
-
+        TransitionAdapter(trigger="start_learning", source="waitingForLearningStart", dest="learning", before="set_initiator"),
+        TransitionAdapter(trigger="peer_learning_initiated", source="waitingForLearningStart", dest="learning"),
         # Learning process finished
-        TransitionAdapter(trigger='learning_finished', source='learning', dest='learningFinished'),
-
+        TransitionAdapter(trigger="learning_finished", source="learning", dest="learningFinished"),
         # Stopping the workflow
-        TransitionAdapter(trigger='stop_node', source='*', dest='stopped', before='stop'),
-
+        TransitionAdapter(trigger="stop_node", source="*", dest="stopped", before="stop"),
         # Communications
-        TransitionAdapter(trigger='connect_node', source=['waitingForLearningStart', 'learning', 'learningFinished'], dest=None, before='connect'),
-        TransitionAdapter(trigger='disconnect_node', source=['waitingForLearningStart', 'learning', 'learningFinished'], dest=None, before='disconnect'),
+        TransitionAdapter(
+            trigger="connect_node", source=["waitingForLearningStart", "learning", "learningFinished"], dest=None, before="connect"
+        ),
+        TransitionAdapter(
+            trigger="disconnect_node", source=["waitingForLearningStart", "learning", "learningFinished"], dest=None, before="disconnect"
+        ),
     ]
 
     return [transition.to_dict() for transition in transitions]
 
+
 class NodeWorkflowModel:
     """Base for the node workflow."""
 
-    state : str
+    state: str
 
     def __init__(self, node: Node, state_history_length: int = 10):
         """Initialize the workflow model."""
@@ -92,10 +97,10 @@ class NodeWorkflowModel:
         self.node = node
         self.is_initiator: bool = False
 
-        #self.event_log: list = []
-        #self.state_log: collections.deque = collections.deque(maxlen=state_history_length)
+        # self.event_log: list = []
+        # self.state_log: collections.deque = collections.deque(maxlen=state_history_length)
 
-        self.workflow_state_manager: WorkflowStateManager|None = None
+        self.workflow_state_manager: WorkflowStateManager | None = None
         WorkflowMachineManager().add_model(self)
 
     def __remove__(self):
@@ -165,7 +170,6 @@ class NodeWorkflowModel:
             raise RuntimeError("Workflow is not initialized")
         return self.workflow_state_manager.get_network_state()
 
-
     ########################################
     # EVENTS (Overridden by pytransitions) #
     ########################################
@@ -209,7 +213,8 @@ class NodeWorkflowModel:
         """
         raise RuntimeError("Should be overridden!")
 
-    async def start_learning(self,
+    async def start_learning(
+        self,
         workflow_type: WorkflowType,
         experiment_name: str,
         rounds: int,
@@ -219,13 +224,8 @@ class NodeWorkflowModel:
         """Handle the start learning event."""
         raise RuntimeError("Should be overridden!")
 
-    async def peer_learning_initiated(self,
-        workflow_type: WorkflowType,
-        experiment_name: str,
-        rounds: int,
-        epochs: int,
-        trainset_size: int,
-        source: str
+    async def peer_learning_initiated(
+        self, workflow_type: WorkflowType, experiment_name: str, rounds: int, epochs: int, trainset_size: int, source: str
     ) -> bool:
         """Handle the peer learning initiated event."""
         raise RuntimeError("Should be overridden!")
@@ -257,7 +257,7 @@ class NodeWorkflowModel:
             bool: True if the workflow is waiting for the learning start, False otherwise.
 
         """
-        return self.state == 'waitingForLearningStart'
+        return self.state == "waitingForLearningStart"
 
     @property
     def running(self) -> bool:
@@ -268,7 +268,7 @@ class NodeWorkflowModel:
             bool: True if the workflow is running, False otherwise.
 
         """
-        return self.state != 'stopped'
+        return self.state != "stopped"
 
     @property
     def finished(self) -> bool:
@@ -279,22 +279,17 @@ class NodeWorkflowModel:
             bool: True if the workflow is finished, False otherwise.
 
         """
-        return self.state == 'learningFinished'
+        return self.state == "learningFinished"
 
     async def set_initiator(self, *args, **kwargs) -> None:
         """Set the model initialized."""
         # Set the initiator flag in the network state
         self.is_initiator = True
 
-
     ###################
     # STATE CALLBACKS #
     ###################
-    async def on_enter_learning(
-        self,
-        workflow_type: WorkflowType,
-        *args, **kwargs
-        ):
+    async def on_enter_learning(self, workflow_type: WorkflowType, *args, **kwargs):
         """Start the training."""
         logger.info(self.node.address, f"⏳ Setting environment for learning. Learning type: {workflow_type.value}")
 
@@ -400,7 +395,7 @@ class NodeWorkflowModel:
 
             # Stop server
             await communication_protocol.stop()
-            #self.node.get_communication_protocol().remove_command(self.node.workflow_factory.create_commands(self.node))
+            # self.node.get_communication_protocol().remove_command(self.node.workflow_factory.create_commands(self.node))
 
             await self.get_learning_workflow().stop_learning()
 
@@ -445,10 +440,10 @@ class WorkflowMachineManager(metaclass=SingletonMeta):
         self._machine: Machine = TimeoutMachine(
             states=get_states(),
             transitions=get_transitions(),
-            initial='stopped',
-            queued='model',
+            initial="stopped",
+            queued="model",
             ignore_invalid_triggers=True,
-            finalize_event='finalize_logging',
+            finalize_event="finalize_logging",
             model_override=True,
         )
 

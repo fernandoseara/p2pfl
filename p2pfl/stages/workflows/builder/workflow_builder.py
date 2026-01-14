@@ -84,7 +84,6 @@ class WorkflowBuilder(ABC):
         pass
 
 
-
 # Abstract factory pattern
 class WorkflowBuilderFactory:
     """Factory producer for workflow builders."""
@@ -98,6 +97,7 @@ class WorkflowBuilderFactory:
             return BasicDFLWorkflowBuilder
         elif workflow_name == WorkflowType.ASYNC.value:
             from p2pfl.stages.workflows.builder.asyncFL.asydfl_workflow_builder import AsyDFLWorkflowBuilder
+
             return AsyDFLWorkflowBuilder
         else:
             raise Exception("Invalid workflow name.")

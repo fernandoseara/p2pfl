@@ -23,8 +23,6 @@ from typing import TYPE_CHECKING
 
 from p2pfl.stages.workflows.models.workflow_model import WorkflowModel
 
-if TYPE_CHECKING:
-    from p2pfl.node import Node
 
 class EventHandlerWorkflowModel(WorkflowModel):
     """Base for the event handler workflow."""

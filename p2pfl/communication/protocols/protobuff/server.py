@@ -21,7 +21,6 @@ import asyncio
 import traceback
 import typing
 from abc import ABC, abstractmethod
-from typing import Optional, Union
 
 import google.protobuf.empty_pb2
 import grpc
@@ -31,7 +30,6 @@ from p2pfl.communication.protocols.protobuff.gossiper import Gossiper
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2, node_pb2_grpc
 from p2pfl.management.logger import logger
-from p2pfl.settings import Settings
 from p2pfl.utils.node_component import NodeComponent, allow_no_addr_check
 
 
@@ -51,7 +49,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         self,
         gossiper: Gossiper,
         neighbors: Neighbors,
-        commands: Optional[list[Command]] = None,
+        commands: list[Command] | None = None,
     ) -> None:
         """Initialize the GRPC server."""
         # Message handlers
@@ -147,30 +145,48 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
         """
         # If message already processed, return
-        if request.HasField("message") and not await self._gossiper.check_and_set_processed(request):
+        if request.HasField("gossip_message") and not await self._gossiper.check_and_set_processed(request):
             return node_pb2.ResponseMessage()
 
+        # Log
+        package_type = "message" if request.HasField("gossip_message") else "weights"
+        package_size = len(request.SerializeToString())
+        # Pass None for negative rounds, the logger will handle it
+        round_num = request.round if request.round >= 0 else None
+        logger.log_communication(
+            self.address,
+            "received",
+            request.cmd,
+            request.source,
+            package_type,
+            package_size,
+            round_num,
+        )
+
         # Process message/model
-        if request.cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and request.cmd == "beat"):
-            emoji = "📫" if request.HasField("message") else "📦"
-            logger.debug(
-                self.address,
-                f"{emoji} {request.cmd.upper()} received from {request.source}",
-            )
+        cmd_out: str | None = None
         if request.cmd in self.__commands:
             try:
-                if request.HasField("message"):
-                    task = asyncio.create_task(self.__commands[request.cmd].execute(request.source, request.round, *request.message.args))
+                if request.HasField("gossip_message"):
+                    task = asyncio.create_task(
+                        self.__commands[request.cmd].execute(request.source, request.round, *request.gossip_message.args)
+                    )
+                elif request.HasField("direct_message"):
+                    task = asyncio.create_task(
+                        self.__commands[request.cmd].execute(request.source, request.round, *request.direct_message.args)
+                    )
                 elif request.HasField("weights"):
-                    task = asyncio.create_task(self.__commands[request.cmd].execute(
-                        request.source,
-                        request.round,
-                        weights=request.weights.weights,
-                        contributors=request.weights.contributors,
-                        num_samples=request.weights.num_samples,
-                    ))
+                    task = asyncio.create_task(
+                        self.__commands[request.cmd].execute(
+                            request.source,
+                            request.round,
+                            weights=request.weights.weights,
+                            contributors=request.weights.contributors,
+                            num_samples=request.weights.num_samples,
+                        )
+                    )
                 else:
-                    error_text = f"Error while processing command: {request.cmd}: No message or weights"
+                    error_text = f"Error while processing command: {request.cmd}: No message or weights."
                     logger.error(self.address, error_text)
                     return node_pb2.ResponseMessage(error=error_text)
 
@@ -191,19 +207,19 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             return node_pb2.ResponseMessage(error=f"Unknown command: {request.cmd}")
 
         # If message gossip
-        if request.HasField("message") and request.message.ttl > 0:
+        if request.HasField("gossip_message") and request.gossip_message.ttl > 0:
             # Update ttl and gossip
-            request.message.ttl -= 1
+            request.gossip_message.ttl -= 1
             await self._gossiper.add_message(request)
 
-        return node_pb2.ResponseMessage()
+        return node_pb2.ResponseMessage(response=cmd_out)
 
     ####
     # Commands
     ####
 
     @allow_no_addr_check
-    def add_command(self, cmds: Union[Command, list[Command]]) -> None:
+    def add_command(self, cmds: Command | list[Command]) -> None:
         """
         Add a command.
 
@@ -220,12 +236,12 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             raise Exception("Command not valid")
 
     @allow_no_addr_check
-    def remove_command(self, cmds: Union[Command, list[Command]]) -> None:
+    def remove_command(self, cmds: Command | list[Command]) -> None:
         """
         Remove a command.
 
         Args:
-            cmd: Command to be removed.
+            cmds: Command or list of commands to be removed.
 
         """
         if isinstance(cmds, list):

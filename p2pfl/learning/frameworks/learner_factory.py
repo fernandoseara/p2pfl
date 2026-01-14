@@ -18,8 +18,6 @@
 
 """P2PFLCallback factory."""
 
-from typing import Type
-
 from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
@@ -30,7 +28,7 @@ class LearnerFactory:
     """Factory for creating learners based on the model framework."""
 
     @classmethod
-    def create_learner(cls, model: P2PFLModel) -> Type[Learner]:
+    def create_learner(cls, model: P2PFLModel) -> type[Learner]:
         """
         Create a learner based on the model framework.
 
@@ -51,6 +49,10 @@ class LearnerFactory:
             from p2pfl.learning.frameworks.flax.flax_learner import FlaxLearner
 
             return FlaxLearner
+        elif framework == Framework.XGBOOST.value:
+            from p2pfl.learning.frameworks.xgboost.xgboost_learner import XGBoostLearner
+
+            return XGBoostLearner
         else:
             logger.error("LearnerFactory", f"Unsupported framework: {framework}")
             raise ValueError(f"Unsupported framework: {framework}")

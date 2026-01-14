@@ -26,11 +26,13 @@ P2PFL Logger.
 import copy
 import datetime
 import logging
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
-from p2pfl.stages.local_state.experiment import Experiment
+from p2pfl.management.message_storage import MessageEntryType, MessageStorage
 from p2pfl.management.metric_storage import GlobalLogsType, GlobalMetricStorage, LocalLogsType, LocalMetricStorage
+from p2pfl.management.node_monitor import NodeMonitor
 from p2pfl.settings import Settings
+from p2pfl.stages.local_state.experiment import Experiment
 
 ###################
 #    Exception    #
@@ -97,15 +99,18 @@ class P2PFLogger:
 
     """
 
-    def __init__(self, nodes: Optional[Dict[str, Dict[str, Any]]] = None, disable_locks: bool = False) -> None:
+    def __init__(self, nodes: dict[str, dict[str, Any]] | None = None, disable_locks: bool = False) -> None:
         """Initialize the logger."""
         # Node Information
-        self._nodes: Dict[str, Dict[Any, Any]] = nodes if nodes else {}
+        self._nodes: dict[str, dict[Any, Any]] = nodes if nodes else {}
 
-        # Experiment Metrics
+        # Experiment Metrics and Message Storage
         self.disable_locks = disable_locks
         self.local_metrics = LocalMetricStorage(disable_locks=disable_locks)
         self.global_metrics = GlobalMetricStorage(disable_locks=disable_locks)
+        self.message_storage = MessageStorage(disable_locks=disable_locks)
+        self.node_monitor = NodeMonitor(report_fn=None)
+        self.node_monitor.start()
 
         # Python logging
         self._logger = logging.getLogger("p2pfl")
@@ -124,16 +129,18 @@ class P2PFLogger:
         stream_handler.setFormatter(cmd_formatter)
         self._logger.addHandler(stream_handler)  # not async
 
-    def connect_web(self, url: str, key: str) -> None:
+    def connect(self, **kwargs: Any) -> None:
         """
-        Connect to the web services.
+        Establish connection/setup for the logger.
+
+        This method should be overridden by loggers that require connection setup.
+        By default, it does nothing.
 
         Args:
-            url: The URL of the web services.
-            key: The API key.
+            **kwargs: Connection parameters specific to each logger type.
 
         """
-        raise NotImplementedError("Web Services not implemented.")
+        pass
 
     def cleanup(self) -> None:
         """Cleanup the logger."""
@@ -145,11 +152,20 @@ class P2PFLogger:
         for handler in self._logger.handlers:
             self._logger.removeHandler(handler)
 
+    def finish(self) -> None:
+        """
+        Finish any logging activities, like closing a W&B run.
+
+        This method is a placeholder and is meant to be implemented by a decorator.
+        By default, it does nothing.
+        """
+        pass
+
     ######
     # Application logging
     ######
 
-    def set_level(self, level: Union[int, str]) -> None:
+    def set_level(self, level: int | str) -> None:
         """
         Set the logger level.
 
@@ -268,7 +284,7 @@ class P2PFLogger:
     # Metrics
     ######
 
-    def log_metric(self, addr: str, metric: str, value: float, step: Optional[int] = None, round: Optional[int] = None) -> None:
+    def log_metric(self, addr: str, metric: str, value: float, step: int | None = None, round: int | None = None) -> None:
         """
         Log a metric.
 
@@ -284,9 +300,8 @@ class P2PFLogger:
         try:
             experiment = self._nodes[addr]["Experiment"]
         except KeyError:
-            # print(f"Node {addr} not registered.")
+            # Node not registered, skip logging
             return
-            raise NodeNotRegistered(f"Node {addr} not registered.") from None
 
         # Get Round
         if round is None:
@@ -349,7 +364,6 @@ class P2PFLogger:
         """
         # Node State
         if self._nodes.get(address) is None:
-            # Dict[str, Dict[str,Any]]
             self._nodes[address] = {}
         else:
             raise Exception(f"Node {address} already registered.")
@@ -363,12 +377,10 @@ class P2PFLogger:
 
         """
         # Node state
-        n = self._nodes[address]
-        if n is not None:
-            # Unregister the node
+        if address in self._nodes:
             self._nodes.pop(address)
         else:
-            raise Exception(f"Node {address} not registered.")
+            self.warning("SYSTEM", f"Attempted to unregister node {address} that was not registered.")
 
     ######
     # Node Status
@@ -411,7 +423,7 @@ class P2PFLogger:
         self.warning(address, "Uncatched Experiment Ended on Logger")
         del self._nodes[address]["Experiment"]
 
-    def get_nodes(self) -> Dict[str, Dict[Any, Any]]:
+    def get_nodes(self) -> dict[str, dict[Any, Any]]:
         """
         Get the registered nodes.
 
@@ -431,15 +443,137 @@ class P2PFLogger:
         """
         self._logger.addHandler(handler)
 
-    def log_system_metric(self, node: str, metric: str, value: float, time: datetime.datetime) -> None:
+    ######
+    # Communication Logs
+    ######
+
+    def log_communication(
+        self,
+        node: str,
+        direction: str,
+        cmd: str,
+        source_dest: str,
+        package_type: str,
+        package_size: int,
+        round_num: int | None = None,
+        additional_info: dict[str, Any] | None = None,
+    ) -> None:
         """
-        Log a system metric.
+        Log a communication event.
 
         Args:
-            node: The node name.
-            metric: The metric to log.
-            value: The value.
-            time: The time.
+            node: The node address.
+            direction: Direction of communication ("sent" or "received").
+            cmd: The command or message type.
+            source_dest: Source (if receiving) or destination (if sending) node.
+            package_type: Type of package ("message" or "weights").
+            package_size: Size of the package in bytes (if available).
+            round_num: The federated learning round number (if applicable).
+            additional_info: Additional information as a dictionary.
 
         """
-        pass
+        # Determine emoji based on direction and package type
+        emoji = ("📫" if package_type == "message" else "📦") if direction == "received" else ("📤" if package_type == "message" else "📬")
+
+        # If round_num is not specified but we're in an experiment, get the current round
+        if round_num is None or round_num < 0:
+            try:
+                # Look for the node in registered nodes
+                if node in self._nodes and "Experiment" in self._nodes[node]:
+                    experiment = self._nodes[node]["Experiment"]
+                    if experiment is not None and hasattr(experiment, "round") and experiment.round is not None:
+                        round_num = experiment.round
+            except Exception:
+                # If we can't get the round, just continue with default round_num (None)
+                pass
+
+        # Create base message
+        message = f"{emoji} {cmd.upper()} {direction} "
+        if direction == "received":
+            message += f"from {source_dest}"
+        else:
+            message += f"to {source_dest}"
+
+        # Add round information if available
+        if round_num is not None and round_num >= 0:
+            message += f" (round {round_num})"
+
+        # Log the message at debug level
+        if cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and cmd == "beat"):
+            pass
+            # self.debug(node, message)
+
+        # Get actual round number for storage (default to 0 if None)
+        storage_round = 0 if round_num is None or round_num < 0 else round_num
+
+        # Store in message storage
+        self.message_storage.add_message(
+            node=node,
+            direction=direction,
+            cmd=cmd,
+            source_dest=source_dest,
+            package_type=package_type,
+            package_size=package_size,
+            round_num=storage_round,
+            additional_info=additional_info,
+        )
+
+    def get_messages(
+        self,
+        direction: str = "all",  # "all", "sent", or "received"
+        node: str | None = None,
+        cmd: str | None = None,
+        round_num: int | None = None,
+        limit: int | None = None,
+    ) -> list[MessageEntryType]:
+        """
+        Get communication messages with optional filtering.
+
+        Args:
+            direction: Filter by message direction ("all", "sent", or "received").
+            node: Filter by node address (optional).
+            cmd: Filter by command type (optional).
+            round_num: Filter by round number (optional).
+            limit: Limit the number of messages returned per node (optional).
+
+        Returns:
+            A flat list of message dictionaries. Each message includes a 'direction' field
+            indicating whether it was 'sent' or 'received'.
+
+        """
+        # Validate direction
+        if direction not in ["all", "sent", "received"]:
+            raise ValueError(f"Invalid direction: {direction}. Must be 'all', 'sent', or 'received'.")
+
+        # Convert "all" to None as expected by message_storage
+        storage_direction = None if direction == "all" else direction
+
+        return self.message_storage.get_messages(node=node, direction=storage_direction, cmd=cmd, round_num=round_num, limit=limit)
+
+    def get_system_metrics(self) -> dict[datetime.datetime, dict[str, float]]:
+        """
+        Get the system metrics.
+
+        Returns:
+            The system metrics.
+
+        """
+        return self.node_monitor.get_logs()
+
+    def reset(self) -> None:
+        """
+        Reset the logger state between experiments.
+
+        This clears all stored metrics, messages, and system logs while keeping
+        the logger configuration and handlers intact.
+        """
+        # Recreate storage instances to clear all data
+        self.local_metrics = LocalMetricStorage(disable_locks=self.disable_locks)
+        self.global_metrics = GlobalMetricStorage(disable_locks=self.disable_locks)
+        self.message_storage = MessageStorage(disable_locks=self.disable_locks)
+
+        # Clear system metrics and registered nodes
+        self.node_monitor.logs.clear()
+        self._nodes.clear()
+
+        self.info("SYSTEM", "Logger state reset for new experiment")

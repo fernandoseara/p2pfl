@@ -18,8 +18,6 @@
 
 """Keras custom model factory."""
 
-import tensorflow as tf
-
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.logger import logger
 

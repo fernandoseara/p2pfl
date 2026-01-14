@@ -20,11 +20,11 @@
 
 import datetime
 import logging
-from typing import Optional
+import os
+from typing import Any
 
 from p2pfl.management.logger.decorators.logger_decorator import LoggerDecorator
-from p2pfl.management.logger.logger import NodeNotRegistered, P2PFLogger
-from p2pfl.management.node_monitor import NodeMonitor
+from p2pfl.management.logger.logger import P2PFLogger
 from p2pfl.management.p2pfl_web_services import P2pflWebServices
 from p2pfl.stages.local_state.experiment import Experiment
 
@@ -96,23 +96,96 @@ class WebP2PFLogger(LoggerDecorator):
     def __init__(self, p2pflogger: P2PFLogger):
         """Initialize the logger."""
         super().__init__(p2pflogger)
-        self._p2pfl_web_services: Optional[P2pflWebServices] = None
+        self._p2pfl_web_services: P2pflWebServices | None = None
 
-    def connect_web(self, url: str, key: str) -> None:
+        # Load credentials from .p2pfl_env file if it exists
+        self._load_env_file()
+
+        # Try to auto-connect using environment variables
+        self.connect()
+
+    def _load_env_file(self) -> None:
+        """Load environment variables from ~/.p2pfl_env if it exists."""
+        # Skip loading in test mode to avoid interference with tests
+        if os.environ.get("P2PFL_TESTING", "").lower() in ("1", "true"):
+            return
+
+        # Skip if environment variables are already set
+        if "P2PFL_WEB_LOGGER_URL" in os.environ and "P2PFL_WEB_LOGGER_KEY" in os.environ:
+            return
+
+        env_file = os.path.join(os.path.expanduser("~"), ".p2pfl_env")
+        if os.path.exists(env_file):
+            try:
+                with open(env_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key, value = line.split("=", 1)
+                            # Only set if not already in environment
+                            if key not in os.environ:
+                                os.environ[key] = value
+                super().debug("WebP2PFLogger", f"Loaded credentials from {env_file}")
+            except Exception as e:
+                super().warning("WebP2PFLogger", f"Could not load {env_file}: {e}")
+
+    def connect(
+        self,
+        p2pfl_web_url: str | None = None,
+        p2pfl_web_key: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         """
-        Connect to the web services.
+        Establish connection to web services.
 
         Args:
-            url: The URL of the web services.
-            key: The API key.
+            p2pfl_web_url: The URL of the web services (or P2PFL_WEB_LOGGER_URL env var)
+            p2pfl_web_key: The API key (or P2PFL_WEB_LOGGER_KEY env var)
+            **kwargs: Additional parameters (for compatibility)
 
         """
-        if self._p2pfl_web_services is not None:
-            raise Exception("Web services already connected.")
-        self._p2pfl_web_services = P2pflWebServices(url, key)
-        self.add_handler(P2pflWebLogHandler(self._p2pfl_web_services))
+        # Get parameters from function args or environment variables
+        url = p2pfl_web_url or os.environ.get("P2PFL_WEB_LOGGER_URL")
+        key = p2pfl_web_key or os.environ.get("P2PFL_WEB_LOGGER_KEY")
 
-    def log_metric(self, addr: str, metric: str, value: float, step: Optional[int] = None, round: Optional[int] = None) -> None:
+        # Check if we have the required parameters
+        if url is None or key is None:
+            if url is not None or key is not None:
+                super().warning("WebP2PFLogger", "P2PFL Web URL or key provided but incomplete. Both URL and key are required.")
+            return
+
+        # If already connected, skip
+        if self._p2pfl_web_services is not None:
+            super().debug("WebP2PFLogger", "Web services already connected, skipping re-initialization")
+            return
+
+        # Connect to web services
+        try:
+            self._p2pfl_web_services = P2pflWebServices(str(url), str(key))
+            self.add_handler(P2pflWebLogHandler(self._p2pfl_web_services))
+            super().debug("WebP2PFLogger", f"Successfully connected to P2PFL Web Services at {url}")
+        except Exception as e:
+            super().warning("WebP2PFLogger", f"Failed to connect to P2PFL Web Services: {e}")
+            self._p2pfl_web_services = None
+
+    def experiment_started(self, node: str, experiment: Experiment) -> None:
+        """
+        Handle experiment start for web services.
+
+        Args:
+            node: The node address.
+            experiment: The experiment object containing metadata.
+
+        """
+        # If connected, could send experiment metadata to web services
+        if self._p2pfl_web_services is not None:
+            super().debug("WebP2PFLogger", f"Experiment '{experiment.exp_name}' started for node {node}")
+            # TODO: Add experiment metadata to web services
+
+        # Call parent's experiment_started
+        super().experiment_started(node, experiment)
+
+    def log_metric(self, addr: str, metric: str, value: float, step: int | None = None, round: int | None = None) -> None:
         """
         Log a metric.
 
@@ -125,12 +198,14 @@ class WebP2PFLogger(LoggerDecorator):
 
         """
         super().log_metric(addr=addr, metric=metric, value=value, step=step, round=round)
+
         if self._p2pfl_web_services is not None:
             # Get Experiment
             try:
                 experiment: Experiment = self._nodes[addr]["Experiment"]
             except KeyError:
-                raise NodeNotRegistered(f"Node {addr} not registered.") from None
+                # If no experiment is registered for this node, skip web logging
+                return
 
             if step is None:
                 # Global Metrics
@@ -139,20 +214,64 @@ class WebP2PFLogger(LoggerDecorator):
                 # Local Metrics
                 self._p2pfl_web_services.send_local_metric(experiment.exp_name, experiment.round, metric, addr, value, step)
 
-    def log_system_metric(self, node: str, metric: str, value: float, time: datetime.datetime) -> None:
+    def log_communication(
+        self,
+        node: str,
+        direction: str,
+        cmd: str,
+        source_dest: str,
+        package_type: str,
+        package_size: int,
+        round_num: int | None = None,
+        additional_info: dict[str, Any] | None = None,
+    ) -> None:
         """
-        Log a system metric. Only on web.
+        Log a communication event and send it to web services if connected.
 
         Args:
-            node: The node name.
-            metric: The metric to log.
-            value: The value.
-            time: The time.
+            node: The node address.
+            direction: Direction of communication ("sent" or "received").
+            cmd: The command or message type.
+            source_dest: Source (if receiving) or destination (if sending) node.
+            package_type: Type of package ("message" or "weights").
+            package_size: Size of the package in bytes (if available).
+            round_num: The federated learning round number (if applicable).
+            additional_info: Additional information as a dictionary.
 
         """
-        LoggerDecorator.log_system_metric(self, node, metric, value, time)
+        # Call parent's method first
+        super().log_communication(
+            node=node,
+            direction=direction,
+            cmd=cmd,
+            source_dest=source_dest,
+            package_type=package_type,
+            package_size=package_size,
+            round_num=round_num,
+            additional_info=additional_info,
+        )
+
+        # Send to web services if connected
         if self._p2pfl_web_services is not None:
-            self._p2pfl_web_services.send_system_metric(node, metric, value, time)
+            # Create timestamp
+            now = datetime.datetime.now()
+
+            # Send as a structured communication log
+            try:
+                self._p2pfl_web_services.send_communication_log(
+                    node=node,
+                    timestamp=now,
+                    direction=direction,
+                    cmd=cmd,
+                    source_dest=source_dest,
+                    package_type=package_type,
+                    package_size=package_size,
+                    round_num=round_num,
+                    additional_info=additional_info,
+                )
+            except Exception as e:
+                # Error handling
+                super().warning("WebP2PFLogger", f"Error sending communication log to web services: {e}")
 
     def register_node(self, node: str) -> None:
         """
@@ -164,12 +283,7 @@ class WebP2PFLogger(LoggerDecorator):
         """
         super().register_node(node)
         if self._p2pfl_web_services is not None:
-            # Start the node status reporter
-            node_monitor = NodeMonitor(node, self.log_system_metric)
-            node_monitor.run()
-
-            # Dict[str, Dict[str, Any]]
-            self._p2pfl_logger._nodes[node]["NodeMonitor"] = node_monitor
+            self._p2pfl_web_services.register_node(node)
 
     def unregister_node(self, node: str) -> None:
         """
@@ -183,11 +297,11 @@ class WebP2PFLogger(LoggerDecorator):
         if self._p2pfl_web_services is not None:
             self._p2pfl_web_services.unregister_node(node)
 
-            # Node state
-            n = self._p2pfl_logger._nodes[node]
-            if n is not None:
-                # Stop the node status reporter
-                if "NodeMonitor" in n:
-                    n["NodeMonitor"].stop()
-            else:
-                raise Exception(f"Node {node} not registered.")
+    def finish(self) -> None:
+        """
+        Finish the current experiment for web services.
+
+        The connection remains alive for potential future experiments.
+        """
+        # Call parent's finish
+        super().finish()

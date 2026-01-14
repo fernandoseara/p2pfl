@@ -18,10 +18,7 @@
 
 """Context Information Updating commands."""
 
-from typing import Optional
-
 from p2pfl.communication.commands.command import Command
-from p2pfl.management.logger import logger
 from p2pfl.node import Node
 
 
@@ -83,8 +80,7 @@ class IndexInformationUpdatingCommand(Command):
         if round is None:
             raise ValueError("Index is required")
 
-        await self.__node.get_learning_workflow().iteration_index_received(source,
-                                                                    index=round)
+        await self.__node.get_learning_workflow().iteration_index_received(source, index=round)
 
 
 class ModelInformationUpdatingCommand(Command):
@@ -100,19 +96,24 @@ class ModelInformationUpdatingCommand(Command):
         """Get the command name."""
         return "model_information_updating"
 
-    async def execute(self, source: str, round: int,
-                weights: Optional[bytes] = None,
-                contributors: Optional[list[str]] = None,  # TIPO ESTA MAL (NECESARIO CASTEARLO AL LLAMAR)
-                num_samples: Optional[int] = None,
-                **kwargs,
-        ) -> None:
+    async def execute(
+        self,
+        source: str,
+        round: int,
+        weights: bytes | None = None,
+        contributors: list[str] | None = None,
+        num_samples: int | None = None,
+        **kwargs,
+    ) -> None:
         """
         Execute the command.
 
         Args:
             source: The source of the command.
             round: The round of the command.
-            *args: Vote values (pairs of key and values).
+            weights: The model weights bytes.
+            contributors: List of contributor nodes.
+            num_samples: Number of samples used for training.
             **kwargs: The command keyword arguments.
 
         """
@@ -120,6 +121,7 @@ class ModelInformationUpdatingCommand(Command):
             raise ValueError("Weights, contributors and weight are required")
 
         await self.__node.get_learning_workflow().model_received(source, round, weights, num_samples, list(contributors))
+
 
 class PushSumWeightInformationUpdatingCommand(Command):
     """PushSumWeightInformationUpdatingCommand."""
@@ -149,5 +151,4 @@ class PushSumWeightInformationUpdatingCommand(Command):
         if push_sum_weight is None:
             raise ValueError("Push-sum weight is required")
 
-        await self.__node.get_learning_workflow().push_sum_weight_received(source,
-                push_sum_weight=float(push_sum_weight))
+        await self.__node.get_learning_workflow().push_sum_weight_received(source, push_sum_weight=float(push_sum_weight))

@@ -20,9 +20,11 @@
 
 import datetime
 import logging
-from typing import Any, Callable, Dict, Union
+from collections.abc import Callable
+from typing import Any
 
 from p2pfl.management.logger.logger import P2PFLogger
+from p2pfl.management.message_storage import MessageEntryType
 from p2pfl.management.metric_storage import GlobalLogsType, LocalLogsType
 from p2pfl.stages.local_state.experiment import Experiment
 
@@ -44,22 +46,27 @@ class LoggerDecorator(P2PFLogger):
         """
         self._p2pfl_logger = logger() if callable(logger) else logger
 
-    def connect_web(self, url: str, key: str) -> None:
+    def connect(self, **kwargs: Any) -> None:
         """
-        Connect to the web services.
+        Establish connection/setup for the logger.
+
+        Delegates to the wrapped logger's connect method.
 
         Args:
-            url: The URL of the web services.
-            key: The API key.
+            **kwargs: Connection parameters specific to each logger type.
 
         """
-        self._p2pfl_logger.connect_web(url, key)
+        self._p2pfl_logger.connect(**kwargs)
 
     def cleanup(self) -> None:
         """Cleanup the logger."""
         self._p2pfl_logger.cleanup()
 
-    def set_level(self, level: Union[int, str]) -> None:
+    def finish(self) -> None:
+        """Pass the finish call to the wrapped logger."""
+        self._p2pfl_logger.finish()
+
+    def set_level(self, level: int | str) -> None:
         """
         Set the logger level.
 
@@ -198,7 +205,7 @@ class LoggerDecorator(P2PFLogger):
         """
         self._p2pfl_logger.experiment_finished(node)
 
-    def get_nodes(self) -> Dict[str, Dict[Any, Any]]:
+    def get_nodes(self) -> dict[str, dict[Any, Any]]:
         """
         Get the registered nodes.
 
@@ -218,15 +225,81 @@ class LoggerDecorator(P2PFLogger):
         """
         self._p2pfl_logger.add_handler(handler)
 
-    def log_system_metric(self, node: str, metric: str, value: float, time: datetime.datetime) -> None:
+    def log_communication(
+        self,
+        node: str,
+        direction: str,
+        cmd: str,
+        source_dest: str,
+        package_type: str,
+        package_size: int,
+        round_num: int | None = None,
+        additional_info: dict[str, Any] | None = None,
+    ) -> None:
         """
-        Log a system metric.
+        Log a communication event.
 
         Args:
-            node: The node name.
-            metric: The metric to log.
-            value: The value.
-            time: The time.
+            node: The node address.
+            direction: Direction of communication ("sent" or "received").
+            cmd: The command or message type.
+            source_dest: Source (if receiving) or destination (if sending) node.
+            package_type: Type of package ("message" or "weights").
+            package_size: Size of the package in bytes (if available).
+            round_num: The federated learning round number (if applicable).
+            additional_info: Additional information as a dictionary.
 
         """
-        self._p2pfl_logger.log_system_metric(node, metric, value, time)
+        self._p2pfl_logger.log_communication(
+            node=node,
+            direction=direction,
+            cmd=cmd,
+            source_dest=source_dest,
+            package_type=package_type,
+            package_size=package_size,
+            round_num=round_num,
+            additional_info=additional_info,
+        )
+
+    def get_messages(
+        self,
+        direction: str = "all",
+        node: str | None = None,
+        cmd: str | None = None,
+        round_num: int | None = None,
+        limit: int | None = None,
+    ) -> list[MessageEntryType]:
+        """
+        Get communication messages with optional filtering.
+
+        Args:
+            direction: Filter by message direction ("all", "sent", or "received").
+            node: Filter by node address (optional).
+            cmd: Filter by command type (optional).
+            round_num: Filter by round number (optional).
+            limit: Limit the number of messages returned per node (optional).
+
+        Returns:
+            Messages matching the filters.
+
+        """
+        return self._p2pfl_logger.get_messages(direction=direction, node=node, cmd=cmd, round_num=round_num, limit=limit)
+
+    def get_system_metrics(self) -> dict[datetime.datetime, dict[str, float]]:
+        """
+        Get the system metrics.
+
+        Returns:
+            The system metrics.
+
+        """
+        return self._p2pfl_logger.get_system_metrics()
+
+    def reset(self) -> None:
+        """
+        Reset the logger state between experiments.
+
+        This clears all stored metrics, messages, and system logs while keeping
+        the logger configuration and handlers intact.
+        """
+        self._p2pfl_logger.reset()

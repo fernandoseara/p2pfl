@@ -19,41 +19,37 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from p2pfl.stages.local_state.experiment import Experiment
 from p2pfl.management.logger import logger
-
-if TYPE_CHECKING:
-    pass
+from p2pfl.stages.local_state.experiment import Experiment
 
 
 class LocalNodeState:
     """
-    Class to store the main state of a learning node.
+    Class to store the local state of a learning node.
+
+    Peer-related state (nei_status, models_aggregated, train_set_votes) is managed by NetworkState.
 
     Attributes:
-        addr: The address of the node.
-        learner: The learner of the node.
-        nei_status: The status of the neighbors.
+        address: The address of the node.
+        status: The status of the node.
         train_set: The train set of the node.
-        train_set_votes: The votes of the train set.
+        experiment: The current experiment.
 
     Args:
-        addr: The address of the node.
+        address: The address of the node.
 
     """
 
     def __init__(self, address: str) -> None:
         """Initialize the node state."""
         self.address = address
+        self.status = "Idle"
 
         # Train Set
         self.train_set: list[str] = []
 
         # Actual experiment
         self.experiment: Experiment | None = None
-
 
     @property
     def round(self) -> int | None:
@@ -71,31 +67,25 @@ class LocalNodeState:
         return self.experiment.exp_name if self.experiment is not None else None
 
     @property
-    def epochs(self) -> int | None:
-        """Get the number of epochs."""
-        return self.experiment.epochs if self.experiment is not None else None
+    def epochs_per_round(self) -> int | None:
+        """Get the number of epochs per round."""
+        return self.experiment.epochs_per_round if self.experiment is not None else None
 
     def get_experiment(self) -> Experiment | None:
         """Get the actual experiment."""
         return self.experiment
 
-    def set_experiment(self, exp_name: str, total_rounds: int, epochs: int = 1, trainset_size: int = 4) -> None:
+    def set_experiment(self, *args, **kwargs) -> None:
         """
-        Start a new experiment.
+        Set a new experiment.
 
         Args:
-            exp_name: The name of the experiment.
-            total_rounds: The total rounds of the experiment.
-            epochs: The number of epochs.
-            trainset_size: The size of the train set.
-
-        Raises:
-            ValueError: If the experiment is already initialized.
+            *args: Positional arguments for Experiment (exp_name, total_rounds).
+            **kwargs: Additional experiment parameters (epochs_per_round, dataset_name, etc.)
 
         """
-        self.status = "Learning"
-        self.experiment = Experiment(exp_name, total_rounds, epochs, trainset_size)
-        logger.experiment_started(self.address, self.experiment)  # TODO: Improve changes on the experiment
+        self.experiment = Experiment(*args, **kwargs)
+        logger.experiment_started(self.address, self.experiment)
 
     def increase_iteration(self) -> None:
         """
@@ -121,7 +111,7 @@ class LocalNodeState:
     def __str__(self) -> str:
         """Return a String representation of the node state."""
         return (
-            f"NodeState(addr={self.address}, status={self.status}, exp_name={self.exp_name}, "
+            f"LocalNodeState(address={self.address}, status={self.status}, exp_name={self.exp_name}, "
             f"round={self.round}, total_rounds={self.total_rounds}, "
             f"train_set={self.train_set})"
         )

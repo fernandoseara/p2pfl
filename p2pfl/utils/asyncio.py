@@ -48,6 +48,7 @@ def run_async(coro):
     else:
         return loop.run_until_complete(coro)
 
+
 def sync_or_async(async_func):
     """Support both sync and async calling of a method."""
 
@@ -59,4 +60,5 @@ def sync_or_async(async_func):
         else:
             # Called from sync context
             return run_async(async_func(self, *args, **kwargs))
+
     return wrapper

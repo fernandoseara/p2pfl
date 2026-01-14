@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,46 +16,60 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Callback for SCAFFOLD operations."""
+"""SCAFFOLD Aggregator."""
 
 from typing import Any
 
 import numpy as np
 
-from p2pfl.learning.aggregators.aggregator import Aggregator, NoModelsToAggregateError
+from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError, WeightAggregator
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
-class Scaffold(Aggregator):
+class Scaffold(WeightAggregator):
     """
-    SCAFFOLD Aggregator.
+    SCAFFOLD Aggregator [Karimireddy et al., 2019].
+
+    Inherits from ``WeightAggregator`` as SCAFFOLD works with neural network
+    weight tensors.
 
     Paper: https://arxiv.org/pdf/1910.06378
-    The aggregator acts like the server in centralized learning, handling both model and control variate updates.
 
-    Due to the complete decentralization of the enviroment, a global model is also maintained in the aggregator.
-    This consumes additional bandwidth.
+    The aggregator acts like the server in centralized learning, handling both
+    model and control variate updates.
 
-    ::todo:: Improve efficiency by sharing the global model only each n rounds.
+    Due to the complete decentralization of the environment, a global model is
+    also maintained in the aggregator. This consumes additional bandwidth.
+
+    Note:
+        This aggregator requires the ``scaffold`` callback to be registered.
+        The callback computes ``delta_y_i`` (model update) and ``delta_c_i``
+        (control variate update) which are passed via ``additional_info``.
+        See ``ScaffoldCallback`` for PyTorch/TensorFlow implementations.
+
+    Todo:
+        Improve efficiency by sharing the global model only each n rounds.
+
     """
 
     REQUIRED_INFO_KEYS = ["delta_y_i", "delta_c_i"]
+    SUPPORTS_PARTIAL_AGGREGATION: bool = False
 
-    def __init__(self, global_lr: float = 0.1):
+    def __init__(self, global_lr: float = 0.1, disable_partial_aggregation: bool = False):
         """
         Initialize the aggregator.
 
         Args:
             global_lr: The global learning rate.
+            disable_partial_aggregation: Whether to disable partial aggregation.
 
         """
-        super().__init__()
+        super().__init__(disable_partial_aggregation=disable_partial_aggregation)
         self.global_lr = global_lr
         self.c: list[np.ndarray] = []  # global control variates
         self.global_model_params: list[np.ndarray] = []  # simulate global model
-        self.partial_aggregation = False
 
-    def aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
+    def _aggregate(self, models: list[P2PFLModel]) -> P2PFLModel:
         """
         Aggregate the models and control variates from clients.
 
@@ -84,7 +98,7 @@ class Scaffold(Aggregator):
         # Update global model
         if not self.global_model_params:
             self.global_model_params = models[0].get_parameters()
-        self.global_model_params = [param + delta for param, delta in zip(self.global_model_params, accum_delta_y)]
+        self.global_model_params = [param + delta for param, delta in zip(self.global_model_params, accum_delta_y, strict=False)]
 
         # Accumulate control variates
         delta_c_i_first = self._get_and_validate_model_info(models[0])["delta_c_i"]  # take first model as reference
@@ -134,5 +148,5 @@ class Scaffold(Aggregator):
         """
         info = model.get_info("scaffold")
         if not all(key in info for key in self.REQUIRED_INFO_KEYS):
-            raise ValueError(f"Model is missing required info keys: {self.REQUIRED_INFO_KEYS}" f"Model info keys: {info.keys()}")
+            raise ValueError(f"Model is missing required info keys: {self.REQUIRED_INFO_KEYS}Model info keys: {info.keys()}")
         return info

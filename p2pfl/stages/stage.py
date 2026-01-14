@@ -25,7 +25,7 @@ class Stage:
     """Abstract class for a stage."""
 
     @staticmethod
-    async def execute() -> None:
+    async def execute(**kwargs) -> None:
         """Execute the stage."""
         raise NotImplementedError("Stage execute not implemented.")
 

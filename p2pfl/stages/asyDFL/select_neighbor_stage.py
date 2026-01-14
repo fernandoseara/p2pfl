@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
+
 class SelectNeighborsStage:
     """Compute priority stage."""
 
@@ -31,12 +32,14 @@ class SelectNeighborsStage:
     async def execute(
         neighbor_priorities: list[tuple[str, float]],
         node: Node,
-        ) -> list[str]:
+    ) -> list[str]:
         """
         Execute the stage. Perform neighbor selection and update models.
 
         Args:
+            neighbor_priorities: The list of neighbors with their priorities.
             node: The node to execute the stage on.
+
         """
         # Sort the neighbors by their priority in descending order (highest priority first)
         neighbor_priorities.sort(key=lambda x: x[1], reverse=True)
@@ -58,9 +61,9 @@ class SelectNeighborsStage:
     @staticmethod
     def select_neighbors(priority: list) -> list:
         """
-        Select the neighbors based on the priority p(b_i,j) of node i selecting neighbor j.
+        Select the neighbors based on the priority p(b_i,j).
 
-        Parameters:
+        Args:
             priority: The priority of selecting neighbors.
 
         Returns:

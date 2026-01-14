@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from p2pfl.stages.network_state.async_network_state import AsyncNetworkState
 
 
-
 # Define states and transitions
 def get_states() -> list[dict]:
     """Define the states for the workflow."""
@@ -54,63 +53,79 @@ def get_states() -> list[dict]:
         StateAdapter(name="startingTraining"),
         StateAdapter(name="waitingForSynchronization"),
         StateAdapter(name="nodesSynchronized"),
-        StateAdapter(name='trainingRound', initial='debiasingModel', children=[
-            StateAdapter(name="debiasingModel"),
-            StateAdapter(name='updatingLocalModel'),
-            StateAdapter(name="sendingTrainingLoss"),
-
-            StateAdapter(name='networkUpdating', initial='gossipingModel', children=[
-                StateAdapter(name="gossipingModel"),
-                StateAdapter(name='aggregating'),
-                StateAdapter(name="networkUpdatingFinishing", final=True),
-            ]),
-
-            StateAdapter(name="roundFinishing", final=True),
-        ]),
+        StateAdapter(
+            name="trainingRound",
+            initial="debiasingModel",
+            children=[
+                StateAdapter(name="debiasingModel"),
+                StateAdapter(name="updatingLocalModel"),
+                StateAdapter(name="sendingTrainingLoss"),
+                StateAdapter(
+                    name="networkUpdating",
+                    initial="gossipingModel",
+                    children=[
+                        StateAdapter(name="gossipingModel"),
+                        StateAdapter(name="aggregating"),
+                        StateAdapter(name="networkUpdatingFinishing", final=True),
+                    ],
+                ),
+                StateAdapter(name="roundFinishing", final=True),
+            ],
+        ),
         StateAdapter(name="trainingFinished", final=True),
     ]
     return [state.to_dict() for state in states]
+
 
 def get_transitions() -> list[dict]:
     """Define the transitions for the workflow."""
     transitions = [
         # Training workflow transitions
         # Setup & initial synchronization
-        TransitionAdapter(trigger='setup', source='waitingSetup', dest='startingTraining'),
-        TransitionAdapter(trigger='next_stage', source='startingTraining', dest='waitingForSynchronization'),
-        TransitionAdapter(trigger='network_ready', source='waitingForSynchronization', dest='nodesSynchronized'),
-        TransitionAdapter(trigger='next_stage', source='nodesSynchronized', dest='trainingRound'),
-
+        TransitionAdapter(trigger="setup", source="waitingSetup", dest="startingTraining"),
+        TransitionAdapter(trigger="next_stage", source="startingTraining", dest="waitingForSynchronization"),
+        TransitionAdapter(trigger="network_ready", source="waitingForSynchronization", dest="nodesSynchronized"),
+        TransitionAdapter(trigger="next_stage", source="nodesSynchronized", dest="trainingRound"),
         # Debiasing & updating
-        TransitionAdapter(trigger='next_stage', source='trainingRound_debiasingModel', dest='trainingRound_updatingLocalModel'),
-        TransitionAdapter(trigger='next_stage', source='trainingRound_updatingLocalModel', dest='trainingRound_sendingTrainingLoss'),
+        TransitionAdapter(trigger="next_stage", source="trainingRound_debiasingModel", dest="trainingRound_updatingLocalModel"),
+        TransitionAdapter(trigger="next_stage", source="trainingRound_updatingLocalModel", dest="trainingRound_sendingTrainingLoss"),
         # Check if is it time to update the model with network updating
-        TransitionAdapter(trigger='next_stage', source='trainingRound_sendingTrainingLoss', dest='trainingRound_networkUpdating',
-            conditions='check_iteration_network_updating', before='get_gossip_candidates'),
-        TransitionAdapter(trigger='next_stage', source='trainingRound_sendingTrainingLoss', dest='trainingRound_roundFinishing'),
+        TransitionAdapter(
+            trigger="next_stage",
+            source="trainingRound_sendingTrainingLoss",
+            dest="trainingRound_networkUpdating",
+            conditions="check_iteration_network_updating",
+            before="get_gossip_candidates",
+        ),
+        TransitionAdapter(trigger="next_stage", source="trainingRound_sendingTrainingLoss", dest="trainingRound_roundFinishing"),
         # Network updating
-        TransitionAdapter(trigger='next_stage', source='trainingRound_networkUpdating_gossipingModel', dest='trainingRound_networkUpdating_aggregating'),
-        TransitionAdapter(trigger='next_stage', source='trainingRound_networkUpdating_aggregating', dest='trainingRound_networkUpdating_networkUpdatingFinishing'),
-        TransitionAdapter(trigger='next_stage', source='trainingRound_networkUpdating', dest='trainingRound_roundFinishing'),
+        TransitionAdapter(
+            trigger="next_stage", source="trainingRound_networkUpdating_gossipingModel", dest="trainingRound_networkUpdating_aggregating"
+        ),
+        TransitionAdapter(
+            trigger="next_stage",
+            source="trainingRound_networkUpdating_aggregating",
+            dest="trainingRound_networkUpdating_networkUpdatingFinishing",
+        ),
+        TransitionAdapter(trigger="next_stage", source="trainingRound_networkUpdating", dest="trainingRound_roundFinishing"),
         # Loop
-        TransitionAdapter(trigger='next_stage', source='trainingRound', dest='trainingFinished', conditions='check_total_rounds_reached'),
-        TransitionAdapter(trigger='next_stage', source='trainingRound', dest='nodesSynchronized'),
-
+        TransitionAdapter(trigger="next_stage", source="trainingRound", dest="trainingFinished", conditions="check_total_rounds_reached"),
+        TransitionAdapter(trigger="next_stage", source="trainingRound", dest="nodesSynchronized"),
         # Stop training
-        TransitionAdapter(trigger='stop_learning', source='*', dest='trainingFinished', before='stop'),
-
+        TransitionAdapter(trigger="stop_learning", source="*", dest="trainingFinished", before="stop"),
         # Event handler transitions
-        TransitionAdapter(trigger='node_started', source=['waitingSetup','startingTraining','waitingForSynchronization'], dest=None,
-        prepare='create_peer', conditions='is_all_nodes_started', after='send_network_ready'),
-
-        TransitionAdapter(trigger='loss_information_received', source='*', dest=None,
-        prepare='save_loss_information'),
-        TransitionAdapter(trigger='iteration_index_received', source='*', dest=None,
-        prepare='save_iteration_index'),
-        TransitionAdapter(trigger='model_received', source='*', dest=None,
-        prepare='save_model'),
-        TransitionAdapter(trigger='push_sum_weight_received', source='*', dest=None,
-        prepare='save_push_sum_weight'),
+        TransitionAdapter(
+            trigger="node_started",
+            source=["waitingSetup", "startingTraining", "waitingForSynchronization"],
+            dest=None,
+            prepare="create_peer",
+            conditions="is_all_nodes_started",
+            after="send_network_ready",
+        ),
+        TransitionAdapter(trigger="loss_information_received", source="*", dest=None, prepare="save_loss_information"),
+        TransitionAdapter(trigger="iteration_index_received", source="*", dest=None, prepare="save_iteration_index"),
+        TransitionAdapter(trigger="model_received", source="*", dest=None, prepare="save_model"),
+        TransitionAdapter(trigger="push_sum_weight_received", source="*", dest=None, prepare="save_push_sum_weight"),
     ]
     return [transition.to_dict() for transition in transitions]
 
@@ -169,14 +184,8 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
     # STATE CALLBACKS #
     ###################
     async def on_enter_startingTraining(
-        self,
-        is_initiator: bool,
-        experiment_name: str,
-        rounds: int = 0,
-        epochs: int = 0,
-        trainset_size: int = 0,
-        source: str | None = None
-        ):
+        self, is_initiator: bool, experiment_name: str, rounds: int = 0, epochs: int = 0, trainset_size: int = 0, source: str | None = None
+    ):
         """Start the training."""
         logger.info(self.node.address, "⏳ Starting training.")
 
@@ -193,13 +202,16 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         exp_name = experiment.exp_name
 
         # Comunicate the start of the learning process
-        await communication_protocol.broadcast(communication_protocol.build_msg(
-            StartLearningCommand.get_name(),
-            [self.local_state.total_rounds,
-            self.node.get_learner().get_epochs(),
-            trainset_size,
-            exp_name,
-            self.node.get_node_workflow().get_workflow_type().value]
+        await communication_protocol.broadcast(
+            communication_protocol.build_msg(
+                StartLearningCommand.get_name(),
+                [
+                    self.local_state.total_rounds,
+                    self.node.get_learner().get_epochs(),
+                    trainset_size,
+                    exp_name,
+                    self.node.get_node_workflow().get_workflow_type().value,
+                ],
             )
         )
 
@@ -207,7 +219,7 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         logger.info(self.node.address, "Initializing local model and parameters...")
         self.tau = 2  # τ
 
-        #await self.next_stage()
+        # await self.next_stage()
 
     async def on_enter_waitingForSynchronization(self, *args, **kwargs):
         """Wait for the synchronization."""
@@ -238,31 +250,31 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
 
         self.network_state.set_mixing_weights({neighbor: 1.0 / len(neighbors) if neighbors else 1.0 for neighbor in neighbors})  # pt_j,i(0)
 
-        #await self.next_stage()
+        # await self.next_stage()
 
     async def on_enter_trainingRound_debiasingModel(self, *args, **kwargs):
         """Round initialized."""
         logger.debug(self.node.address, "🤖 Debiasing model.")
 
         # De-bias the update model (Equation 3)
-        model = self.node.get_learner().get_P2PFLModel()
+        model = self.node.get_learner().get_model()
         model.set_push_sum_weight(self.network_state.get_push_sum_weight(self.node.address))
 
-        #await self.continue_training_round()
+        # await self.continue_training_round()
 
     async def on_enter_trainingRound_updatingLocalModel(self, *args, **kwargs):
         """Update the round."""
         logger.info(self.node.address, "🏋️‍♀️ Updating local model...")
         await self.node.get_learner().train_on_batch()
-        self.network_state.add_model(self.node.get_learner().get_P2PFLModel(), self.node.address)
+        self.network_state.add_model(self.node.get_learner().get_model(), self.node.address)
 
-        #await self.continue_training_round()
+        # await self.continue_training_round()
 
     async def on_enter_trainingRound_sendingTrainingLoss(self, *args, **kwargs):
         """Send the training loss."""
         communication_protocol = self.node.get_communication_protocol()
 
-        training_loss = self.node.get_learner().get_P2PFLModel().last_training_loss
+        training_loss = self.node.get_learner().get_model().last_training_loss
         self.network_state.add_loss(self.node.address, self.local_state.round, training_loss)
 
         logger.info(self.node.address, "📢 Broadcasting loss values.")
@@ -276,7 +288,7 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
                 )
             )
 
-        #await self.continue_training_round()
+        # await self.continue_training_round()
 
     async def on_enter_trainingRound_networkUpdating_gossipingModel(self, *args, **kwargs):
         """Gossip the model."""
@@ -287,7 +299,7 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
             node=self.node,
         )
 
-        #await self.continue_network_updating()
+        # await self.continue_network_updating()
 
     async def on_enter_trainingRound_networkUpdating_aggregating(self):
         """Aggregate the models."""
@@ -306,7 +318,7 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
             logger.debug(self.node.address, f"📡 {neighbor} push-sum weight updated to {push_sum_weight}")
 
             # Update index of P2P updating
-            self.network_state.update_p2p_updating_idx(neighbor,self.local_state.round)
+            self.network_state.update_p2p_updating_idx(neighbor, self.local_state.round)
 
             # Send index of local iteration to neighbors
             with contextlib.suppress(Exception):
@@ -315,19 +327,19 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
                     msg=communication_protocol.build_msg(
                         IndexInformationUpdatingCommand.get_name(),
                         round=self.local_state.round,
-                    )
+                    ),
                 )
 
         # P2P updating of the model
         agg_model = self.node.get_aggregator().aggregate(self.network_state.get_all_models())
-        self.node.get_learner().set_P2PFLModel(agg_model)
+        self.node.get_learner().set_model(agg_model)
 
         # Evaluate the model
         await EvaluateStage.execute(
             node=self.node,
         )
 
-        #await self.continue_network_updating()
+        # await self.continue_network_updating()
 
     async def on_enter_trainingRound_networkUpdating_networkUpdatingFinishing(self):
         """Finish the network updating."""
@@ -358,14 +370,13 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         )
 
         # Communication Protocol
-        #self.node.get_communication_protocol().remove_command(self.node.get_node_workflow().get_commands())
+        # self.node.get_communication_protocol().remove_command(self.node.get_node_workflow().get_commands())
 
         # Clean state
         self.local_state.clear()
         self.network_state.clear()
 
         logger.info(self.node.address, "😋 Training finished!!")
-
 
     ##############
     # CONDITIONS #
@@ -398,7 +409,6 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
 
         logger.info(self.node.address, f"🧾 Selected neighbors: {self.candidates}")
 
-
     #########################
     # EVENT HANDLER SETTERS #
     #########################
@@ -426,20 +436,14 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         except Exception as e:
             logger.error(self.node.address, f"❌ Error saving loss information from {source} for round {round}: {e}")
 
-    async def save_model(self,
-        source: str,
-        round: int,
-        weights: bytes,
-        num_samples: int,
-        contributors: list[str]
-        ):
+    async def save_model(self, source: str, round: int, weights: bytes, num_samples: int, contributors: list[str]):
         """Initialize model."""
         # Check source
         # Wait and gossip model initialization
         logger.info(self.node.address, "📦 Model received.")
 
         try:
-            model = self.node.get_learner().get_P2PFLModel().build_copy(params=weights, num_samples=num_samples, contributors=contributors)
+            model = self.node.get_learner().get_model().build_copy(params=weights, num_samples=num_samples, contributors=contributors)
             self.network_state.add_model(model, source)
 
         except DecodingParamsError:
@@ -449,10 +453,11 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         except Exception as e:
             logger.error(self.node.address, f"❌ Unknown error adding model: {e}")
 
-    async def save_iteration_index(self,
-                            source: str,
-                            index: int,
-                            ):
+    async def save_iteration_index(
+        self,
+        source: str,
+        index: int,
+    ):
         """Save the iteration index."""
         try:
             self.network_state.update_round(source, index)
@@ -482,7 +487,6 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         """Send the network ready event."""
         logger.info(self.node.address, "✅ Network ready.")
         await self.network_ready()
-
 
     #############
     # INTERRUPT #

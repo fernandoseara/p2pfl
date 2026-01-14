@@ -27,14 +27,16 @@ from p2pfl.stages.network_state.network_state import NetworkState
 if TYPE_CHECKING:
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
+
 @dataclass
 class PeerNodeState:
     """Class to store the state of a peer node."""
 
     round_number: int
-    model_updated: P2PFLModel|None # The model updated by this peer
-    aggregated_from: list[str] # Addresses of models this one was aggregated from
-    train_set_votes: dict[str, int] # for each nei the given vote
+    model_updated: P2PFLModel | None  # The model updated by this peer
+    aggregated_from: list[str]  # Addresses of models this one was aggregated from
+    train_set_votes: dict[str, int]  # for each nei the given vote
+
 
 class BasicNetworkState(NetworkState):
     """Network state to keep track of peer nodes and their states."""
@@ -169,7 +171,7 @@ class BasicNetworkState(NetworkState):
         for state in self._peer_states.values():
             if state.model_updated:
                 contributors.extend(state.model_updated.get_contributors())
-        return list(set(contributors)) # Remove duplicates
+        return list(set(contributors))  # Remove duplicates
 
     def get_all_votes(self) -> dict[str, dict[str, int]]:
         """Return all votes by peer, per training set."""

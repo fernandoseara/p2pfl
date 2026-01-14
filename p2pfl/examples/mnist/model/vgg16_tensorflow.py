@@ -23,7 +23,7 @@ from tensorflow.keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, Resizi
 from tensorflow.keras.losses import SparseCategoricalCrossentropy  # type: ignore
 from tensorflow.keras.optimizers import Adam  # type: ignore
 
-from p2pfl.learning.frameworks.tensorflow.keras_model import KerasP2PFLModel
+from p2pfl.learning.frameworks.tensorflow.keras_model import KerasModel
 from p2pfl.settings import Settings
 from p2pfl.utils.seed import set_seed
 
@@ -52,37 +52,37 @@ class VGG16(tf.keras.Model):
         self.resize = Resizing(224, 224)
 
         # Block 1
-        self.conv1_1 = Conv2D(64, (3, 3), activation='relu', padding='same')
-        self.conv1_2 = Conv2D(64, (3, 3), activation='relu', padding='same')
+        self.conv1_1 = Conv2D(64, (3, 3), activation="relu", padding="same")
+        self.conv1_2 = Conv2D(64, (3, 3), activation="relu", padding="same")
         self.pool1 = MaxPooling2D((2, 2))
 
         # Block 2
-        self.conv2_1 = Conv2D(128, (3, 3), activation='relu', padding='same')
-        self.conv2_2 = Conv2D(128, (3, 3), activation='relu', padding='same')
+        self.conv2_1 = Conv2D(128, (3, 3), activation="relu", padding="same")
+        self.conv2_2 = Conv2D(128, (3, 3), activation="relu", padding="same")
         self.pool2 = MaxPooling2D((2, 2))
 
         # Block 3
-        self.conv3_1 = Conv2D(256, (3, 3), activation='relu', padding='same')
-        self.conv3_2 = Conv2D(256, (3, 3), activation='relu', padding='same')
-        self.conv3_3 = Conv2D(256, (3, 3), activation='relu', padding='same')
+        self.conv3_1 = Conv2D(256, (3, 3), activation="relu", padding="same")
+        self.conv3_2 = Conv2D(256, (3, 3), activation="relu", padding="same")
+        self.conv3_3 = Conv2D(256, (3, 3), activation="relu", padding="same")
         self.pool3 = MaxPooling2D((2, 2))
 
         # Block 4
-        self.conv4_1 = Conv2D(512, (3, 3), activation='relu', padding='same')
-        self.conv4_2 = Conv2D(512, (3, 3), activation='relu', padding='same')
-        self.conv4_3 = Conv2D(512, (3, 3), activation='relu', padding='same')
+        self.conv4_1 = Conv2D(512, (3, 3), activation="relu", padding="same")
+        self.conv4_2 = Conv2D(512, (3, 3), activation="relu", padding="same")
+        self.conv4_3 = Conv2D(512, (3, 3), activation="relu", padding="same")
         self.pool4 = MaxPooling2D((2, 2))
 
         # Block 5
-        self.conv5_1 = Conv2D(512, (3, 3), activation='relu', padding='same')
-        self.conv5_2 = Conv2D(512, (3, 3), activation='relu', padding='same')
-        self.conv5_3 = Conv2D(512, (3, 3), activation='relu', padding='same')
+        self.conv5_1 = Conv2D(512, (3, 3), activation="relu", padding="same")
+        self.conv5_2 = Conv2D(512, (3, 3), activation="relu", padding="same")
+        self.conv5_3 = Conv2D(512, (3, 3), activation="relu", padding="same")
         self.pool5 = MaxPooling2D((2, 2))
 
         # Fully connected layers
         self.flatten = Flatten()
-        self.fc1 = Dense(4096, activation='relu')
-        self.fc2 = Dense(4096, activation='relu')
+        self.fc1 = Dense(4096, activation="relu")
+        self.fc2 = Dense(4096, activation="relu")
         self.output_layer = Dense(out_channels)
 
         # Compile config
@@ -126,13 +126,15 @@ class VGG16(tf.keras.Model):
         x = self.fc2(x)
         return self.output_layer(x)
 
-def model_build_fn(*args, **kwargs) -> KerasP2PFLModel:
+
+def model_build_fn(*args, **kwargs) -> KerasModel:
     """Export the model build function."""
     compression = kwargs.pop("compression", None)
-    return KerasP2PFLModel(VGG16(*args, **kwargs), compression=compression)
+    return KerasModel(VGG16(*args, **kwargs), compression=compression)
+
 
 if __name__ == "__main__":
     # Example usage
     model = model_build_fn(input_shape=(224, 224, 3), out_channels=10, lr_rate=0.001)
-    model.get_model().compile(optimizer="adam", metrics=['accuracy'])
+    model.get_model().compile(optimizer="adam", metrics=["accuracy"])
     print(model.get_model().summary())

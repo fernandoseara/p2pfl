@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ import numpy as np
 import pytest  # noqa: E402, I001
 from datasets import DatasetDict, load_dataset  # noqa: E402, I001
 
+from p2pfl.communication.protocols.protobuff.memory import MemoryCommunicationProtocol
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset  # noqa: E402
 from p2pfl.learning.dataset.partition_strategies import DirichletPartitionStrategy, RandomIIDPartitionStrategy
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
@@ -62,7 +63,10 @@ def __fl_without_training(seed):
     Settings.general.SEED = seed
 
     # Create X nodes (model and data do not matter)
-    nodes = [Node(model_build_fn_pytorch(), P2PFLDataset.from_huggingface("p2pfl/MNIST")) for _ in range(10)]
+    nodes = [
+        Node(model_build_fn_pytorch(), P2PFLDataset.from_huggingface("p2pfl/MNIST"), protocol=MemoryCommunicationProtocol())
+        for _ in range(5)
+    ]
 
     try:
         [node.start() for node in nodes]
@@ -177,7 +181,7 @@ def test_model_initialization_reproducibility(model_build_fn):
         params2 = model_build_fn().get_parameters()
 
         # Assert parameters are identical
-        for p1, p2 in zip(params1, params2):
+        for p1, p2 in zip(params1, params2, strict=False):
             assert np.array_equal(p1, p2), "Model parameters differ despite using the same seed"
 
         # Different seed should produce different parameters
@@ -186,7 +190,7 @@ def test_model_initialization_reproducibility(model_build_fn):
 
         # At least one parameter should be different
         any_different = False
-        for p1, p3 in zip(params1, params3):
+        for p1, p3 in zip(params1, params3, strict=False):
             if not np.array_equal(p1, p3):
                 any_different = True
                 break
@@ -216,8 +220,8 @@ def test_local_training_reproducibility(model_build_fn):
         model1 = model_build_fn(lr_rate=2.0)  # High learning rate to ensure that schocastic differences are visible
         learner1 = LearnerFactory.create_learner(model1)()
         learner1.set_data(dataset)
-        learner1.set_P2PFLModel(model1)
-        learner1.set_addr("test-node-1")
+        learner1.set_model(model1)
+        learner1.set_address("test-node-1")
         learner1.set_epochs(1)
         learner1.fit()
         params1 = model1.get_parameters()
@@ -227,15 +231,15 @@ def test_local_training_reproducibility(model_build_fn):
         model1_1 = model_build_fn(lr_rate=2.0)  # High learning rate to ensure that schocastic differences are visible
         learner1_1 = LearnerFactory.create_learner(model1_1)()
         learner1_1.set_data(dataset)
-        learner1_1.set_P2PFLModel(model1_1)
-        learner1_1.set_addr("test-node-1")
+        learner1_1.set_model(model1_1)
+        learner1_1.set_address("test-node-1")
         learner1_1.set_epochs(1)
         learner1_1.fit()
         params1_1 = model1_1.get_parameters()
         eval1_1 = learner1_1.evaluate()
 
         # Assert parameters and evaluation metrics are identical or very close
-        for p1, p1_1 in zip(params1, params1_1):
+        for p1, p1_1 in zip(params1, params1_1, strict=False):
             assert np.array_equal(p1, p1_1), "Model parameters are not identical despite using equal seeds"
 
         for metric in eval1:
@@ -246,14 +250,14 @@ def test_local_training_reproducibility(model_build_fn):
         model2 = model_build_fn(lr_rate=2.0)  # High learning rate to ensure that schocastic differences are visible
         learner2 = LearnerFactory.create_learner(model2)()
         learner2.set_data(dataset)
-        learner2.set_P2PFLModel(model2)
-        learner2.set_addr("test-node-2")
+        learner2.set_model(model2)
+        learner2.set_address("test-node-2")
         learner2.set_epochs(1)
         learner2.fit()
         params2 = model2.get_parameters()
 
         # Assert parameters and evaluation metrics are identical or very close
-        for p1, p2 in zip(params1, params2):
+        for p1, p2 in zip(params1, params2, strict=False):
             assert not np.array_equal(p1, p2), "Model parameters not differ despite using different seed"
 
     except ImportError:
@@ -274,7 +278,7 @@ def __train_with_seed(s, n, r, model_build_fn, disable_ray: bool = False):
 
     # Data
     data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
-    partitions = data.generate_partitions(n * 50, RandomIIDPartitionStrategy)
+    partitions = data.generate_partitions(n * 50, RandomIIDPartitionStrategy())
 
     # Node Creation
     nodes = []
@@ -294,7 +298,8 @@ def __train_with_seed(s, n, r, model_build_fn, disable_ray: bool = False):
     wait_to_finish(nodes, timeout=240)
 
     # Stop Nodes
-    [n.stop() for n in nodes]
+    for node in nodes:
+        node.stop()
 
     return exp_name
 
@@ -334,7 +339,7 @@ def __flatten_results(item):
         A list of numerical values found in the item.
 
     """
-    if isinstance(item, (int, float)):
+    if isinstance(item, int | float):
         return [item]  # Base case: if it's a number, return it in a list
     elif isinstance(item, list):
         return [sub_item for element in item for sub_item in __flatten_results(element)]

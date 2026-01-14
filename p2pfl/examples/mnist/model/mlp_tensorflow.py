@@ -23,7 +23,7 @@ from tensorflow.keras.layers import Dense, Flatten  # type: ignore
 from tensorflow.keras.losses import SparseCategoricalCrossentropy  # type: ignore
 from tensorflow.keras.optimizers import Adam  # type: ignore
 
-from p2pfl.learning.frameworks.tensorflow.keras_model import KerasP2PFLModel
+from p2pfl.learning.frameworks.tensorflow.keras_model import KerasModel
 from p2pfl.settings import Settings
 from p2pfl.utils.seed import set_seed
 
@@ -73,7 +73,7 @@ class MLP(tf.keras.Model):
 
 
 # Export P2PFL model
-def model_build_fn(*args, **kwargs) -> KerasP2PFLModel:
+def model_build_fn(*args, **kwargs) -> KerasModel:
     """Export the model build function."""
     compression = kwargs.pop("compression", None)
-    return KerasP2PFLModel(MLP(*args, **kwargs), compression=compression)  # type: ignore
+    return KerasModel(MLP(*args, **kwargs), compression=compression)  # type: ignore

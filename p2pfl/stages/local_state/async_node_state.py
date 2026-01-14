@@ -22,7 +22,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from p2pfl.management.logger import logger
-from p2pfl.stages.local_state.experiment import Experiment
 from p2pfl.stages.local_state.node_state import LocalNodeState
 
 if TYPE_CHECKING:
@@ -48,7 +47,6 @@ class AsyncLocalNodeState(LocalNodeState):
     def __init__(self, address: str) -> None:
         """Initialize the node state."""
         super().__init__(address)
-
 
     def increase_iteration(self) -> None:
         """

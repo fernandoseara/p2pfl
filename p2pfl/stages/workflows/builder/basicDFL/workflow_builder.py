@@ -41,6 +41,7 @@ from p2pfl.utils.pytransitions import TimeoutMachine
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
+
 class BasicDFLWorkflowBuilder(WorkflowBuilder):
     """Builder for BasicDFL workflows."""
 
@@ -90,10 +91,10 @@ class BasicDFLWorkflowBuilder(WorkflowBuilder):
                 states=self._states,
                 transitions=self._transitions,
                 initial=None,
-                queued='model',
+                queued="model",
                 ignore_invalid_triggers=True,
                 model_override=True,
-                finalize_event='finalize_logging',
+                finalize_event="finalize_logging",
             )
         )
 
@@ -103,8 +104,7 @@ class BasicDFLWorkflowBuilder(WorkflowBuilder):
             raise ValueError("Network state is not set.")
 
         self._workflow_state_manager.add_learning_workflow(
-            BasicLearningWorkflowModel(node, self._local_state, self._network_state),
-            initialState="waitingSetup"
+            BasicLearningWorkflowModel(node, self._local_state, self._network_state), initialState="waitingSetup"
         )
 
     def create_commands(self, node: Node) -> None:

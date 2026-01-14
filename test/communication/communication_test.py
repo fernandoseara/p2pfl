@@ -18,7 +18,7 @@
 """P2PFL communication tests."""
 
 import asyncio
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
@@ -44,13 +44,13 @@ ProtocolBuilder = Callable[..., CommunicationProtocol]
 
 def __build_grpc_protocol(*args, **kwargs) -> CommunicationProtocol:
     comm_proto = GrpcCommunicationProtocol(*args, **kwargs)
-    comm_proto.set_addr("localhost")
+    comm_proto.set_address("localhost")
     return comm_proto
 
 
 def __build_memory_protocol(*args, **kwargs) -> CommunicationProtocol:
     comm_proto = MemoryCommunicationProtocol(*args, **kwargs)
-    comm_proto.set_addr("node")
+    comm_proto.set_address("node")
     return comm_proto
 
 
@@ -78,7 +78,8 @@ class MockCommand(Command):
         self.flag = True
 
 
-@pytest.mark.asyncio.parametrize("protocol_builder", build_protocols_fns)
+@pytest.mark.asyncio
+@pytest.mark.parametrize("protocol_builder", build_protocols_fns)
 async def test_connect_invalid_node(protocol_builder: ProtocolBuilder):
     """Test that a node can't connect to an invalid node."""
     protocol1 = protocol_builder()
@@ -89,7 +90,8 @@ async def test_connect_invalid_node(protocol_builder: ProtocolBuilder):
     await protocol1.stop()
 
 
-@pytest.mark.asyncio.parametrize("protocol_builder", build_protocols_fns)
+@pytest.mark.asyncio
+@pytest.mark.parametrize("protocol_builder", build_protocols_fns)
 async def test_basic_communication(protocol_builder: ProtocolBuilder):
     """Test the start and stop methods."""
     # Create 2 communication protocols
@@ -146,7 +148,8 @@ async def test_basic_communication(protocol_builder: ProtocolBuilder):
     await protocol2.stop()
 
 
-@pytest.mark.asyncio.parametrize("protocol_builder", build_protocols_fns)
+@pytest.mark.asyncio
+@pytest.mark.parametrize("protocol_builder", build_protocols_fns)
 async def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
     """Test the neighbor management."""
     # Create the protocols
@@ -217,7 +220,8 @@ async def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilde
     await protocol5.stop()
 
 
-@pytest.mark.asyncio.parametrize("protocol_builder", build_protocols_fns)
+@pytest.mark.asyncio
+@pytest.mark.parametrize("protocol_builder", build_protocols_fns)
 async def test_node_down(protocol_builder: ProtocolBuilder):
     """Test that a node abruptly down is removed from the neighbors list."""
     # Create 2 communication protocols

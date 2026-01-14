@@ -44,6 +44,7 @@ from p2pfl.utils.pytransitions import TimeoutMachine
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
+
 class AsyDFLWorkflowBuilder(WorkflowBuilder):
     """Builder for AsyDFL workflows."""
 
@@ -93,10 +94,10 @@ class AsyDFLWorkflowBuilder(WorkflowBuilder):
                 states=self._states,
                 transitions=self._transitions,
                 initial=None,
-                queued='model',
+                queued="model",
                 ignore_invalid_triggers=True,
                 model_override=True,
-                finalize_event='finalize_logging',
+                finalize_event="finalize_logging",
             )
         )
 
@@ -106,8 +107,7 @@ class AsyDFLWorkflowBuilder(WorkflowBuilder):
             raise ValueError("Network state is not set.")
 
         self._workflow_state_manager.add_learning_workflow(
-            AsyncLearningWorkflowModel(node, self._local_state, self._network_state),
-            initialState="waitingSetup"
+            AsyncLearningWorkflowModel(node, self._local_state, self._network_state), initialState="waitingSetup"
         )
 
     def create_commands(self, node: Node) -> None:
@@ -125,5 +125,5 @@ class AsyDFLWorkflowBuilder(WorkflowBuilder):
 
     def create_model(self, node: Node) -> None:
         """Create model."""
-        model = node.get_learner().get_P2PFLModel()
-        node.get_learner().set_P2PFLModel(CustomModelFactory.create_model("AsyDFL", model))
+        model = node.get_learner().get_model()
+        node.get_learner().set_model(CustomModelFactory.create_model("AsyDFL", model))

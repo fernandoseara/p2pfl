@@ -18,8 +18,9 @@
 
 """Example of a P2PFL MNIST experiment, using a MLP model and a MnistFederatedDM."""
 
-# poetry run snakeviz _MainThread-0.pstat
-# poetry run gprof2dot -f pstats Gossiper-10.pstat | dot -Tpng -o output.png && open output.png
+# source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
+# snakeviz _MainThread-0.pstat
+# gprof2dot -f pstats Gossiper-10.pstat | dot -Tpng -o output.png && open output.png
 
 import argparse
 import asyncio
@@ -99,6 +100,7 @@ async def mnist(
         protocol: The protocol to use.
         framework: The framework to use.
         aggregator: The aggregator to use.
+        workflow: The workflow type to use.
         reduced_dataset: Use a reduced dataset just for testing.
         topology: The network topology (star, full, line, ring).
         batch_size: The batch size for training.
@@ -112,7 +114,7 @@ async def mnist(
     # Check settings
     if n > Settings.gossip.TTL:
         raise ValueError(
-            "For in-line topology TTL must be greater than the number of nodes." "Otherwise, some messages will not be delivered."
+            "For in-line topology TTL must be greater than the number of nodes.Otherwise, some messages will not be delivered."
         )
 
     # Imports
@@ -145,7 +147,7 @@ async def mnist(
             model_fn(),
             partitions[i],
             protocol=MemoryCommunicationProtocol() if protocol == "memory" else GrpcCommunicationProtocol(),
-            address=address,
+            addr=address,
             aggregator=Scaffold() if aggregator == "scaffold" else None,
         )
         await node.start()
@@ -161,15 +163,15 @@ async def mnist(
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        await nodes[0].set_start_learning(rounds=r, epochs=e,
-            workflow=WorkflowType.ASYNC if workflow == "async" else WorkflowType.BASIC)
+        await nodes[0].set_start_learning(rounds=r, epochs=e, workflow=WorkflowType.ASYNC if workflow == "async" else WorkflowType.BASIC)
 
         # Wait and check
         await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour
 
         # Local Logs
         if show_metrics:
-            import os # noqa: I001
+            import os  # noqa: I001
+
             # Create directories to avoid clutter and overwrite
             os.makedirs("plots/local", exist_ok=True)
             os.makedirs("plots/global", exist_ok=True)
@@ -181,7 +183,7 @@ async def mnist(
                 for round_num, round_metrics in logs_l.items():
                     for node_name, node_metrics in round_metrics.items():
                         for metric, values in node_metrics.items():
-                            x, y = zip(*values)
+                            x, y = zip(*values, strict=False)
                             plt.plot(x, y, label=metric)
                             # Add a red point to the last data point
                             plt.scatter(x[-1], y[-1], color="red")
@@ -200,7 +202,7 @@ async def mnist(
                 # Plot experiment metrics
                 for node_name, node_metrics in logs_g.items():
                     for metric, values in node_metrics.items():
-                        x, y = zip(*values)
+                        x, y = zip(*values, strict=False)
                         plt.plot(x, y, label=metric)
                         # Add a red point to the last data point
                         plt.scatter(x[-1], y[-1], color="red")
@@ -238,7 +240,7 @@ if __name__ == "__main__":
 
     # Set logger
     if args.token != "":
-        logger.connect_web("http://localhost:3000/api/v1", args.token)
+        logger.connect(p2pfl_web_url="http://localhost:3000/api/v1", p2pfl_web_key=args.token)
 
     # Seed
     if args.seed is not None:
@@ -246,20 +248,22 @@ if __name__ == "__main__":
 
     # Launch experiment
     try:
-        asyncio.run(mnist(
-            args.nodes,
-            args.rounds,
-            args.epochs,
-            show_metrics=args.show_metrics,
-            measure_time=args.measure_time,
-            protocol=args.protocol,
-            framework=args.framework,
-            aggregator=args.aggregator,
-            workflow=args.workflow,
-            reduced_dataset=args.reduced_dataset,
-            topology=args.topology,
-            batch_size=args.batch_size,
-        ))
+        asyncio.run(
+            mnist(
+                args.nodes,
+                args.rounds,
+                args.epochs,
+                show_metrics=args.show_metrics,
+                measure_time=args.measure_time,
+                protocol=args.protocol,
+                framework=args.framework,
+                aggregator=args.aggregator,
+                workflow=args.workflow,
+                reduced_dataset=args.reduced_dataset,
+                topology=args.topology,
+                batch_size=args.batch_size,
+            )
+        )
     finally:
         if args.profiling:
             # Stop profiler

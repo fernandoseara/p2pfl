@@ -26,6 +26,7 @@ from p2pfl.management.logger import logger
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
+
 class WorkflowModel:
     """Workflow base class."""
 
@@ -39,7 +40,7 @@ class WorkflowModel:
     # LOGGING CALLBACKS #
     ######################
     def finalize_logging(self, *args, **kwargs) -> None:
-        """Logging callback."""
+        """Log the current stage transition."""
         logger.debug(self.node.address, f"🏃 Running stage: {(self.state)}")
 
     def test(self, *args, **kwargs) -> None:

@@ -20,7 +20,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from p2pfl.utils.singleton import SingletonMeta
 
@@ -33,7 +33,7 @@ from p2pfl.utils.singleton import SingletonMeta
 class General:
     """General system settings."""
 
-    SEED: Optional[int] = None
+    SEED: int | None = None
     """Seed for random number generation."""
     GRPC_TIMEOUT: float = 10.0
     """Maximum time (seconds) to wait for a gRPC request."""
@@ -45,6 +45,8 @@ class General:
     """Maximum number of run log files to keep."""
     DISABLE_RAY: bool = False
     """Disable Ray for local testing."""
+    RESOURCE_MONITOR_PERIOD: int = 10
+    """Period (seconds) to send resource monitor information."""
 
 
 @dataclass
@@ -79,6 +81,8 @@ class Gossip:
     """Amount of equal rounds to exit gossiping. Careful, a low value can cause an early stop of gossiping."""
     EXIT_ON_X_EQUAL_ROUNDS: int = 10
     """Amount of equal rounds to exit gossiping. Careful, a low value can cause an early stop of gossiping."""
+    MODE_EXPECTATION_TIMEOUT: float = 60.0
+    """Timeout (seconds) to wait for a model to be received."""
 
 
 @dataclass
@@ -110,14 +114,7 @@ class Training:
     """Timeout (seconds) for a node to wait for other models. Timeout starts when the first model is added."""
     DEFAULT_BATCH_SIZE: int = 128
     """Default batch size for training."""
-
-
-@dataclass
-class Web:
-    """Web interface and resource monitoring settings."""
-
-    RESOURCE_MONITOR_PERIOD: int = 1
-    """Period (seconds) to send resource monitor information."""
+    RAY_ACTOR_POOL_SIZE: int = 4
 
 
 ###################
@@ -138,8 +135,6 @@ class Settings(metaclass=SingletonMeta):
     """SSL certificate settings."""
     training = Training()
     """Training process settings."""
-    web = Web()
-    """Web interface and resource monitoring settings."""
 
     @classmethod
     def set_from_dict(cls, settings_dict: dict[str, dict[str, Any]]):

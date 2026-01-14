@@ -28,6 +28,7 @@ from p2pfl.stages.stage import Stage
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
+
 class GossipFullModelStage(Stage):
     """Gossip model stage."""
 
@@ -35,7 +36,7 @@ class GossipFullModelStage(Stage):
     async def execute(
         node: Node,
         candidates: list[str],
-        ) -> None:
+    ) -> None:
         """Execute the stage."""
         logger.info(node.address, "🗣️ Gossiping full model.")
         await GossipFullModelStage.__gossip_model_difusion(
@@ -48,15 +49,12 @@ class GossipFullModelStage(Stage):
         candidates: list[str],
         node: Node,
     ) -> None:
-
         def model_fn(_: str) -> Any:
             if node.get_local_state().get_experiment().round is None:
                 raise Exception("Round not initialized")
-            encoded_model = node.get_learner().get_P2PFLModel().encode_parameters()
+            encoded_model = node.get_learner().get_model().encode_parameters()
             return node.get_communication_protocol().build_weights(
-                FullModelCommand.get_name(),
-                node.get_local_state().get_experiment().round,
-                encoded_model
+                FullModelCommand.get_name(), node.get_local_state().get_experiment().round, encoded_model
             )
 
         for neighbor in candidates:

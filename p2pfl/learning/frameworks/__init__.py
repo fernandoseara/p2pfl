@@ -6,14 +6,14 @@ This package contains all the integrations with the different learning framework
 
 from enum import Enum
 
+
 ###
 #   Framework Enum
 ###
-
-
 class Framework(Enum):
     """Enum for the different learning frameworks."""
 
     PYTORCH = "pytorch"
     TENSORFLOW = "tensorflow"
     FLAX = "flax"
+    XGBOOST = "xgboost"

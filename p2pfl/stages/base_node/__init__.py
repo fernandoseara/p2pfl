@@ -7,3 +7,13 @@ from .gossip_partial_model_stage import GossipPartialModelStage
 from .start_learning_stage import StartLearningStage
 from .train_stage import TrainStage
 from .vote_train_set_stage import VoteTrainSetStage
+
+__all__ = [
+    "AggregatingVoteTrainSetStage",
+    "EvaluateStage",
+    "GossipFullModelStage",
+    "GossipPartialModelStage",
+    "StartLearningStage",
+    "TrainStage",
+    "VoteTrainSetStage",
+]

@@ -19,7 +19,6 @@
 
 from concurrent import futures
 from os.path import isfile
-from typing import Optional
 
 from grpc import aio, ssl_server_credentials
 
@@ -48,7 +47,7 @@ class GrpcServer(ProtobuffServer):
         self,
         gossiper: Gossiper,
         neighbors: Neighbors,
-        commands: Optional[list[Command]] = None,
+        commands: list[Command] | None = None,
     ) -> None:
         """Initialize the GRPC server."""
         # Super
@@ -65,9 +64,9 @@ class GrpcServer(ProtobuffServer):
         )
         self.__server_started = False
 
-    def set_addr(self, addr: str) -> str:
-        """Parse and set the addr of the node."""
-        return super().set_addr(AddressParser(addr).get_parsed_address())
+    def set_address(self, address: str) -> str:
+        """Parse and set the address of the node."""
+        return super().set_address(AddressParser(address).get_parsed_address())
 
     ####
     # Management
@@ -85,9 +84,11 @@ class GrpcServer(ProtobuffServer):
         node_pb2_grpc.add_NodeServicesServicer_to_server(self, self.__server)
         try:
             if Settings.ssl.USE_SSL and isfile(Settings.ssl.SERVER_KEY) and isfile(Settings.ssl.SERVER_CRT):
-                with open(Settings.ssl.SERVER_KEY) as key_file, open(Settings.ssl.SERVER_CRT) as crt_file, open(
-                    Settings.ssl.CA_CRT
-                ) as ca_file:
+                with (
+                    open(Settings.ssl.SERVER_KEY) as key_file,
+                    open(Settings.ssl.SERVER_CRT) as crt_file,
+                    open(Settings.ssl.CA_CRT) as ca_file,
+                ):
                     private_key = key_file.read().encode()
                     certificate_chain = crt_file.read().encode()
                     root_certificates = ca_file.read().encode()

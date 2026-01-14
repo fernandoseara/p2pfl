@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2022 Pedro Guijas Bravo.
 #
@@ -19,7 +19,8 @@
 """P2PFL model abstraction."""
 
 import copy
-from typing import Any, Optional, Union
+from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 
@@ -27,29 +28,33 @@ from p2pfl.learning.compression.manager import CompressionManager
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError
 
 
-class P2PFLModel:
+class P2PFLModel(ABC):
     """
-    P2PFL model abstraction.
+    Abstract base class for all P2PFL models.
 
     This class encapsulates the different models across all the possible frameworks.
-
     The key concept is the extraction of the model weights in a common format for all the frameworks.
+
+    Important:
+        Inherit from ``WeightBasedModel`` or ``TreeBasedModel`` instead, which handle
+        neural networks and tree ensembles respectively with proper aggregator compatibility.
 
     Args:
         model: The model to encapsulate.
 
-    :: note :: The model type is ANY because the different frameworks do not share a common model type.
+    Note:
+        The model type is ANY because different model types have different parameter formats.
 
     """
 
     def __init__(
         self,
         model: Any,
-        params: Optional[Union[list[np.ndarray], bytes]] = None,
-        num_samples: Optional[int] = None,
-        contributors: Optional[list[str]] = None,
-        additional_info: Optional[dict[str, Any]] = None,
-        compression: Optional[dict[str, dict[str, Any]]] = None,
+        params: Any = None,
+        num_samples: int | None = None,
+        contributors: list[str] | None = None,
+        additional_info: dict[str, Any] | None = None,
+        compression: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         """Initialize the model."""
         self.model = model
@@ -73,7 +78,7 @@ class P2PFLModel:
         """Get the model."""
         return self.model
 
-    def encode_parameters(self, params: Optional[list[np.ndarray]] = None) -> bytes:
+    def encode_parameters(self, params: Any = None) -> bytes:
         """
         Encode the parameters of the model.
 
@@ -86,12 +91,12 @@ class P2PFLModel:
 
         return CompressionManager.apply(params, self.additional_info, self.compression)
 
-    def decode_parameters(self, data: bytes) -> tuple[list[np.ndarray], dict[str, Any]]:
+    def decode_parameters(self, data: bytes) -> tuple[Any, dict[str, Any]]:
         """
         Decode the parameters of the model.
 
         Args:
-            data: The parameters of the model.
+            data: The serialized parameters.
 
         """
         try:
@@ -99,17 +104,19 @@ class P2PFLModel:
         except Exception as e:
             raise DecodingParamsError("Error decoding parameters") from e
 
-    def get_parameters(self) -> list[np.ndarray]:
+    @abstractmethod
+    def get_parameters(self) -> Any:
         """
         Get the parameters of the model.
 
         Returns:
-            The parameters of the model
+            The parameters of the model.
 
         """
         raise NotImplementedError
 
-    def set_parameters(self, params: Union[list[np.ndarray], bytes]) -> None:
+    @abstractmethod
+    def set_parameters(self, params: Any) -> None:
         """
         Set the parameters of the model.
 
@@ -133,7 +140,7 @@ class P2PFLModel:
         """
         self.additional_info[callback] = info
 
-    def get_info(self, callback: Optional[str] = None) -> Any:
+    def get_info(self, callback: str | None = None) -> Any:
         """
         Get additional information from the learner state.
 
@@ -183,6 +190,7 @@ class P2PFLModel:
         """
         return self.__class__(copy.deepcopy(self.model), **kwargs)
 
+    @abstractmethod
     def get_framework(self) -> str:
         """
         Retrieve the model framework name.
@@ -203,164 +211,70 @@ class P2PFLModel:
         """
         raise NotImplementedError("Clone method not implemented for this model.")
 
-class P2PFLModelDecorator(P2PFLModel):
+
+class WeightBasedModel(P2PFLModel):
     """
-    Base decorator interface for P2PFLModel.
+    Base class for neural network models (PyTorch, TensorFlow, Flax).
 
-    Delegates all calls to the wrapped model.
+    Returns parameters as ``list[np.ndarray]`` weight tensors. Compatible with ``WeightAggregator``.
+
     """
-
-    def __init__(self, wrapped_model: P2PFLModel):
-        """
-        Initialize the decorator with a wrapped P2PFLModel.
-
-        Args:
-            wrapped_model: The P2PFLModel to wrap.
-
-        """
-        self._wrapped_model = wrapped_model
-
-    def get_parameters(self) -> list[np.ndarray]:
-        """
-        Get the parameters of the wrapped model.
-
-        Returns:
-            The parameters of the wrapped model.
-
-        """
-        return self._wrapped_model.get_parameters()
-
-    def set_parameters(self, params: Union[list[np.ndarray], bytes]) -> None:
-        """
-        Set the parameters of the wrapped model.
-
-        Args:
-            params: The parameters to set in the wrapped model.
-
-        Raises:
-            ModelNotMatchingError: If parameters don't match the wrapped model.
-
-        """
-        self._wrapped_model.set_parameters(params)
-
-    def get_framework(self) -> str:
-        """
-        Retrieve the framework of the wrapped model.
-
-        Returns:
-            The framework of the wrapped model.
-
-        """
-        return self._wrapped_model.get_framework()
-
-    def get_model(self) -> Any:
-        """
-        Get the underlying model of the wrapped P2PFLModel.
-
-        Returns:
-            The underlying model of the wrapped P2PFLModel.
-
-        """
-        return self._wrapped_model.get_model()
-
-    def build_copy(self, **kwargs) -> "P2PFLModel":
-        """
-        Build a copy of this decorator (including a copy of the wrapped model).
-
-        Returns:
-            A copy of the decorator, wrapping a copy of the model.
-
-        """
-        copied_wrapped_model = self._wrapped_model.build_copy(**kwargs)
-        return self.__class__(copied_wrapped_model)
-
-    def encode_parameters(self, params: Optional[list[np.ndarray]] = None) -> bytes:
-        """
-        Encode the parameters of the wrapped model.
-
-        Args:
-            params: The parameters of the wrapped model.
-
-        Returns:
-            Encoded parameters as bytes.
-
-        """
-        return self._wrapped_model.encode_parameters(params)
 
     def decode_parameters(self, data: bytes) -> tuple[list[np.ndarray], dict[str, Any]]:
         """
-        Decode the parameters of the wrapped model.
+        Decode the parameters of the model.
 
         Args:
-            data: The encoded parameters of the wrapped model.
+            data: The serialized parameters.
 
         Returns:
-            A tuple containing the decoded parameters and additional info.
+            Tuple of (weight arrays, additional info).
 
         """
-        return self._wrapped_model.decode_parameters(data)
+        params, info = super().decode_parameters(data)
+        return list(params), info
 
-    def add_info(self, callback: str, info: Any) -> None:
+    @abstractmethod
+    def get_parameters(self) -> list[np.ndarray]:
         """
-        Add additional information to the wrapped model.
+        Get the parameters of the model.
+
+        Returns:
+            List of numpy arrays, one per layer.
+
+        """
+        raise NotImplementedError
+
+
+class TreeBasedModel(P2PFLModel):
+    """
+    Base class for tree ensemble models (XGBoost).
+
+    Returns parameters as ``dict[str, Any]`` tree structures. Compatible with ``TreeAggregator``.
+
+    """
+
+    def decode_parameters(self, data: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
+        """
+        Decode the parameters of the model.
 
         Args:
-            callback: The callback to add the information.
-            info: The information for the callback.
-
-        """
-        self._wrapped_model.add_info(callback, info)
-
-    def get_info(self, callback: Optional[str] = None) -> Any:
-        """
-        Get additional information from the wrapped model.
-
-        Args:
-            callback: The callback to retrieve the information.
+            data: The serialized parameters.
 
         Returns:
-            The requested information or all additional info if no callback is specified.
+            Tuple of (tree structure dict, additional info).
 
         """
-        return self._wrapped_model.get_info(callback)
+        params, info = super().decode_parameters(data)
+        return dict(params), info
 
-    def set_contribution(self, contributors: list[str], num_samples: int) -> None:
+    @abstractmethod
+    def get_parameters(self) -> dict[str, Any]:
         """
-        Set the contribution of the wrapped model.
-
-        Args:
-            contributors: The contributors of the wrapped model.
-            num_samples: The number of samples used to train this model.
-
-        """
-        self._wrapped_model.set_contribution(contributors, num_samples)
-
-    def get_contributors(self) -> list[str]:
-        """
-        Get the contributors of the wrapped model.
+        Get the parameters of the model.
 
         Returns:
-            The contributors of the wrapped model.
+            Parsed tree structure as a dictionary (XGBoost JSON format).
 
         """
-        return self._wrapped_model.get_contributors()
-
-    def get_num_samples(self) -> int:
-        """
-        Get the number of samples used to train the wrapped model.
-
-        Returns:
-            The number of samples used to train the wrapped model.
-
-        """
-        return self._wrapped_model.get_num_samples()
-
-    def clone_model(self) -> Any:
-        """
-        Clone the underlying model of the wrapped P2PFLModel.
-
-        Returns:
-            The cloned model of the wrapped P2PFLModel.
-
-        """
-        return self._wrapped_model.clone_model()
+        raise NotImplementedError

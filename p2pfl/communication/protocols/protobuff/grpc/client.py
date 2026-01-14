@@ -18,7 +18,6 @@
 """GRPC client."""
 
 from os.path import isfile
-from typing import Optional
 
 import grpc
 
@@ -44,8 +43,8 @@ class GrpcClient(ProtobuffClient):
         super().__init__(self_addr, nei_addr)
 
         # GRPC
-        self.channel: Optional[grpc.aio.Channel] = None
-        self.stub: Optional[node_pb2_grpc.NodeServicesStub] = None
+        self.channel: grpc.aio.Channel | None = None
+        self.stub: node_pb2_grpc.NodeServicesStub | None = None
 
     ####
     # Connection
@@ -71,9 +70,11 @@ class GrpcClient(ProtobuffClient):
         try:
             # Create channel (ssl or not)
             if Settings.ssl.USE_SSL and isfile(Settings.ssl.SERVER_CRT):
-                with open(Settings.ssl.CLIENT_KEY) as key_file, open(Settings.ssl.CLIENT_CRT) as crt_file, open(
-                    Settings.ssl.CA_CRT
-                ) as ca_file:
+                with (
+                    open(Settings.ssl.CLIENT_KEY) as key_file,
+                    open(Settings.ssl.CLIENT_CRT) as crt_file,
+                    open(Settings.ssl.CA_CRT) as ca_file,
+                ):
                     private_key = key_file.read().encode()
                     certificate_chain = crt_file.read().encode()
                     root_certificates = ca_file.read().encode()
@@ -136,7 +137,7 @@ class GrpcClient(ProtobuffClient):
         temporal_connection: bool = False,
         raise_error: bool = False,
         disconnect_on_error: bool = True,
-    ) -> None:
+    ) -> str:
         """
         Send a message to the neighbor.
 
@@ -159,11 +160,18 @@ class GrpcClient(ProtobuffClient):
             elif raise_error:
                 raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
             else:
-                return
+                raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
 
         # Send
         try:
             res = await self.stub.send(msg, timeout=Settings.general.GRPC_TIMEOUT)  # type: ignore
+
+            # Log successful message sending
+            if not res.error:
+                self.log_successful_send(msg)
+            else:
+                raise CommunicationError(f"Error while sending a message: {msg.cmd}: {res.error}")
+
         except Exception as e:
             # Unexpected error
             logger.info(
@@ -177,7 +185,7 @@ class GrpcClient(ProtobuffClient):
             if raise_error:
                 raise e
             else:
-                return
+                return ""
 
         if res.error:
             logger.info(
@@ -196,3 +204,5 @@ class GrpcClient(ProtobuffClient):
         # Raise
         if res.error and raise_error:
             raise CommunicationError(f"Error while sending a message: {msg.cmd}: {res.error}")
+
+        return res.response

@@ -20,7 +20,6 @@
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.command import Command

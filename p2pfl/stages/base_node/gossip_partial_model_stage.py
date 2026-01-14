@@ -37,11 +37,7 @@ class GossipPartialModelStage(Stage):
     """GossipPartialModel stage."""
 
     @staticmethod
-    async def execute(
-        network_state: NetworkState,
-        node: Node,
-        candidates: list[str]
-        ) -> None:
+    async def execute(network_state: NetworkState, node: Node, candidates: list[str]) -> None:
         """Execute the stage."""
         # Communicate Aggregation
         await node.get_communication_protocol().broadcast_gossip(
@@ -74,10 +70,7 @@ class GossipPartialModelStage(Stage):
             aggregation_sources = network_state.get_aggregation_sources(n)
 
             # Filter models whose contributors are not in aggregation sources
-            eligible_models = [
-                model for model in models
-                if not set(model.get_contributors()).issubset(aggregation_sources)
-            ]
+            eligible_models = [model for model in models if not set(model.get_contributors()).issubset(aggregation_sources)]
 
             # Select one random eligible model
             model = None

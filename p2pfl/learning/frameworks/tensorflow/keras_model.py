@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2024 Pedro Guijas Bravo.
 #
@@ -18,17 +18,14 @@
 
 """Keras model abstraction for P2PFL."""
 
-from typing import Any, Optional, TypeVar, Union
+from typing import Any
 
 import numpy as np
 import tensorflow as tf  # type: ignore
 
 from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
-from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
-from p2pfl.management.logger import logger
-
-T = TypeVar("T", bound="KerasP2PFLModel")
+from p2pfl.learning.frameworks.p2pfl_model import WeightBasedModel
 
 #####################
 #    KerasModel     #
@@ -41,7 +38,7 @@ class ModelNotBuiltError(Exception):
     pass
 
 
-class KerasP2PFLModel(P2PFLModel):
+class KerasModel(WeightBasedModel):
     """
     P2PFL model abstraction for TensorFlow/Keras.
 
@@ -58,11 +55,11 @@ class KerasP2PFLModel(P2PFLModel):
     def __init__(
         self,
         model: tf.keras.Model,
-        params: Optional[Union[list[np.ndarray], bytes]] = None,
-        num_samples: Optional[int] = None,
-        contributors: Optional[list[str]] = None,
-        additional_info: Optional[dict[str, Any]] = None,
-        compression: Optional[dict[str, dict[str, Any]]] = None,
+        params: list[np.ndarray] | bytes | None = None,
+        num_samples: int | None = None,
+        contributors: list[str] | None = None,
+        additional_info: dict[str, Any] | None = None,
+        compression: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         """Initialize the KerasModel."""
         super().__init__(model, params, num_samples, contributors, additional_info, compression)
@@ -83,7 +80,7 @@ class KerasP2PFLModel(P2PFLModel):
         """
         return self.model.get_weights()
 
-    def set_parameters(self, params: Union[list[np.ndarray], bytes]) -> None:
+    def set_parameters(self, params: list[np.ndarray] | bytes) -> None:
         """
         Set the parameters of the model.
 
@@ -134,7 +131,7 @@ class KerasP2PFLModel(P2PFLModel):
         """
         return self.model.__class__.from_config(self.model.get_config())
 
-    def build_copy(self, **kwargs) -> "P2PFLModel":
+    def build_copy(self, **kwargs) -> "KerasModel":
         """
         Create a copy of the model with the same configuration.
 

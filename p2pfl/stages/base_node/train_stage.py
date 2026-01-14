@@ -27,6 +27,7 @@ from p2pfl.stages.stage import Stage
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
+
 class TrainStage(Stage):
     """Train stage."""
 

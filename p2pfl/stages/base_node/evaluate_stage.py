@@ -33,8 +33,7 @@ class EvaluateStage(Stage):
     """Evaluate stage."""
 
     @staticmethod
-    async def execute(
-        node: Node) -> None:
+    async def execute(node: Node) -> None:
         """Execute the stage."""
         # Evaluate and send metrics
         logger.info(node.address, "🔬 Evaluating...")

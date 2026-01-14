@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from p2pfl.stages.network_state.network_state import NetworkState
     from p2pfl.stages.workflows.models.learning_workflow_model import LearningWorkflowModel
 
+
 class WorkflowStateManager:
     """Manage the state of the workflows."""
 

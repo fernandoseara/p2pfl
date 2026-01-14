@@ -19,7 +19,6 @@
 
 from __future__ import annotations
 
-import random
 from typing import TYPE_CHECKING
 
 from p2pfl.management.logger import logger
@@ -29,6 +28,7 @@ if TYPE_CHECKING:
     from p2pfl.node import Node
     from p2pfl.stages.network_state.network_state import NetworkState
 
+
 class AggregatingVoteTrainSetStage(Stage):
     """Vote Train Set Stage."""
 
@@ -36,11 +36,11 @@ class AggregatingVoteTrainSetStage(Stage):
     async def execute(
         network_state: NetworkState,
         node: Node,
-        ) -> None:
+    ) -> None:
         """Execute the stage."""
         # Aggregate votes
         node.get_local_state().train_set = AggregatingVoteTrainSetStage.__validate_train_set(
-            await AggregatingVoteTrainSetStage.__aggregate_votes(network_state,node),
+            await AggregatingVoteTrainSetStage.__aggregate_votes(network_state, node),
             node,
         )
         logger.info(
@@ -48,13 +48,8 @@ class AggregatingVoteTrainSetStage(Stage):
             f"🚂 Train set of {len(node.get_local_state().train_set)} nodes: {node.get_local_state().train_set}",
         )
 
-
     @staticmethod
-    async def __aggregate_votes(
-        network_state: NetworkState,
-        node: Node
-        ) -> list[str]:
-
+    async def __aggregate_votes(network_state: NetworkState, node: Node) -> list[str]:
         # Get all votes
         results: dict[str, int] = {}
         for node_vote in list(network_state.get_all_votes().values()):
@@ -67,9 +62,7 @@ class AggregatingVoteTrainSetStage(Stage):
                     results[k] = v
 
         # Order by votes and get TOP X
-        results_ordered = sorted(
-            results.items(), key=lambda x: x[0], reverse=True
-        )  # to equal solve of draw (node name alphabetical order)
+        results_ordered = sorted(results.items(), key=lambda x: x[0], reverse=True)  # to equal solve of draw (node name alphabetical order)
         results_ordered = sorted(results_ordered, key=lambda x: x[1], reverse=True)
         top = min(len(results_ordered), node.get_local_state().experiment.trainset_size)
         results_ordered = results_ordered[0:top]
@@ -77,7 +70,6 @@ class AggregatingVoteTrainSetStage(Stage):
         network_state.clear_all_votes()
         logger.info(node.address, f"🔢 Computed {len(network_state.get_all_votes())} votes.")
         return [i[0] for i in results_ordered]
-
 
     @staticmethod
     def __validate_train_set(train_set: list[str], node: Node) -> list[str]:

@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from transitions import MachineError
 
@@ -28,7 +28,7 @@ from p2pfl.communication.commands.command import Command
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.management.logger import logger
 
-if TYPE_CHECKING:  # Only imports the below statements during type checking
+if TYPE_CHECKING:
     from p2pfl.node import Node
 
 
@@ -37,7 +37,7 @@ class PartialModelCommand(Command):
 
     def __init__(
         self,
-        node: Node
+        node: Node,
     ) -> None:
         """Initialize PartialModelCommand."""
         self.__node = node
@@ -51,9 +51,9 @@ class PartialModelCommand(Command):
         self,
         source: str,
         round: int,
-        weights: Optional[bytes] = None,
-        contributors: Optional[List[str]] = None,  # TIPO ESTA MAL (NECESARIO CASTEARLO AL LLAMAR)
-        num_samples: Optional[int] = None,
+        weights: bytes | None = None,
+        contributors: list[str] | None = None,  # TIPO ESTA MAL (NECESARIO CASTEARLO AL LLAMAR)
+        num_samples: int | None = None,
         **kwargs,
     ) -> None:
         """Execute the command."""
@@ -62,10 +62,14 @@ class PartialModelCommand(Command):
 
         try:
             # Add model to aggregator
-            model = self.__node.get_learner().get_P2PFLModel().build_copy(
-                params=weights,
-                num_samples=num_samples,
-                contributors=list(contributors)
+            model = (
+                self.__node.get_learner()
+                .get_model()
+                .build_copy(
+                    params=weights,
+                    num_samples=num_samples,
+                    contributors=list(contributors),
+                )
             )
 
             await self.__node.get_learning_workflow().aggregate(model, source)

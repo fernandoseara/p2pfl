@@ -19,7 +19,8 @@
 """Communication protocol."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.utils.node_component import NodeComponent, allow_no_addr_check
@@ -34,7 +35,7 @@ class CommunicationProtocol(ABC, NodeComponent):
 
     """
 
-    def __init__(self, commands: Optional[List[Command]] = None, *args, **kwargs) -> None:
+    def __init__(self, commands: list[Command] | None = None, *args, **kwargs) -> None:
         """Initialize the communication protocol."""
         # (addr) Super
         NodeComponent.__init__(self)
@@ -51,7 +52,7 @@ class CommunicationProtocol(ABC, NodeComponent):
 
     @allow_no_addr_check
     @abstractmethod
-    def add_command(self, cmds: Union[Command, List[Command]]) -> None:
+    def add_command(self, cmds: Command | list[Command]) -> None:
         """
         Add a command to the communication protocol.
 
@@ -63,7 +64,7 @@ class CommunicationProtocol(ABC, NodeComponent):
 
     @allow_no_addr_check
     @abstractmethod
-    def remove_command(self, cmd: Union[str, Command]) -> None:
+    def remove_command(self, cmd: str | Command) -> None:
         """
         Remove a command from the communication protocol.
 
@@ -74,7 +75,7 @@ class CommunicationProtocol(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    def build_msg(self, command_name: str, content: Optional[list[Any]] = None, round: Optional[int] = None) -> Any:
+    def build_msg(self, command_name: str, content: list[Any] | None = None, round: int | None = None) -> Any:
         """
         Build a message to send to the neighbors.
 
@@ -95,7 +96,7 @@ class CommunicationProtocol(ABC, NodeComponent):
         cmd: str,
         round: int,
         serialized_model: bytes,
-        contributors: Optional[list[str]] = None,
+        contributors: list[str] | None = None,
         weight: int = 1,
     ) -> Any:
         """
@@ -128,12 +129,13 @@ class CommunicationProtocol(ABC, NodeComponent):
             msg: The message to send.
             raise_error: If raise error.
             remove_on_error: If remove on error.
+            temporal_connection: If temporal connection.
 
         """
         pass
 
     @abstractmethod
-    async def broadcast(self, msg: Any, node_list: Optional[List[str]] = None) -> None:
+    async def broadcast(self, msg: Any, node_list: list[str] | None = None) -> None:
         """
         Broadcast a message to all neighbors.
 
@@ -161,12 +163,13 @@ class CommunicationProtocol(ABC, NodeComponent):
             msg: The message to gossip.
             raise_error: If raise error.
             remove_on_error: If remove on error.
+            temporal_connection: If temporal connection.
 
         """
         pass
 
     @abstractmethod
-    async def broadcast_gossip(self, msg: Any, node_list: Optional[List[str]] = None) -> None:
+    async def broadcast_gossip(self, msg: Any, node_list: list[str] | None = None) -> None:
         """
         Gossip a message to all neighbors.
 
@@ -202,7 +205,7 @@ class CommunicationProtocol(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    def get_neighbors(self, only_direct: bool = False) -> Dict[str, Any]:
+    def get_neighbors(self, only_direct: bool = False) -> dict[str, Any]:
         """
         Get the neighbors.
 
@@ -225,4 +228,28 @@ class CommunicationProtocol(ABC, NodeComponent):
     @abstractmethod
     def wait_for_termination(self) -> None:
         """Wait for termination."""
+        pass
+
+    @abstractmethod
+    async def gossip_weights(
+        self,
+        early_stopping_fn: Callable[[], bool],
+        get_candidates_fn: Callable[[], list[str]],
+        status_fn: Callable[[], Any],
+        model_fn: Callable[[str], tuple[Any, str, int, list[str]]],
+        period: float | None = None,
+        create_connection: bool = False,
+    ) -> None:
+        """
+        Gossip model weights.
+
+        Args:
+            early_stopping_fn: The early stopping function.
+            get_candidates_fn: The get candidates function.
+            status_fn: The status function.
+            model_fn: The model function.
+            period: The period.
+            create_connection: The create connection flag.
+
+        """
         pass

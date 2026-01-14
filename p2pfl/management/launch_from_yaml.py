@@ -17,7 +17,6 @@
 #
 """Launch from YAMLs."""
 
-import asyncio
 import importlib
 import logging
 import os
@@ -51,12 +50,13 @@ def load_by_package_and_name(package_name, class_name) -> Any:
     return getattr(module, class_name)
 
 
-async def run_from_yaml(yaml_path: str):
+async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     """
     Run a simulation from a YAML file.
 
     Args:
         yaml_path: The path to the YAML file.
+        debug: If True, enable debug mode.
 
     """
     logging.getLogger("asyncio").setLevel(logging.WARNING)
@@ -97,13 +97,13 @@ async def run_from_yaml(yaml_path: str):
     if profiling.get("measure_time", False):
         start_time = time.time()
 
-    ######################
-    # P2PFL Web Services #
-    ######################
+    ###################
+    # Remote Loggers  #
+    ###################
 
-    web_logger = config.get("web_logger", {})
-    if web_logger.get("enabled", False):
-        logger.connect_web(web_logger.get("url"), web_logger.get("token"))
+    remote_loggers = config.get("remote_loggers", {})
+    if remote_loggers:
+        logger.connect(**remote_loggers)
 
     ###########
     # Dataset #
@@ -150,7 +150,7 @@ async def run_from_yaml(yaml_path: str):
     # Batch size
     dataset.set_batch_size(dataset_config.get("batch_size", 1))
 
-    # Partitioning
+    # Partitioning (do this BEFORE applying transforms)
     partitioning_config = dataset_config.get("partitioning", {})
     if not partitioning_config:
         raise ValueError("Missing 'partitioning' configuration in YAML file.")
@@ -168,6 +168,21 @@ async def run_from_yaml(yaml_path: str):
         ),
         **partitioning_config.get("params", {}),
     )
+
+    # Transforms (apply AFTER partitioning)
+    transforms_config = dataset_config.get("transforms", None)
+    if transforms_config:
+        transforms_package = transforms_config.get("package")
+        transform_function = transforms_config.get("function")
+        if not transforms_package or not transform_function:
+            raise ValueError("Missing 'transforms' configuration in YAML file.")
+        transform_class = load_by_package_and_name(
+            transforms_package,
+            transform_function,
+        )
+        # Apply transforms to each partition
+        for partition in partitions:
+            partition.set_transforms(transform_class(**transforms_config.get("params", {})))
 
     #########
     # Model #
@@ -272,11 +287,12 @@ async def run_from_yaml(yaml_path: str):
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size,
-            workflow=workflow_fn())
+        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size, workflow=workflow_fn())
 
         # Wait and check
-        await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour | TODO: Make this configurable
+        # Get wait_timeout from experiment config (in minutes), default to 60 minutes (1 hour)
+        wait_timeout = experiment_config.get("wait_timeout", 60)
+        await wait_to_finish(nodes, timeout=wait_timeout * 60, debug=debug)
 
     except Exception as e:
         raise e

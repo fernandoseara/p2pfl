@@ -18,13 +18,10 @@
 
 """AsyDFL callback for P2PFL."""
 
-from typing import Optional
-
 import tensorflow as tf  # type: ignore
 
 from p2pfl.learning.frameworks.learner import P2PFLCallback
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
-from p2pfl.management.logger import logger as P2PLogger
 
 
 class EdgeNodeUpdateCallback(tf.keras.callbacks.Callback, P2PFLCallback):
@@ -39,7 +36,7 @@ class EdgeNodeUpdateCallback(tf.keras.callbacks.Callback, P2PFLCallback):
 
     """
 
-    def __init__(self, learner, de_biased_model: Optional[P2PFLModel] = None):
+    def __init__(self, learner, de_biased_model: P2PFLModel | None = None):
         """
         Initialize the callback.
 
@@ -87,4 +84,4 @@ class EdgeNodeUpdateCallback(tf.keras.callbacks.Callback, P2PFLCallback):
 
         """
         optimizer = tf.keras.optimizers.Adam()
-        optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
+        optimizer.apply_gradients(zip(gradients, self.model.trainable_variables, strict=False))

@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
 
 import asyncio
 import time
-from typing import List, Optional, Union
 
 import numpy as np
 
@@ -61,6 +60,7 @@ def set_standalone_settings() -> None:
     Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS = 10
     Settings.training.VOTE_TIMEOUT = 60
     Settings.training.AGGREGATION_TIMEOUT = 60
+    Settings.training.RAY_ACTOR_POOL_SIZE = 1
     Settings.general.LOG_LEVEL = "INFO"
     logger.set_level(Settings.general.LOG_LEVEL)  # Refresh (maybe already initialized)
 
@@ -68,7 +68,7 @@ def set_standalone_settings() -> None:
 async def wait_convergence(
     nodes: list[Node | CommunicationProtocol],
     n_neis: int,
-    wait: Union[int, float] = 5,
+    wait: int | float = 5,
     only_direct: bool = False,
     debug: bool = False,
 ) -> None:
@@ -90,19 +90,106 @@ async def wait_convergence(
     while True:
         begin = time.time()
         if all(len(n.get_neighbors(only_direct=only_direct)) == n_neis for n in nodes):
+            if debug:
+                _print_connectivity_matrix(nodes, only_direct, final=True)
             break
         if debug:
-            logger.info(
-                "Waiting for convergence",
-                str([list(n.get_neighbors(only_direct=only_direct).keys()) for n in nodes]),
-            )
+            _print_connectivity_matrix(nodes, only_direct, final=False)
         await asyncio.sleep(0.1)
         acum += time.time() - begin
         if acum > wait:
             raise AssertionError()
 
 
-def full_connection(node: Node, nodes: List[Node]) -> None:
+def _print_connectivity_matrix(
+    nodes: list[Node | CommunicationProtocol],
+    only_direct: bool = False,
+    final: bool = False,
+) -> None:
+    """
+    Print a visual connectivity matrix showing node connections.
+
+    Args:
+        nodes: List of nodes.
+        only_direct: Only direct neighbors.
+        final: Whether this is the final converged state.
+
+    """
+    n = len(nodes)
+
+    # Build connectivity matrix
+    matrix = [[0 for _ in range(n)] for _ in range(n)]
+
+    for i, node in enumerate(nodes):
+        neighbors = node.get_neighbors(only_direct=only_direct)
+        for j, other_node in enumerate(nodes):
+            if i != j and other_node.address in neighbors:
+                matrix[i][j] = 1
+
+    # Build complete visualization as a single string
+    output_lines = []
+
+    # Print header
+    if final:
+        output_lines.append("=" * 50)
+        output_lines.append("CONVERGENCE ACHIEVED - Final Network Topology")
+        output_lines.append("=" * 50)
+    else:
+        output_lines.append("-" * 50)
+        output_lines.append("Waiting for convergence - Current Network State")
+        output_lines.append("-" * 50)
+
+    # Print node addresses for reference
+    output_lines.append("Node Addresses:")
+    for i, node in enumerate(nodes):
+        addr_display = node.address if len(str(node.address)) < 20 else f"...{str(node.address)[-17:]}"
+        output_lines.append(f"  Node {i}: {addr_display}")
+
+    # Print connectivity matrix with visual formatting
+    output_lines.append("\nConnectivity Matrix:")
+    output_lines.append("    " + "".join(f" {i:2}" for i in range(n)))
+    output_lines.append("   +" + "---" * n + "+")
+
+    for i in range(n):
+        row_str = f"{i:2} |"
+        for j in range(n):
+            if i == j:
+                row_str += " · "  # Self-connection (diagonal)
+            elif matrix[i][j] == 1:
+                row_str += " ■ "  # Connected
+            else:
+                row_str += " □ "  # Not connected
+        row_str += f"| ({sum(matrix[i])} connections)"
+        output_lines.append(row_str)
+
+    output_lines.append("   +" + "---" * n + "+")
+
+    # Print summary statistics
+    total_connections = sum(sum(row) for row in matrix)
+    output_lines.append("\nSummary:")
+    output_lines.append(f"  Total nodes: {n}")
+    output_lines.append(f"  Total connections: {total_connections}")
+    output_lines.append(f"  Average connections per node: {total_connections / n:.1f}")
+
+    # Check convergence status
+    connections_per_node = [sum(row) for row in matrix]
+    if all(c == connections_per_node[0] for c in connections_per_node):
+        output_lines.append(f"  Status: Uniform topology ({connections_per_node[0]} connections each)")
+    else:
+        output_lines.append(f"  Status: Non-uniform (range: {min(connections_per_node)}-{max(connections_per_node)})")
+
+    output_lines.append("=" * 50 if final else "-" * 50)
+    output_lines.append("")  # Add blank line for readability
+
+    # Log the complete visualization with proper format
+    matrix_display = "\n".join(output_lines)
+    if final:
+        logger.info("Network Convergence", matrix_display)
+    else:
+        logger.info("Waiting for convergence", matrix_display)
+
+
+def full_connection(node: Node, nodes: list[Node]) -> None:
     """
     Connect node to all nodes.
 
@@ -115,26 +202,60 @@ def full_connection(node: Node, nodes: List[Node]) -> None:
         node.connect(n.address)
 
 
-async def wait_to_finish(nodes: List[Node], timeout=60):
+class NodeLearningError(Exception):
+    """Exception raised when one or more nodes fail during learning."""
+
+    def __init__(self, failed_nodes: list[tuple[str, Exception]]) -> None:
+        """
+        Initialize the exception.
+
+        Args:
+            failed_nodes: List of (node_addr, error) tuples for failed nodes.
+
+        """
+        self.failed_nodes = failed_nodes
+        node_errors = "; ".join(f"{addr}: {type(e).__name__}: {e}" for addr, e in failed_nodes)
+        super().__init__(f"Learning failed on {len(failed_nodes)} node(s): {node_errors}")
+
+
+async def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_error=True) -> None:
     """
     Wait until all nodes have finished the workflow.
 
     Args:
         nodes: List of nodes.
-        timeout: Timeout.
+        timeout: Timeout in seconds (default: 1 hour = 3600 seconds).
+        debug: Debug mode.
+        raise_on_error: If True, raise NodeLearningError if any node failed.
+
+    Raises:
+        TimeoutError: If the nodes don't finish within the timeout period.
+        NodeLearningError: If any node failed during learning (when raise_on_error=True).
 
     """
-    # Wait untill all nodes finised the workflow
+    # Wait until all nodes finish the workflow
     start = time.time()
     while True:
+        if debug:
+            logger.info(
+                "Waiting for nodes to finish",
+                str([n.get_node_workflow().finished for n in nodes]),
+            )
         if all(n.get_node_workflow().finished for n in nodes):
             break
         await asyncio.sleep(1)
-        if time.time() - start > timeout:
-            raise TimeoutError("Timeout waiting for nodes to finish")
+        elapsed = time.time() - start
+        if elapsed > timeout:
+            raise TimeoutError(f"Timeout waiting for nodes to finish (elapsed: {int(elapsed // 60)} minutes {int(elapsed % 60)} seconds)")
+
+    # Check for failures
+    if raise_on_error:
+        failed = [(n.address, n.get_node_workflow().error) for n in nodes if n.get_node_workflow().failed and n.get_node_workflow().error]
+        if failed:
+            raise NodeLearningError(failed)
 
 
-def check_equal_models(nodes: List[Node]) -> None:
+def check_equal_models(nodes: list[Node]) -> None:
     """
     Check that all nodes have the same model.
 
@@ -145,11 +266,11 @@ def check_equal_models(nodes: List[Node]) -> None:
         AssertionError: If the condition is not met.
 
     """
-    model_params: Optional[List[np.ndarray]] = None
+    model_params: list[np.ndarray] | None = None
     first = True
     for node in nodes:
         if first:
-            model_params = node.get_learner().get_P2PFLModel().get_parameters()
+            model_params = node.get_learner().get_model().get_parameters()
             first = False
         else:
             # compare layers with a tolerance
@@ -158,6 +279,6 @@ def check_equal_models(nodes: List[Node]) -> None:
             for i, layer in enumerate(model_params):
                 assert np.allclose(
                     layer,
-                    node.get_learner().get_P2PFLModel().get_parameters()[i],
+                    node.get_learner().get_model().get_parameters()[i],
                     atol=1e-1,
                 )

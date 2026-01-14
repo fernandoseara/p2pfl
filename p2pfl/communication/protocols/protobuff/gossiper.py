@@ -20,8 +20,10 @@
 
 import asyncio
 import random
-from typing import Any, Callable, List, Optional
+from collections.abc import Callable
+from typing import Any
 
+from p2pfl.communication.commands.message.pre_send_model_command import PreSendModelCommand
 from p2pfl.communication.protocols.protobuff.client import ProtobuffClient
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
@@ -31,40 +33,41 @@ from p2pfl.utils.node_component import NodeComponent
 
 
 class Gossiper(NodeComponent):
-    """
-    Async-compatible Gossiper that periodically spreads messages and models 
-    to selected neighbors using protocol-agnostic logic.
-    
-    """
+    """Async-compatible Gossiper that spreads messages and models to neighbors."""
 
     def __init__(
         self,
         neighbors: Neighbors,
-        period: Optional[float] = None,
-        messages_per_period: Optional[int] = None,
+        build_msg: Callable[..., node_pb2.RootMessage],
+        period: float | None = None,
+        messages_per_period: int | None = None,
     ) -> None:
+        """Initialize the gossiper."""
         super().__init__()
         self._neighbors = neighbors
         self.period = period or Settings.gossip.PERIOD
         self.messages_per_period = messages_per_period or Settings.gossip.MESSAGES_PER_PERIOD
 
         # State
-        self._processed_messages: List[int] = []
-        self._pending_msgs: List[tuple[node_pb2.RootMessage, List[ProtobuffClient]]] = []
+        self._processed_messages: list[int] = []
+        self._pending_msgs: list[tuple[node_pb2.RootMessage, list[ProtobuffClient]]] = []
 
         # Concurrency
         self._processed_messages_lock = asyncio.Lock()
         self._pending_msgs_lock = asyncio.Lock()
         self._terminate_event = asyncio.Event()
 
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self.name = "gossiper-async"
 
-    def set_addr(self, addr: str) -> str:
-        """Assigns address and updates gossiper thread name."""
-        addr = super().set_addr(addr)
-        self.name = f"gossiper-async-{addr}"
-        return addr
+        # Build msgs
+        self.build_msg_fn = build_msg
+
+    def set_address(self, address: str) -> str:
+        """Assign address and update gossiper thread name."""
+        address = super().set_address(address)
+        self.name = f"gossiper-async-{address}"
+        return address
 
     async def start(self) -> None:
         """Launch the gossiping task."""
@@ -80,36 +83,33 @@ class Gossiper(NodeComponent):
             await self._task
 
     async def add_message(self, msg: node_pb2.RootMessage) -> None:
-        """
-        Queues a message to be gossiped to all direct neighbors, excluding the source and self.
-        """
+        """Queue a message to be gossiped to all direct neighbors."""
         async with self._pending_msgs_lock:
             neighbors = [
-                v[0] for addr, v in self._neighbors.get_all(only_direct=True).items()
-                if addr != self.address and addr != msg.source
+                v[0] for addr, v in self._neighbors.get_all(only_direct=True).items() if addr != self.address and addr != msg.source
             ]
             self._pending_msgs.append((msg, neighbors))
 
     async def check_and_set_processed(self, msg: node_pb2.RootMessage) -> bool:
-        """
-        Marks a message as processed if it hasn't been seen yet.
-        Returns True if the message was new, False otherwise.
-        """
+        """Mark a message as processed if new. Return True if new, False otherwise."""
         if msg.source == self.address:
             return False
 
+        # Check if message was already processed
         async with self._processed_messages_lock:
             if msg.message.hash in self._processed_messages:
                 return False
 
-            if len(self._processed_messages) >= Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED:
+            # If there are more than X messages, remove the oldest one
+            if len(self._processed_messages) > Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED:
                 self._processed_messages.pop(0)
 
+            # Add message
             self._processed_messages.append(msg.message.hash)
             return True
 
     async def _run(self) -> None:
-        """Main loop that periodically sends pending messages to neighbors."""
+        """Run main loop that periodically sends pending messages to neighbors."""
         while not self._terminate_event.is_set():
             start_time = asyncio.get_event_loop().time()
             messages_to_send = []
@@ -138,9 +138,9 @@ class Gossiper(NodeComponent):
     async def gossip_weights(
         self,
         early_stopping_fn: Callable[[], bool],
-        get_candidates_fn: Callable[[], List[str]],
+        get_candidates_fn: Callable[[], list[str]],
         status_fn: Callable[[], Any],
-        model_fn: Callable[[str], Any],
+        model_fn: Callable[[str], tuple[Any, str, int, list[str]]],  # TODO: this can be simplified
         period: float,
         temporal_connection: bool,
     ) -> None:
@@ -156,8 +156,9 @@ class Gossiper(NodeComponent):
             model_fn: Generates the model to send to each node.
             period: Delay between gossip rounds.
             temporal_connection: Whether to use temporary connections.
+
         """
-        last_status: List[Any] = []
+        last_status: list[Any] = []
         j = 0
 
         while True:
@@ -167,7 +168,10 @@ class Gossiper(NodeComponent):
                 logger.info(self.address, "Stopping model gossip process.")
                 return
 
+            # Get nodes which need models
             candidates = get_candidates_fn()
+
+            # Determine end of gossip
             if not candidates:
                 logger.info(self.address, "🤫 Gossip finished.")
                 return
@@ -190,16 +194,30 @@ class Gossiper(NodeComponent):
             sample_size = min(Settings.gossip.MODELS_PER_ROUND, len(candidates))
             sampled = random.sample(candidates, sample_size)
 
-            clients = [
-                v[0] for k, v in self._neighbors.get_all(only_direct=False).items()
-                if k in sampled
-            ]
+            # Get clients for sampled nodes
+            clients = [v[0] for k, v in self._neighbors.get_all(only_direct=False).items() if k in sampled]
 
+            # Generate and send model partial aggregations
             for client in clients:
-                model = model_fn(client.nei_addr)
-                if model is not None:
-                    logger.debug(self.address, f"🗣️ Sending model to {client.nei_addr}")
-                    await client.send(model, temporal_connection=temporal_connection)
+                # Get Model
+                model, command_name, round_num, model_hashes = model_fn(client.nei_addr)
+                if model is None:
+                    continue
+
+                # Pre send weights
+                presend_msg = self.build_msg_fn(PreSendModelCommand.get_name(), [command_name] + model_hashes, round_num, direct=True)
+                presend_response = await client.send(presend_msg, temporal_connection=temporal_connection)
+
+                # Send model only if pre-send was accepted
+                if presend_response != "true":
+                    logger.debug(
+                        self.address, f"Avoiding concurrent model sending to {client.nei_addr}. Msg: {command_name} | Hash: {model_hashes}"
+                    )
+                    continue
+
+                # Send
+                logger.debug(self.address, f"🗣️ Gossiping model to {client.nei_addr}.")
+                await client.send(model, temporal_connection=temporal_connection)
 
             elapsed = asyncio.get_event_loop().time() - start_time
             await asyncio.sleep(max(0, period - elapsed))

@@ -24,11 +24,11 @@ from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.message.vote_train_set_command import VoteTrainSetCommand
 from p2pfl.management.logger import logger
-from p2pfl.settings import Settings
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
+
 
 class VoteTrainSetStage(Stage):
     """Vote Train Set Stage."""
@@ -55,7 +55,7 @@ class VoteTrainSetStage(Stage):
         weights = [math.floor(generator.randint(0, 1000) / (i + 1)) for i in range(samples)]
 
         # Add self vote (send it to itself)
-        self_vote = list(zip(nodes_voted, weights))
+        self_vote = list(zip(nodes_voted, weights, strict=False))
         logger.debug(node.address, f"🪞🗳️ Self Vote: {self_vote}")
         await node.get_learning_workflow().vote(node.address, state.round, self_vote)
 

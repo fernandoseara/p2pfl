@@ -20,15 +20,14 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.exceptions import NodeRunningException
 from p2pfl.management.logger import logger
 from p2pfl.stages.workflow_type import WorkflowType
 
-if TYPE_CHECKING:  # Only imports the below statements during type checking
+if TYPE_CHECKING:
     from p2pfl.node import Node
 
 
@@ -49,11 +48,11 @@ class StartLearningCommand(Command):
         self,
         source: str,
         round: int,
-        learning_rounds: Optional[int] = None,
-        learning_epochs: Optional[int] = None,
-        trainset_size: Optional[int] = None,
-        experiment_name: Optional[str] = None,
-        workflow: Optional[str] = None,
+        learning_rounds: int | None = None,
+        learning_epochs: int | None = None,
+        trainset_size: int | None = None,
+        experiment_name: str | None = None,
+        workflow: str | None = None,
         **kwargs,
     ) -> None:
         """
@@ -62,10 +61,11 @@ class StartLearningCommand(Command):
         Args:
             source: The source of the command.
             round: The round of the command.
-            trainset_size: The size of the trainset.
             learning_rounds: The number of learning rounds.
             learning_epochs: The number of learning epochs.
+            trainset_size: The size of the trainset.
             experiment_name: The name of the experiment.
+            workflow: The workflow type to use.
             **kwargs: The command keyword arguments.
 
         """
@@ -79,8 +79,8 @@ class StartLearningCommand(Command):
                 rounds=int(learning_rounds),
                 epochs=int(learning_epochs),
                 trainset_size=int(trainset_size),
-                source=source
+                source=source,
             )
 
         except NodeRunningException as e:
-            logger.debug(self.__node.local_state.address, str(e))
+            logger.debug(self.__node.address, str(e))

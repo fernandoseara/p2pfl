@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2022 Pedro Guijas Bravo.
 #
@@ -20,7 +20,6 @@
 
 import logging
 import traceback
-from typing import Dict, Optional, Tuple
 
 import lightning as L
 import torch
@@ -54,26 +53,24 @@ class LightningLearner(Learner):
 
     """
 
-    def __init__(
-        self, model: Optional[P2PFLModel] = None, data: Optional[P2PFLDataset] = None, aggregator: Optional[Aggregator] = None
-    ) -> None:
+    def __init__(self, model: P2PFLModel | None = None, data: P2PFLDataset | None = None, aggregator: Aggregator | None = None) -> None:
         """Initialize the learner."""
         super().__init__(model, data, aggregator)
-        self.__trainer: Optional[Trainer] = None
-        self.experiment: Optional[Experiment] = None
+        self.__trainer: Trainer | None = None
+        self.experiment: Experiment | None = None
 
         # Start logging
         # To avoid GPU/TPU printings
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
-    def set_addr(self, addr: str) -> str:
-        """Set the addr of the node."""
-        self.logger = FederatedLogger(addr)
-        return super().set_addr(addr)
+    def set_address(self, address: str) -> str:
+        """Set the address of the node."""
+        self.logger = FederatedLogger(address)
+        return super().set_address(address)
 
-    def __get_pt_model_data(self, train: bool = True) -> Tuple[L.LightningModule, DataLoader]:
+    def __get_pt_model_data(self, train: bool = True) -> tuple[L.LightningModule, DataLoader]:
         # Get Model
-        pt_model = self.get_P2PFLModel().get_model()
+        pt_model = self.get_model().get_model()
         if not isinstance(pt_model, L.LightningModule):
             raise ValueError("The model must be a PyTorch Lightning model")
         # Get Data
@@ -84,11 +81,13 @@ class LightningLearner(Learner):
 
     async def fit(self) -> P2PFLModel:
         """Fit the model."""
-        if Settings.general.SEED is not None and not ray_installed():
-            raise ValueError("You must use Ray to set a seed with PyTorch Lightning. Not working on a same process. | pip install ray")
-        set_seed(Settings.general.SEED, self.get_framework())
         try:
             if self.epochs > 0:
+                if Settings.general.SEED is not None and not ray_installed():
+                    raise ValueError(
+                        "You must use Ray to set a seed with PyTorch Lightning. Not working on a same process. | pip install ray"
+                    )
+                set_seed(Settings.general.SEED, self.get_framework())
                 self.__trainer = Trainer(
                     max_epochs=self.epochs,
                     accelerator="auto",
@@ -102,12 +101,12 @@ class LightningLearner(Learner):
                 self.__trainer = None
 
             # Set model contribution
-            self.get_P2PFLModel().set_contribution([self.address], self.get_data().get_num_samples())
+            self.get_model().set_contribution([self.address], self.get_data().get_num_samples())
 
             # Set callback info
             self.add_callback_info_to_model()
 
-            return self.get_P2PFLModel()
+            return self.get_model()
 
         except Exception as e:
             print(traceback.format_exc())
@@ -117,13 +116,13 @@ class LightningLearner(Learner):
             )
             raise e
 
-    def interrupt_fit(self) -> None:
+    async def interrupt_fit(self) -> None:
         """Interrupt the fit."""
         if self.__trainer is not None:
             self.__trainer.should_stop = True
             self.__trainer = None
 
-    async def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> dict[str, float]:
         """
         Evaluate the model with actual parameters.
 

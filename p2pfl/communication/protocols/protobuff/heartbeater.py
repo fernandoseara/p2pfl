@@ -21,7 +21,7 @@
 import asyncio
 import contextlib
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
@@ -33,25 +33,23 @@ heartbeater_cmd_name = "beat"
 
 
 class Heartbeater(NodeComponent):
-    """
-    Async Heartbeater for agnostic communication protocol. Send and update fresh heartbeats.
-    """
+    """Async Heartbeater for agnostic communication protocol."""
 
     def __init__(self, neighbors: Neighbors, build_msg: Callable[..., node_pb2.RootMessage]) -> None:
         """Initialize the heartbeat task."""
         self.__neighbors = neighbors
         self.__build_beat_message: Callable[[float], node_pb2.RootMessage] = lambda time: build_msg(heartbeater_cmd_name, content=[time])
-        self.__heartbeat_task: Optional[asyncio.Task] = None
+        self.__heartbeat_task: asyncio.Task | None = None
         self.__stop_event = asyncio.Event()
         self.name = "heartbeater-async-unknown"
 
-    def set_addr(self, addr: str) -> str:
+    def set_address(self, address: str) -> str:
         """Set the address and update the task name."""
-        addr = super().set_addr(addr)
-        self.name = f"heartbeater-async-{addr}"
-        return addr
+        address = super().set_address(address)
+        self.name = f"heartbeater-async-{address}"
+        return address
 
-    async def start(self, period: Optional[float] = None, timeout: Optional[float] = None) -> None:
+    async def start(self, period: float | None = None, timeout: float | None = None) -> None:
         """Start the async heartbeat task."""
         self.__heartbeat_task = asyncio.create_task(self.__heartbeater(period, timeout))
 
@@ -69,8 +67,8 @@ class Heartbeater(NodeComponent):
 
     async def __heartbeater(
         self,
-        period: Optional[float] = None,
-        timeout: Optional[float] = None,
+        period: float | None = None,
+        timeout: float | None = None,
     ) -> None:
         if period is None:
             period = Settings.heartbeat.PERIOD

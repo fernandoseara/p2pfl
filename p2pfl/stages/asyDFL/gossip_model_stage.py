@@ -31,6 +31,7 @@ from p2pfl.stages.network_state.async_network_state import AsyncNetworkState
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
+
 class GossipModelStage:
     """Gossip model stage."""
 
@@ -39,7 +40,7 @@ class GossipModelStage:
         network_state: AsyncNetworkState,
         node: Node,
         candidates: list[str],
-        ) -> None:
+    ) -> None:
         """Execute the stage."""
         # Push model to selected neighbors and update push-sum weights
         for neighbor in candidates:
@@ -50,15 +51,15 @@ class GossipModelStage:
     @staticmethod
     async def __send_model(neighbor: str, node: Node) -> None:
         """
-        Send the local iteration index to the neighbors.
+        Send the model to a neighbor.
 
-        Parameters:
+        Args:
             neighbor: The neighbor to send the model to.
             node: The node to send the model from.
 
         """
         communication_protocol = node.get_communication_protocol()
-        model = node.get_learner().get_P2PFLModel()
+        model = node.get_learner().get_model()
 
         try:
             logger.debug(node.address, f"🗣️ Sending model to {neighbor}")
@@ -79,11 +80,12 @@ class GossipModelStage:
     @staticmethod
     async def __send_push_sum_weight(network_state: AsyncNetworkState, neighbor: str, node: Node) -> None:
         """
-        Send the local iteration index to the neighbors.
+        Send the push-sum weight to a neighbor.
 
-        Parameters:
-            neighbor: The neighbor to send the model to.
-            node: The node to send the model from.
+        Args:
+            network_state: The async network state.
+            neighbor: The neighbor to send the weight to.
+            node: The node to send from.
 
         """
         communication_protocol = node.get_communication_protocol()

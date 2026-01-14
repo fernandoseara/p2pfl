@@ -1,6 +1,6 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@ import os
 import random
 import time
 import traceback
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from p2pfl.communication.commands.message.metrics_command import MetricsCommand
 from p2pfl.communication.commands.message.start_learning_command import StartLearningCommand
@@ -31,16 +31,15 @@ from p2pfl.communication.commands.message.stop_learning_command import StopLearn
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.communication.protocols.protobuff.grpc import GrpcCommunicationProtocol
 from p2pfl.exceptions import LearnerRunningException, NodeRunningException, ZeroRoundsException
-from p2pfl.learning.aggregators.aggregator import Aggregator
-from p2pfl.learning.aggregators.fedavg import FedAvg
+from p2pfl.learning.aggregators import Aggregator, get_default_aggregator
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.simulation import try_init_learner_with_ray
 from p2pfl.management.logger import logger
-from p2pfl.stages.local_state.node_state import LocalNodeState
 from p2pfl.settings import Settings
+from p2pfl.stages.local_state.node_state import LocalNodeState
 from p2pfl.stages.workflow_type import WorkflowType
 from p2pfl.stages.workflows.node_workflow import NodeWorkflowModel
 from p2pfl.utils.asyncio import sync_or_async
@@ -90,29 +89,35 @@ class Node:
         model: P2PFLModel,
         data: P2PFLDataset,
         address: str = "",
-        learner: Optional[Learner] = None,
-        aggregator: Optional[Aggregator] = None,
-        protocol: Optional[CommunicationProtocol] = None,
-        simulation: bool = False,
+        learner: Learner | None = None,
+        aggregator: Aggregator | None = None,
+        protocol: CommunicationProtocol | None = None,
         **kwargs,
     ) -> None:
         """Initialize a node."""
         # Communication protocol
         self.communication_protocol = GrpcCommunicationProtocol() if protocol is None else protocol
-        address = self.communication_protocol.set_addr(address)
+        address = self.communication_protocol.set_address(address)
 
-        #self.communication_protocol.add_command(commands)
+        # self.communication_protocol.add_command(commands)
+
+        # Select default aggregator based on model type if not provided
+        if aggregator is None:
+            aggregator = get_default_aggregator(model)
+
+        # Validate model-aggregator compatibility early (fail-fast)
+        aggregator.validate_models([model])
 
         # Aggregator
-        self.aggregator = FedAvg() if aggregator is None else aggregator
-        self.aggregator.set_addr(address)
+        self.aggregator = aggregator
+        self.aggregator.set_address(address)
 
         # Learner
         if learner is None:  # if no learner, use factory default
             learner = LearnerFactory.create_learner(model)()
-        learner.set_addr(address)
+        learner.set_address(address)
         self.learner = try_init_learner_with_ray(learner)
-        self.learner.set_P2PFLModel(model)
+        self.learner.set_model(model)
         self.learner.set_data(data)
         self.learner.indicate_aggregator(self.aggregator)
 
@@ -124,14 +129,15 @@ class Node:
         self.node_workflow: NodeWorkflowModel = NodeWorkflowModel(self)
 
         # Commands
-        self.communication_protocol.add_command([
-            StartLearningCommand(self),
-            StopLearningCommand(self),
-            MetricsCommand(self),
-        ])
+        self.communication_protocol.add_command(
+            [
+                StartLearningCommand(self),
+                StopLearningCommand(self),
+                MetricsCommand(self),
+            ]
+        )
 
         self.running = False  # Node state
-
 
     #############################
     #  Neighborhood management  #
@@ -168,10 +174,11 @@ class Node:
 
     def disconnect(self, addr: str, close_code: int) -> None:
         """
-        Disconnects a node from another.
+        Disconnect a node from another.
 
         Args:
             addr: The address of the node to disconnect from.
+            close_code: The close code for the disconnection.
 
         """
         self.node_workflow.disconnect_node(addr)
@@ -234,7 +241,7 @@ class Node:
         """
         if self.get_local_state().round is not None:
             raise LearnerRunningException("Data cannot be set after learner is set.")
-        self.learner.set_P2PFLModel(model)
+        self.learner.set_model(model)
 
     def set_data(self, data: P2PFLDataset) -> None:
         """
@@ -264,7 +271,7 @@ class Node:
             The current model of the node.
 
         """
-        return self.learner.get_P2PFLModel()
+        return self.learner.get_model()
 
     def get_data(self) -> P2PFLDataset:
         """
@@ -333,7 +340,6 @@ class Node:
         else:
             raise NodeRunningException("Node workflow is not initialized")
 
-
     #######################
     #    State Getters    #
     #######################
@@ -348,7 +354,6 @@ class Node:
         """
         return self.node_workflow.get_local_state()
 
-
     def get_generator(self) -> random.Random:
         """
         Get the generator.
@@ -359,19 +364,19 @@ class Node:
         """
         return self.generator
 
-
     ###############################################
     #         Network Learning Management         #
     ###############################################
 
     @sync_or_async
-    async def set_start_learning(self,
+    async def set_start_learning(
+        self,
         rounds: int = 1,
         epochs: int = 1,
         trainset_size: int = 4,
         experiment_name: str = "experiment",
         workflow: WorkflowType = WorkflowType.BASIC,
-        ) -> str:
+    ) -> str:
         """
         Start the learning process in the entire network.
 
@@ -380,6 +385,7 @@ class Node:
             epochs: Number of epochs of the learning process.
             trainset_size: Size of the trainset.
             experiment_name: The name of the experiment.
+            workflow: The workflow type to use.
 
         Raises:
             ZeroRoundsException: If rounds is less than 1.
@@ -408,10 +414,9 @@ class Node:
     @sync_or_async
     async def set_stop_learning(self) -> None:
         """Stop the learning process in the entire network."""
-        if self.local_state.round is not None:
+        local_state = self.get_local_state()
+        if local_state.round is not None:
             # send stop msg
             await self.communication_protocol.broadcast_gossip(self.communication_protocol.build_msg(StopLearningCommand.get_name()))
-            # stop learning
-            #await self.__stop_learning()
         else:
             logger.info(self.address, "🛑 No learning in progress to stop.")

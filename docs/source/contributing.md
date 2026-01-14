@@ -31,11 +31,28 @@ For more information on creating pull requests, see the GitHub documentation: [C
 
 To maintain a high level of code quality, we require all contributions to adhere to the following standards:
 
-* **Formatting:** Use [Ruff](https://docs.astral.sh/ruff/) for code formatting. Run `poetry run ruff format p2pfl` before submitting a pull request.  Also, check for any remaining issues with `poetry run ruff check p2pfl`.
+* **Formatting:** Use [Ruff](https://docs.astral.sh/ruff/) for code formatting. Run `ruff format p2pfl` before submitting a pull request.  Also, check for any remaining issues with `ruff check p2pfl`.
 
-* **Type Hinting:**  Use type hints and ensure your code passes [mypy](https://github.com/python/mypy) type checking. Run `poetry run mypy -p p2pfl` before submitting.
+* **Type Hinting:**  Use type hints and ensure your code passes [mypy](https://github.com/python/mypy) type checking. Run `mypy -p p2pfl` before submitting.
 
-* **Testing:** Provide comprehensive tests for all new code using [Pytest](https://docs.pytest.org/) and ensure test coverage with [Pytest-cov](https://pytest-cov.readthedocs.io/en/latest/). Run `poetry run pytest -v --cov=p2pfl` before submitting.
+* **Testing:** Provide comprehensive tests for all new code using [Pytest](https://docs.pytest.org/) and ensure test coverage with [Pytest-cov](https://pytest-cov.readthedocs.io/en/latest/). For faster development iteration, we recommend running tests in this order:
+
+    1. **Unit tests first** (fast feedback):
+       ```bash
+       pytest -m "not e2e_train"
+       ```
+
+    2. **End-to-end training tests** (comprehensive validation):
+       ```bash
+       pytest -m "e2e_train"
+       ```
+
+    3. **All tests** (before submitting):
+       ```bash
+       pytest
+       ```
+
+    Tests marked with `@pytest.mark.e2e_train` run full federated learning workflows and are slower but validate the complete training pipeline.
 
 * **Documentation:**  Document your code using [Sphinx](https://www.sphinx-doc.org/en/master/).  Pay particular attention to documenting the module you are contributing to.  Refer to the [main components documentation](https://p2pfl.github.io/p2pfl/components.html) for examples and guidance.
 
@@ -47,13 +64,23 @@ To maintain a high level of code quality, we require all contributions to adhere
     * **Strategy Pattern:** For interchangeable algorithms and workflows (e.g., `Aggregator`, `Workflow`).
     * For more detailed information on the design patterns used, please refer to the [main components documentation](https://p2pfl.github.io/p2pfl/components.html), with emphasis on the module you are going to contribute to.
 
-Before submitting a pull request, ensure all of the following commands run successfully:
+Before submitting a pull request, first activate the virtual environment:
 
 ```bash
-poetry run ruff format p2pfl
-poetry run ruff check p2pfl
-poetry run mypy -p p2pfl
-poetry run pytest -v --cov=p2pfl
+# On Unix/macOS:
+source .venv/bin/activate
+
+# On Windows:
+.venv\Scripts\activate
+```
+
+Then ensure all of the following commands run successfully:
+
+```bash
+ruff format p2pfl
+ruff check p2pfl
+mypy -p p2pfl
+pytest
 ```
 
 ## 📜 License

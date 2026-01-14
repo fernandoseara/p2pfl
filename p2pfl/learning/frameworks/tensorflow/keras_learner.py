@@ -18,8 +18,6 @@
 
 """Keras learner for P2PFL."""
 
-from typing import Dict, Optional, Union
-
 import numpy as np
 import tensorflow as tf  # type: ignore
 
@@ -27,9 +25,10 @@ from p2pfl.learning.aggregators.aggregator import Aggregator
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.learner import Learner
+from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.tensorflow.callbacks.keras_logger import FederatedLogger
 from p2pfl.learning.frameworks.tensorflow.keras_dataset import KerasExportStrategy
-from p2pfl.learning.frameworks.tensorflow.keras_model import KerasP2PFLModel
+from p2pfl.learning.frameworks.tensorflow.keras_model import KerasModel
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
 from p2pfl.utils.node_component import allow_no_addr_check
@@ -43,19 +42,22 @@ class KerasLearner(Learner):
     Args:
         model: The KerasModel instance.
         data: The P2PFLDataset instance.
-        addr: The address of this node.
+        aggregator: The aggregator instance.
 
     """
 
     def __init__(
-        self, model: Optional[KerasP2PFLModel] = None, data: Optional[P2PFLDataset] = None, aggregator: Optional[Aggregator] = None
+        self,
+        model: KerasModel | None = None,
+        data: P2PFLDataset | None = None,
+        aggregator: Aggregator | None = None,
     ) -> None:
         """Initialize the KerasLearner."""
         super().__init__(model, data, aggregator)
         self._batch_iterator = None
 
     @allow_no_addr_check
-    def set_P2PFLModel(self, model: Union[KerasP2PFLModel, list[np.ndarray], bytes]) -> None:
+    def set_model(self, model: P2PFLModel | list[np.ndarray] | bytes) -> None:
         """
         Set the model of the learner.
 
@@ -63,21 +65,21 @@ class KerasLearner(Learner):
             model: The model of the learner.
 
         """
-        super().set_P2PFLModel(model)
-        self.get_P2PFLModel().get_model().compile(
-            optimizer=self.get_P2PFLModel().get_model().optimizer,
-            loss=self.get_P2PFLModel().get_model().loss,
+        super().set_model(model)
+        self.get_model().get_model().compile(
+            optimizer=self.get_model().get_model().optimizer,
+            loss=self.get_model().get_model().loss,
             metrics=["sparse_categorical_accuracy"],
         )
 
-    def set_addr(self, addr: str) -> str:
-        """Set the addr of the node."""
-        self.callbacks.append(FederatedLogger(addr))
-        return super().set_addr(addr)
+    def set_address(self, address: str) -> str:
+        """Set the address of the node."""
+        self.callbacks.append(FederatedLogger(address))
+        return super().set_address(address)
 
     def __get_tf_model(self) -> tf.keras.Model:
         # Get Model
-        tf_model = self.get_P2PFLModel().get_model()
+        tf_model = self.get_model().get_model()
         if not isinstance(tf_model, tf.keras.Model):
             raise ValueError("The model must be a TensorFlow Keras model")
         return tf_model
@@ -89,7 +91,7 @@ class KerasLearner(Learner):
             raise ValueError("The data must be a TensorFlow Dataset")
         return data
 
-    async def fit(self) -> KerasP2PFLModel:
+    async def fit(self) -> KerasModel:
         """Fit the model."""
         set_seed(Settings.general.SEED, self.get_framework())
         try:
@@ -102,15 +104,15 @@ class KerasLearner(Learner):
                     callbacks=self.callbacks,  # type: ignore
                     steps_per_epoch=self.steps_per_epoch,
                 )
-                self.get_P2PFLModel().last_training_loss = history.history["loss"][-1]
+                self.get_model().last_training_loss = history.history["loss"][-1]
 
             # Set model contribution
-            self.get_P2PFLModel().set_contribution([self.address], self.get_data().get_num_samples(train=True))
+            self.get_model().set_contribution([self.address], self.get_data().get_num_samples(train=True))
 
             # Set callback info
             self.add_callback_info_to_model()
 
-            return self.get_P2PFLModel()
+            return self.get_model()
         except Exception as e:
             logger.error(self.address, f"Error in training with Keras: {e}")
             raise e
@@ -136,27 +138,26 @@ class KerasLearner(Learner):
             inputs, targets = batch
 
             loss, _ = model.train_on_batch(inputs, targets)
-            self.get_P2PFLModel().last_training_loss = loss
+            self.get_model().last_training_loss = loss
 
             # Set model contribution
-            self.get_P2PFLModel().set_contribution([self.address], self.get_data().get_num_samples(train=True))
+            self.get_model().set_contribution([self.address], self.get_data().get_num_samples(train=True))
 
             # Set callback info
             self.add_callback_info_to_model()
 
-            return self.get_P2PFLModel()
+            return self.get_model()
         except Exception as e:
             logger.error(self.address, f"Error in training with Keras: {e}")
             raise e
 
-
-    def interrupt_fit(self) -> None:
+    async def interrupt_fit(self) -> None:
         """Interrupt the training process."""
         # Keras doesn't have a direct way to interrupt fit.
         # Need to implement a custom callback or use a flag to stop training.
         logger.error(self.address, "Interrupting training (not fully implemented for Keras).")
 
-    async def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> dict[str, float]:
         """Evaluate the Keras model."""
         try:
             if self.epochs > 0:
@@ -166,7 +167,7 @@ class KerasLearner(Learner):
                 results = model.evaluate(data, verbose=0)
                 if not isinstance(results, list):
                     results = [results]
-                results_dict = dict(zip(model.metrics_names, results))
+                results_dict = dict(zip(model.metrics_names, results, strict=False))
                 for k, v in results_dict.items():
                     logger.log_metric(self.address, k, v)
                 return results_dict

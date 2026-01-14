@@ -23,7 +23,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.command import Command
-from p2pfl.management.logger import logger
 
 if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.node import Node
@@ -52,6 +51,4 @@ class NodeInitializedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        await self._node.get_learning_workflow().node_started(
-            source
-        )
+        await self._node.get_learning_workflow().node_started(source)

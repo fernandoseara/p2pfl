@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from p2pfl.node import Node
     from p2pfl.stages.local_state.dfl_node_state import DFLLocalNodeState
 
+
 def get_states() -> list[dict]:
     """Define the states for the workflow."""
     states = [
@@ -58,101 +59,123 @@ def get_states() -> list[dict]:
         StateAdapter(name="gossipingFullModel"),
         StateAdapter(name="waitingForNetworkStart"),
         StateAdapter(name="roundInitialized"),
-        StateAdapter(name='p2pVoting', initial='startingVoting', on_final= "on_final_p2p_voting", children=[
-            StateAdapter(name="startingVoting"),
-            StateAdapter(name="voting"),
-            StateAdapter(name="waitingVoting", timeout=Settings.training.VOTE_TIMEOUT, on_timeout="voting_timeout"),
-            StateAdapter(name='votingFinished', final=True),
-        ]),
-        StateAdapter(name='p2pLearning', initial='evaluating', children=[
-            StateAdapter(name='evaluating'),
-            StateAdapter(name='training'),
-            StateAdapter(name='gossipingPartialAggregation'),
-            StateAdapter(name="waitingForPartialAggregation", timeout=Settings.training.AGGREGATION_TIMEOUT, on_timeout="aggregation_timeout"),
-            StateAdapter(name='aggregating'),
-            StateAdapter(name="aggregationFinished", final=True),
-        ]),
+        StateAdapter(
+            name="p2pVoting",
+            initial="startingVoting",
+            on_final="on_final_p2p_voting",
+            children=[
+                StateAdapter(name="startingVoting"),
+                StateAdapter(name="voting"),
+                StateAdapter(name="waitingVoting", timeout=Settings.training.VOTE_TIMEOUT, on_timeout="voting_timeout"),
+                StateAdapter(name="votingFinished", final=True),
+            ],
+        ),
+        StateAdapter(
+            name="p2pLearning",
+            initial="evaluating",
+            children=[
+                StateAdapter(name="evaluating"),
+                StateAdapter(name="training"),
+                StateAdapter(name="gossipingPartialAggregation"),
+                StateAdapter(
+                    name="waitingForPartialAggregation", timeout=Settings.training.AGGREGATION_TIMEOUT, on_timeout="aggregation_timeout"
+                ),
+                StateAdapter(name="aggregating"),
+                StateAdapter(name="aggregationFinished", final=True),
+            ],
+        ),
         StateAdapter(name="roundFinished"),
         StateAdapter(name="trainingFinished", final=True),
     ]
 
     return [state.to_dict() for state in states]
 
+
 def get_transitions() -> list[dict]:
     """Define the transitions for the workflow."""
     transitions = [
         # Setup & initial synchronization
-        TransitionAdapter(trigger='setup', source='waitingSetup', dest='startingTraining'),
-        TransitionAdapter(trigger='next_stage', source='startingTraining', dest='waitingForSynchronization'),
-        TransitionAdapter(trigger='next_stage', source='waitingForSynchronization', dest='nodesSynchronized', conditions='is_all_nodes_started'),
-
+        TransitionAdapter(trigger="setup", source="waitingSetup", dest="startingTraining"),
+        TransitionAdapter(trigger="next_stage", source="startingTraining", dest="waitingForSynchronization"),
+        TransitionAdapter(
+            trigger="next_stage", source="waitingForSynchronization", dest="nodesSynchronized", conditions="is_all_nodes_started"
+        ),
         # Model initialization
-        TransitionAdapter(trigger='next_stage', source='nodesSynchronized', dest='initializingInitiator', conditions='is_initiator_node'),
-        TransitionAdapter(trigger='next_stage', source='initializingInitiator', dest='updatingRound'),
-        TransitionAdapter(trigger='next_stage', source='nodesSynchronized', dest='waitingForFullModel'),
-        TransitionAdapter(trigger='next_stage', source='waitingForFullModel', dest='updatingRound', conditions='is_full_model_ready'),
-
+        TransitionAdapter(trigger="next_stage", source="nodesSynchronized", dest="initializingInitiator", conditions="is_initiator_node"),
+        TransitionAdapter(trigger="next_stage", source="initializingInitiator", dest="updatingRound"),
+        TransitionAdapter(trigger="next_stage", source="nodesSynchronized", dest="waitingForFullModel"),
+        TransitionAdapter(trigger="next_stage", source="waitingForFullModel", dest="updatingRound", conditions="is_full_model_ready"),
         # Update round
-        TransitionAdapter(trigger='next_stage', source='updatingRound', dest='gossipingFullModel',
-        prepare=['get_full_gossiping_candidates'], conditions='candidate_exists'),
-        TransitionAdapter(trigger='next_stage', source='updatingRound', dest='waitingForNetworkStart'),
-
+        TransitionAdapter(
+            trigger="next_stage",
+            source="updatingRound",
+            dest="gossipingFullModel",
+            prepare=["get_full_gossiping_candidates"],
+            conditions="candidate_exists",
+        ),
+        TransitionAdapter(trigger="next_stage", source="updatingRound", dest="waitingForNetworkStart"),
         # Gossip full model
-        TransitionAdapter(trigger='next_stage', source='gossipingFullModel', dest='roundInitialized',
-        conditions='is_all_models_initialized'),
-        TransitionAdapter(trigger='next_stage', source='gossipingFullModel', dest='waitingForNetworkStart'),
-        TransitionAdapter(trigger='next_stage', source='waitingForNetworkStart', dest='roundInitialized',conditions='is_all_models_initialized'),
-
+        TransitionAdapter(
+            trigger="next_stage", source="gossipingFullModel", dest="roundInitialized", conditions="is_all_models_initialized"
+        ),
+        TransitionAdapter(trigger="next_stage", source="gossipingFullModel", dest="waitingForNetworkStart"),
+        TransitionAdapter(
+            trigger="next_stage", source="waitingForNetworkStart", dest="roundInitialized", conditions="is_all_models_initialized"
+        ),
         # Workflow finish check
-        TransitionAdapter(trigger='next_stage', source='roundInitialized', dest='trainingFinished', conditions='is_total_rounds_reached'),
-        TransitionAdapter(trigger='next_stage', source='roundInitialized', dest='p2pVoting'),
+        TransitionAdapter(trigger="next_stage", source="roundInitialized", dest="trainingFinished", conditions="is_total_rounds_reached"),
+        TransitionAdapter(trigger="next_stage", source="roundInitialized", dest="p2pVoting"),
         # Voting
-        TransitionAdapter(trigger='next_stage', source='p2pVoting_startingVoting', dest='p2pVoting_voting'),
-        TransitionAdapter(trigger='next_stage', source='p2pVoting_voting', dest='p2pVoting_waitingVoting'),
-        TransitionAdapter(trigger='next_stage', source='p2pVoting_waitingVoting', dest='p2pVoting_votingFinished', conditions='is_all_votes_received'),
-        TransitionAdapter(trigger='voting_timeout', source='p2pVoting_waitingVoting', dest='p2pVoting_votingFinished'),
-
+        TransitionAdapter(trigger="next_stage", source="p2pVoting_startingVoting", dest="p2pVoting_voting"),
+        TransitionAdapter(trigger="next_stage", source="p2pVoting_voting", dest="p2pVoting_waitingVoting"),
+        TransitionAdapter(
+            trigger="next_stage", source="p2pVoting_waitingVoting", dest="p2pVoting_votingFinished", conditions="is_all_votes_received"
+        ),
+        TransitionAdapter(trigger="voting_timeout", source="p2pVoting_waitingVoting", dest="p2pVoting_votingFinished"),
         # Voting outcome
-        TransitionAdapter(trigger='next_stage', source='p2pVoting', dest='p2pLearning', conditions='in_train_set'),
-        TransitionAdapter(trigger='next_stage', source='p2pVoting', dest='waitingForFullModel'),
+        TransitionAdapter(trigger="next_stage", source="p2pVoting", dest="p2pLearning", conditions="in_train_set"),
+        TransitionAdapter(trigger="next_stage", source="p2pVoting", dest="waitingForFullModel"),
         # Learning
-        TransitionAdapter(trigger='next_stage', source='p2pLearning_evaluating', dest='p2pLearning_training'),
-        TransitionAdapter(trigger='next_stage', source='p2pLearning_training', dest='p2pLearning_gossipingPartialAggregation',
-        prepare=['get_partial_gossiping_candidates'], conditions='candidate_exists'),
-        TransitionAdapter(trigger='next_stage', source='p2pLearning_training', dest='p2pLearning_waitingForPartialAggregation'),
-        TransitionAdapter(trigger='next_stage', source='p2pLearning_gossipingPartialAggregation',
-            dest='p2pLearning_waitingForPartialAggregation'),
-
-        TransitionAdapter(trigger='next_stage', source='p2pLearning_waitingForPartialAggregation', dest='p2pLearning_aggregating', conditions='is_all_models_received'),
-        TransitionAdapter(trigger='aggregation_timeout', source='p2pLearning_waitingForPartialAggregation',
-            dest='p2pLearning_aggregating'),
-        TransitionAdapter(trigger='next_stage', source='p2pLearning_aggregating', dest='p2pLearning_aggregationFinished'),
+        TransitionAdapter(trigger="next_stage", source="p2pLearning_evaluating", dest="p2pLearning_training"),
+        TransitionAdapter(
+            trigger="next_stage",
+            source="p2pLearning_training",
+            dest="p2pLearning_gossipingPartialAggregation",
+            prepare=["get_partial_gossiping_candidates"],
+            conditions="candidate_exists",
+        ),
+        TransitionAdapter(trigger="next_stage", source="p2pLearning_training", dest="p2pLearning_waitingForPartialAggregation"),
+        TransitionAdapter(
+            trigger="next_stage", source="p2pLearning_gossipingPartialAggregation", dest="p2pLearning_waitingForPartialAggregation"
+        ),
+        TransitionAdapter(
+            trigger="next_stage",
+            source="p2pLearning_waitingForPartialAggregation",
+            dest="p2pLearning_aggregating",
+            conditions="is_all_models_received",
+        ),
+        TransitionAdapter(trigger="aggregation_timeout", source="p2pLearning_waitingForPartialAggregation", dest="p2pLearning_aggregating"),
+        TransitionAdapter(trigger="next_stage", source="p2pLearning_aggregating", dest="p2pLearning_aggregationFinished"),
         # Loop
-        TransitionAdapter(trigger='next_stage', source='p2pLearning', dest='roundFinished'),
-        TransitionAdapter(trigger='next_stage', source='roundFinished', dest='updatingRound', conditions='is_all_models_received'),
-        TransitionAdapter(trigger='next_stage', source='roundFinished', dest='waitingForFullModel'),
-
-
+        TransitionAdapter(trigger="next_stage", source="p2pLearning", dest="roundFinished"),
+        TransitionAdapter(trigger="next_stage", source="roundFinished", dest="updatingRound", conditions="is_all_models_received"),
+        TransitionAdapter(trigger="next_stage", source="roundFinished", dest="waitingForFullModel"),
         # Event handler transitions
-        TransitionAdapter(trigger='node_started', source=['waitingSetup','startingTraining','waitingForSynchronization'], dest=None,
-        prepare='create_peer'),
-
-        TransitionAdapter(trigger='peer_round_updated', source='*', dest=None,
-        prepare='save_peer_round_updated'),
-        TransitionAdapter(trigger='full_model_received', source='*', dest=None,
-        prepare='save_full_model'),
-
-        TransitionAdapter(trigger='vote', source='*', dest=None,
-        prepare='save_votes'),
-
-        TransitionAdapter(trigger='aggregated_models_received', source='*', dest=None,
-        prepare='save_aggregated_models'),
-        TransitionAdapter(trigger='aggregate', source='*', dest=None,
-        prepare='save_aggregation'),
-
+        TransitionAdapter(
+            trigger="node_started",
+            source=["waitingSetup", "startingTraining", "waitingForSynchronization"],
+            dest=None,
+            prepare="create_peer",
+        ),
+        TransitionAdapter(trigger="peer_round_updated", source="*", dest=None, prepare="save_peer_round_updated"),
+        TransitionAdapter(trigger="full_model_received", source="*", dest=None, prepare="save_full_model"),
+        TransitionAdapter(trigger="vote", source="*", dest=None, prepare="save_votes"),
+        TransitionAdapter(trigger="aggregated_models_received", source="*", dest=None, prepare="save_aggregated_models"),
+        TransitionAdapter(trigger="aggregate", source="*", dest=None, prepare="save_aggregation"),
     ]
 
     return [transition.to_dict() for transition in transitions]
+
 
 class BasicLearningWorkflowModel(LearningWorkflowModel):
     """Model for the training workflow."""
@@ -214,14 +237,8 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
     # STATE CALLBACKS #
     ###################
     async def on_enter_startingTraining(
-        self,
-        is_initiator: bool,
-        experiment_name: str,
-        rounds: int = 0,
-        epochs: int = 0,
-        trainset_size: int = 0,
-        source: str | None = None
-        ):
+        self, is_initiator: bool, experiment_name: str, rounds: int = 0, epochs: int = 0, trainset_size: int = 0, source: str | None = None
+    ):
         """Start the training."""
         logger.info(self.node.address, "⏳ Starting training.")
 
@@ -247,13 +264,12 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
                     self.node.get_learner().get_epochs(),
                     trainset_size,
                     exp_name,
-                    self.node.get_node_workflow().get_workflow_type().value
-                ]
+                    self.node.get_node_workflow().get_workflow_type().value,
+                ],
             )
         )
 
-
-        #self._fire_next_stage("next_stage")
+        # self._fire_next_stage("next_stage")
 
     async def on_enter_waitingForSynchronization(self):
         """Wait for the synchronization."""
@@ -298,14 +314,14 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         )
 
         # Send event to the workflow
-        await self.peer_round_updated(
-            self.node.address, self.local_state.round
-        )
+        await self.peer_round_updated(self.node.address, self.local_state.round)
 
         # Communicate round update
         await self.node.get_communication_protocol().broadcast_gossip(
-            self.node.get_communication_protocol().build_msg(PeerRoundUpdatedCommand.get_name(),
-                                                    round=self.local_state.get_experiment().round))
+            self.node.get_communication_protocol().build_msg(
+                PeerRoundUpdatedCommand.get_name(), round=self.local_state.get_experiment().round
+            )
+        )
 
     async def on_enter_gossipingFullModel(self):
         """Gossip the model."""
@@ -349,10 +365,7 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         )
 
         # Send aggregated model to the workflow
-        await self.aggregate(
-            self.node.get_learner().get_P2PFLModel(),
-            self.node.address
-        )
+        await self.aggregate(self.node.get_learner().get_model(), self.node.address)
 
     async def on_enter_p2pLearning_gossipingPartialAggregation(self):
         """Gossip the partial model."""
@@ -366,8 +379,7 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         """Aggregate the models."""
         # Set aggregated model
         agg_model = self.node.get_aggregator().aggregate(self.network_state.get_all_models())
-        self.node.get_learner().set_P2PFLModel(agg_model)
-
+        self.node.get_learner().set_model(agg_model)
 
     async def on_enter_p2pLearning_aggregationFinished(self):
         """Finish the aggregation."""
@@ -391,7 +403,6 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         self.network_state.clear()
 
         logger.info(self.node.address, "😋 Training finished!!")
-
 
     ##############
     # CONDITIONS #
@@ -434,12 +445,12 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         """Check if all models have been received."""
         return len(self.local_state.train_set) == len(self.network_state.get_all_models())
 
-
     ########################
     # CANDIDATES CALLBACKS #
     ########################
     def get_partial_gossiping_candidates(self):
         """Get the candidates from the train set to gossip the partial model."""
+
         def candidate_condition(node: str) -> set[str]:
             return set(self.local_state.train_set) - set(self.network_state.get_aggregation_sources(node) or [])
 
@@ -450,6 +461,7 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
     def get_full_gossiping_candidates(self):
         """Get the candidates from the train set to gossip the full model."""
         fixed_round = self.local_state.round
+
         def candidate_condition(node: str) -> bool:
             return self.network_state.get_round(node) < fixed_round
 
@@ -536,39 +548,37 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         except Exception as e:
             logger.error(self.node.address, f"❌ Error creating peer {source}: {e}")
 
-    async def save_peer_round_updated(self,
-            source: str,
-            round: int,
-        ):
+    async def save_peer_round_updated(
+        self,
+        source: str,
+        round: int,
+    ):
         """Initialize model."""
         local_round = self.local_state.round
         if local_round is None:
             logger.error(self.node.address, f"Local state is None, cannot update round for {source}")
             return
 
-        if round in [local_round, local_round+1]:
+        if round in [local_round, local_round + 1]:
             self.network_state.update_round(source, round)
             logger.debug(self.node.address, f"📡 Peer round updated: {source} -> {round}")
         else:
             logger.error(self.node.address, f"📡 Peer round not updated: {source} -> {round} (local round: {local_round})")
 
-
-    async def save_full_model(self,
-            source: str,
-            round: int,
-            weights: bytes
-        ):
+    async def save_full_model(self, source: str, round: int, weights: bytes):
         """Initialize model."""
         # Check source
         logger.info(self.node.address, "📦 Full model received.")
 
         try:
-            if round != self.local_state.round+1:
-                logger.warning(self.node.address, f"⚠️ Full model round {round} does not match local round {self.local_state.round+1}. Ignoring.")
+            if round != self.local_state.round + 1:
+                logger.warning(
+                    self.node.address, f"⚠️ Full model round {round} does not match local round {self.local_state.round+1}. Ignoring."
+                )
                 return
 
             # Set new weights and increase round
-            self.node.get_learner().set_P2PFLModel(weights, round)
+            self.node.get_learner().set_model(weights)
             self.local_state.increase_round()
 
             logger.info(self.node.address, "🤖 Model Weights Initialized")
@@ -588,10 +598,11 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
 
             logger.debug(self.node.address, f"📦 Aggregated models received from {source}: {aggregated_models}")
         else:
-            logger.error(self.node.address, f"📦 Aggregated models not received from {source}: {aggregated_models}\
-                         (expected {self.local_state.round})")
-
-
+            logger.error(
+                self.node.address,
+                f"📦 Aggregated models not received from {source}: {aggregated_models}\
+                         (expected {self.local_state.round})",
+            )
 
     ############################
     # EVENT HANDLER CONDITIONS #

@@ -9,7 +9,6 @@ import numpy as np
 import tensorflow as tf
 
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModelDecorator
-from p2pfl.management.logger import logger
 
 if TYPE_CHECKING:
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
@@ -90,7 +89,7 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
             var.assign(var * self.push_sum_weight)  # Restore ω_t by multiplying with μ_t
 
         # Update weights using the computed gradients
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars, strict=False))
 
         # Update metrics (includes the metric that tracks the loss)
         for metric in self.metrics:
@@ -127,14 +126,16 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
 
         """
         config = super().get_config()
-        config.update({
-            "model": tf.keras.utils.serialize_keras_object(self.model),
-            "push_sum_weight": self.push_sum_weight.numpy(),
-        })
+        config.update(
+            {
+                "model": tf.keras.utils.serialize_keras_object(self.model),
+                "push_sum_weight": self.push_sum_weight.numpy(),
+            }
+        )
         return config
 
     @classmethod
-    def from_config(cls, config: dict) -> "DeBiasedAsyDFLKerasModel":
+    def from_config(cls, config: dict) -> DeBiasedAsyDFLKerasModel:
         """
         Create an instance from the configuration dictionary.
 
@@ -145,6 +146,7 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
             The model instance.
 
         """
+
         def load_model_from_config(model_config: dict) -> tf.keras.Model:
             """Dynamically load a model from its config."""
             module_name = model_config["module"]
@@ -190,10 +192,11 @@ class AsyDFLKerasP2PFLModel(P2PFLModelDecorator):
 
     """
 
-    def __init__(self,
+    def __init__(
+        self,
         wrapped_model: P2PFLModel,
         push_sum_weight: float = 1.0,
-        ) -> None:
+    ) -> None:
         """Initialize the model."""
         if not isinstance(wrapped_model, DeBiasedAsyDFLKerasModel):
             # If the wrapped model is not already a DeBiasedAsyDFLKerasModel, wrap it
@@ -214,7 +217,7 @@ class AsyDFLKerasP2PFLModel(P2PFLModelDecorator):
         """
         return self.get_model().push_sum_weight.numpy()
 
-    def set_push_sum_weight(self, weight: float|int) -> None:
+    def set_push_sum_weight(self, weight: float | int) -> None:
         """
         Set the push sum weight.
 
@@ -222,11 +225,11 @@ class AsyDFLKerasP2PFLModel(P2PFLModelDecorator):
             weight: The push sum weight.
 
         """
-        if not isinstance(weight, (float, int)):
+        if not isinstance(weight, float | int):
             raise ValueError("Push sum weight must be a float or int.")
         self.get_model().push_sum_weight.assign(tf.constant(weight, dtype=tf.float32))
 
-    def build_copy(self, **kwargs) -> "AsyDFLKerasP2PFLModel":
+    def build_copy(self, **kwargs) -> AsyDFLKerasP2PFLModel:
         """
         Build a copy of the model with the same configuration.
 

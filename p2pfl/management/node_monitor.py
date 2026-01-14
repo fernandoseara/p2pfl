@@ -21,7 +21,6 @@
 import datetime
 import threading
 import time
-from typing import Dict
 
 import psutil  # type: ignore
 
@@ -38,18 +37,25 @@ class NodeMonitor(threading.Thread):
 
     """
 
-    def __init__(self, node_addr, metric_report_callback) -> None:
+    def __init__(self, report_fn) -> None:
         """Initialize the node monitor."""
-        self.node_addr = node_addr
-        self.metric_report_callback = metric_report_callback
-        self.period = Settings.web.RESOURCE_MONITOR_PERIOD
-        self.last_net_in = -1
-        self.last_net_out = -1
+        self.report_fn = report_fn
+        self.period = Settings.general.RESOURCE_MONITOR_PERIOD
         self.running = True
+        # Logs
+        self.logs: dict[datetime.datetime, dict[str, float]] = {}
         # Super
         super().__init__()
-        self.name = "resource-monitor-thread-" + self.node_addr
+        self.name = "resource-monitor-thread"
         self.daemon = True
+
+    def set_report_fn(self, report_fn) -> None:
+        """Set the report function."""
+        self.report_fn = report_fn
+
+    def get_logs(self) -> dict[datetime.datetime, dict[str, float]]:
+        """Get the logs."""
+        return self.logs
 
     def stop(self) -> None:
         """Stop the node monitor."""
@@ -60,27 +66,20 @@ class NodeMonitor(threading.Thread):
         while self.running:
             # Sys Resources
             time_now = datetime.datetime.now()
-            for key, value in self.__report_system_resources().items():
-                self.metric_report_callback(self.node_addr, key, value, time_now)
+            resources = self.__report_system_resources()
+            # Update logs
+            self.logs.update({time_now: resources})
+            # Report
+            if self.report_fn:
+                for key, value in resources.items():
+                    self.report_fn(key, value, time_now)
             time.sleep(self.period)
 
-    def __report_system_resources(self) -> Dict[str, float]:
+    def __report_system_resources(self) -> dict[str, float]:
         """Report the system resources."""
         res = {}
         # CPU
         res["cpu"] = psutil.cpu_percent()
         # RAM
         res["ram"] = psutil.virtual_memory().percent
-        # NetWork
-        net_stat = psutil.net_io_counters()
-        if self.last_net_in != -1 and self.last_net_out != -1:
-            res["net_in"] = (net_stat.bytes_recv - self.last_net_in) / self.period / (2**20)
-            res["net_out"] = (net_stat.bytes_sent - self.last_net_out) / self.period / (2**20)
-        self.last_net_in = net_stat.bytes_recv
-        self.last_net_out = net_stat.bytes_sent
-
         return res
-
-    def __report_status(self):
-        """Report the status."""
-        raise NotImplementedError

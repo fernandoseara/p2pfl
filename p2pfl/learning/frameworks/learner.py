@@ -19,7 +19,6 @@
 """NodeLearning Interface - Template Pattern."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Union
 
 import numpy as np
 
@@ -38,36 +37,37 @@ class Learner(ABC, NodeComponent):
     Args:
         model: The model of the learner.
         data: The data of the learner.
-        self_addr: The address of the learner.
         aggregator: The aggregator used in the learning process.
         steps_per_epoch: The number of steps per epoch for the model.
 
     """
 
     def __init__(
-        self, address:str, model: Optional[P2PFLModel] = None, data: Optional[P2PFLDataset] = None, aggregator: Optional[Aggregator] = None,
-        steps_per_epoch: Optional[int] = None,
+        self,
+        model: P2PFLModel | None = None,
+        data: P2PFLDataset | None = None,
+        aggregator: Aggregator | None = None,
+        steps_per_epoch: int | None = None,
     ) -> None:
         """Initialize the learner."""
-        # (addr) Super
+        # Super
         NodeComponent.__init__(self)
         # Indicate aggregator (init callbacks)
         self.callbacks: list[P2PFLCallback] = []
         if aggregator:
             self.indicate_aggregator(aggregator)
         self.epochs: int = 1  # Default epochs
-        self.steps_per_epoch: int = steps_per_epoch
+        self.steps_per_epoch: int | None = steps_per_epoch
         # Model and data init (dummy if not)
-        self.__model: Optional[P2PFLModel] = None
+        self.__model: P2PFLModel | None = None
         if model:
-            self.set_P2PFLModel(model)
-        self.__data: Optional[P2PFLDataset] = None
+            self.set_model(model)
+        self.__data: P2PFLDataset | None = None
         if data:
             self.set_data(data)
 
-
     @allow_no_addr_check
-    def set_P2PFLModel(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
+    def set_model(self, model: P2PFLModel | list[np.ndarray] | bytes) -> None:
         """
         Set the model of the learner.
 
@@ -77,14 +77,14 @@ class Learner(ABC, NodeComponent):
         """
         if isinstance(model, P2PFLModel):
             self.__model = model
-        elif isinstance(model, (list, bytes)):
-            self.get_P2PFLModel().set_parameters(model)
+        elif isinstance(model, list | bytes):
+            self.get_model().set_parameters(model)
 
         # Update callbacks with model info
         self.update_callbacks_with_model_info()
 
     @allow_no_addr_check
-    def get_P2PFLModel(self) -> P2PFLModel:
+    def get_model(self) -> P2PFLModel:
         """
         Get the model of the learner.
 
@@ -179,7 +179,7 @@ class Learner(ABC, NodeComponent):
     @allow_no_addr_check
     def update_callbacks_with_model_info(self) -> None:
         """Update the callbacks with the model additional information."""
-        new_info = self.get_P2PFLModel().get_info()
+        new_info = self.get_model().get_info()
         for callback in self.callbacks:
             try:
                 callback_name = callback.get_name()
@@ -191,7 +191,7 @@ class Learner(ABC, NodeComponent):
     def add_callback_info_to_model(self) -> None:
         """Add the additional information from the callbacks to the model."""
         for c in self.callbacks:
-            self.get_P2PFLModel().add_info(c.get_name(), c.get_info())
+            self.get_model().add_info(c.get_name(), c.get_info())
 
     @abstractmethod
     async def fit(self) -> P2PFLModel:
@@ -221,7 +221,7 @@ class Learner(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    async def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> dict[str, float]:
         """
         Evaluate the model with actual parameters.
 
@@ -242,6 +242,7 @@ class Learner(ABC, NodeComponent):
         """
         pass
 
+
 class LearnerDecorator(Learner):
     """
     Decorator class for Learner. Delegates calls to a wrapped Learner instance.
@@ -259,7 +260,7 @@ class LearnerDecorator(Learner):
         """
         self._learner = learner
 
-    def set_addr(self, address: str) -> str:
+    def set_address(self, address: str) -> str:
         """
         Set the address of the learner.
 
@@ -270,27 +271,27 @@ class LearnerDecorator(Learner):
             The address of the learner.
 
         """
-        return self._learner.set_addr(address)
+        return self._learner.set_address(address)
 
-    def set_P2PFLModel(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
+    def set_model(self, model: P2PFLModel | list[np.ndarray] | bytes) -> None:
         """
-        Set the P2PFLModel of the learner.
+        Set the model of the learner.
 
         Args:
-            model: The P2PFLModel to set.
+            model: The model to set.
 
         """
-        self._learner.set_P2PFLModel(model)
+        self._learner.set_model(model)
 
-    def get_P2PFLModel(self) -> P2PFLModel:
+    def get_model(self) -> P2PFLModel:
         """
-        Get the P2PFLModel of the learner.
+        Get the model of the learner.
 
         Returns:
-            The P2PFLModel of the learner.
+            The model of the learner.
 
         """
-        return self._learner.get_P2PFLModel()
+        return self._learner.get_model()
 
     def set_data(self, data: P2PFLDataset) -> None:
         """
@@ -406,7 +407,7 @@ class LearnerDecorator(Learner):
         """
         await self._learner.interrupt_fit()
 
-    async def evaluate(self) -> Dict[str, float]:
+    async def evaluate(self) -> dict[str, float]:
         """
         Evaluate the model using the learner's evaluate method.
 

@@ -18,8 +18,8 @@
 
 """PyTorch dataset integration."""
 
+from collections.abc import Callable, Generator
 from pathlib import Path
-from typing import Callable, Generator, Optional, Union
 
 import torchvision.datasets as datasets
 from datasets import Dataset, DatasetDict  # type: ignore
@@ -33,7 +33,7 @@ class TorchvisionDatasetFactory:
     """Factory class for loading PyTorch Vision datasets in P2PFL."""
 
     @staticmethod
-    def get_mnist(cache_dir: Union[str, Path], train: bool = True, download: bool = True) -> P2PFLDataset:
+    def get_mnist(cache_dir: str | Path, train: bool = True, download: bool = True) -> P2PFLDataset:
         """
         Get the MNIST dataset from PytorchVision.
 
@@ -78,8 +78,7 @@ class PyTorchExportStrategy(DataExportStrategy):
     @staticmethod
     def export(
         data: Dataset,
-        transforms: Optional[Callable] = None,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
         num_workers: int = 0,
         **kwargs,
     ) -> DataLoader:
@@ -87,8 +86,7 @@ class PyTorchExportStrategy(DataExportStrategy):
         Export the data using the PyTorch strategy.
 
         Args:
-            data: The data to export.
-            transforms: The transforms to apply to the data.
+            data: The data to export. Transforms should already be applied to the dataset via set_transform.
             batch_size: The batch size to use for the exported data.
             num_workers: The number of workers to use for the exported
             kwargs: Additional keyword arguments.
@@ -97,10 +95,14 @@ class PyTorchExportStrategy(DataExportStrategy):
             The exported data.
 
         """
-        if transforms is not None:
-            raise NotImplementedError("Transforms are not supported in this export strategy.")
         if not batch_size:
             batch_size = Settings.training.DEFAULT_BATCH_SIZE
 
-        # Export to a PyTorch dataloader
-        return DataLoader(data.with_format(type="torch", output_all_columns=True), batch_size=batch_size, num_workers=num_workers)
+        # Check if data is already in torch format or has transforms applied
+        # If format type is None, it means transforms might be handling conversion
+        if hasattr(data, "format") and data.format["type"] is not None:
+            # No format applied, likely transforms are handling conversion
+            return DataLoader(data, batch_size=batch_size, num_workers=num_workers)
+        else:
+            # Apply torch format
+            return DataLoader(data.with_format(type="torch", output_all_columns=True), batch_size=batch_size, num_workers=num_workers)

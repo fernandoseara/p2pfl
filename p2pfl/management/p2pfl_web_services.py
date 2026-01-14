@@ -29,7 +29,6 @@ Communication with P2PFL Web Services (via REST API).
 """
 
 import datetime
-from typing import Dict
 
 import requests
 
@@ -72,34 +71,33 @@ class P2pflWebServices:
         if not url.startswith("https://"):
             print("P2pflWebServices Warning: Connection must be over https, traffic will not be encrypted")
         self.__key = key
-        self.node_id: Dict[str, int] = {}
+        self.node_id: dict[str, int] = {}
         # TODO: Check connection
 
-    def __build_headers(self) -> Dict[str, str]:
+    def __build_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         headers["x-api-key"] = self.__key
         return headers
 
-    def register_node(self, node: str, is_simulated: bool) -> None:
+    def register_node(self, node: str) -> None:
         """
         Register a node.
 
         Args:
             node: The node address.
-            is_simulated: If the node is simulated.
 
         """
         # Send request
         data = {
             "address": node,
-            "is_simulated": is_simulated,
             "creation_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
         try:
             response = requests.post(self.__url + "/node", json=data, headers=self.__build_headers(), timeout=5)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            print(node, f"Error registering node: {e}")
+            print(f"[P2PFL Web Services] Failed to register node '{node}': {e}")
+            print(f"  Check that '{self.__url}' is valid (P2PFL_WEB_LOGGER_URL or ~/.p2pfl_env)")
             raise e
         # Get node id
         self.node_id[node] = response.json()["node_id"]
@@ -127,7 +125,8 @@ class P2pflWebServices:
         """
         # get node id
         if node not in self.node_id:
-            raise ValueError(f"Node {node} not registered")
+            print(f"P2pflWebServices Warning: Node {node} not registered, skipping log")
+            return
         node_id = self.node_id[node]
 
         # Send request
@@ -166,7 +165,8 @@ class P2pflWebServices:
         """
         # get node id
         if node not in self.node_id:
-            raise ValueError(f"Node {node} not registered")
+            print(f"P2pflWebServices Warning: Node {node} not registered, skipping local metric")
+            return
         node_id = self.node_id[node]
 
         # get experiment id
@@ -206,7 +206,8 @@ class P2pflWebServices:
         """
         # get node id
         if node not in self.node_id:
-            raise ValueError(f"Node {node} not registered")
+            print(f"P2pflWebServices Warning: Node {node} not registered, skipping global metric")
+            return
         node_id = self.node_id[node]
 
         # get experiment id
@@ -244,7 +245,8 @@ class P2pflWebServices:
         """
         # get node id
         if node not in self.node_id:
-            raise ValueError(f"Node {node} not registered")
+            print(f"P2pflWebServices Warning: Node {node} not registered, skipping system metric")
+            return
         node_id = self.node_id[node]
 
         # Send request
@@ -264,6 +266,35 @@ class P2pflWebServices:
             response.raise_for_status()
         except Exception as e:
             raise P2pflWebServicesError(response.status_code, response.text) from e
+
+    def send_communication_log(
+        self,
+        node: str,
+        timestamp: datetime.datetime,
+        direction: str,
+        cmd: str,
+        source_dest: str,
+        package_type: str,
+        package_size: int,
+        round_num: int | None = None,
+        additional_info: dict | None = None,
+    ) -> None:
+        """
+        Send a communication log to the web services.
+
+        Args:
+            node: The node address.
+            timestamp: The timestamp of the communication.
+            direction: Direction of communication ("sent" or "received").
+            cmd: The command or message type.
+            source_dest: Source (if receiving) or destination (if sending) node.
+            package_type: Type of package ("message" or "weights").
+            package_size: Size of the package in bytes (if available).
+            round_num: The federated learning round number (if applicable).
+            additional_info: Additional information as a dictionary.
+
+        """
+        raise NotImplementedError
 
     def get_pending_actions(self):
         """Get pending actions from the p2pfl-web services."""

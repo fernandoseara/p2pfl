@@ -19,8 +19,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from transitions.extensions import HierarchicalAsyncMachine
 from transitions.extensions.asyncio import AsyncTimeout
@@ -36,6 +37,7 @@ class TimeoutMachine(HierarchicalAsyncMachine):
 
     pass
 
+
 @dataclass
 class StateAdapter:
     """State adapter for defining states."""
@@ -43,25 +45,25 @@ class StateAdapter:
     name: str
 
     # Lifecycle hooks
-    on_enter: Callback|None = None
-    on_exit: Callback|None = None
-    on_final: Callback|None = None
-    on_timeout: Callback|None = None
+    on_enter: Callback | None = None
+    on_exit: Callback | None = None
+    on_final: Callback | None = None
+    on_timeout: Callback | None = None
 
     # State behavior
-    timeout: float|None = None
-    initial: str|None = None
+    timeout: float | None = None
+    initial: str | None = None
     final: bool = False
 
     # Hierarchy
-    children: list["StateAdapter"] = field(default_factory=list)
-    parent: "StateAdapter"|None = field(default=None, repr=False)
+    children: list[StateAdapter] = field(default_factory=list)
+    parent: StateAdapter | None = field(default=None, repr=False)
 
     def is_composite(self) -> bool:
         """Check if the state is composite."""
         return bool(self.children)
 
-    def get_child(self, name: str) -> "StateAdapter"|None:
+    def get_child(self, name: str) -> StateAdapter | None:
         """Get a child state by name."""
         for child in self.children:
             if child.name == name:
@@ -99,6 +101,7 @@ class StateAdapter:
 
         return state_dict
 
+
 @dataclass(frozen=True)
 class TransitionAdapter:
     """Transition adapter for defining transitions."""
@@ -119,7 +122,7 @@ class TransitionAdapter:
         object.__setattr__(self, "after", self._normalize(self.after))
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TransitionAdapter":
+    def from_dict(cls, data: dict[str, Any]) -> TransitionAdapter:
         """
         Create a Transition instance from a dictionary.
 
@@ -163,22 +166,14 @@ class TransitionAdapter:
         }
 
         if self.conditions:
-            data["conditions"] = (
-                self.conditions[0] if len(self.conditions) == 1 else self.conditions
-            )
+            data["conditions"] = self.conditions[0] if len(self.conditions) == 1 else self.conditions
 
         if self.prepare:
-            data["prepare"] = (
-                self.prepare[0] if len(self.prepare) == 1 else self.prepare
-            )
+            data["prepare"] = self.prepare[0] if len(self.prepare) == 1 else self.prepare
 
         if self.before:
-            data["before"] = (
-                self.before[0] if len(self.before) == 1 else self.before
-            )
+            data["before"] = self.before[0] if len(self.before) == 1 else self.before
 
         if self.after:
-            data["after"] = (
-                self.after[0] if len(self.after) == 1 else self.after
-            )
+            data["after"] = self.after[0] if len(self.after) == 1 else self.after
         return data

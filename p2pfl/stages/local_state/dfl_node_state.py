@@ -21,7 +21,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from p2pfl.stages.local_state.experiment import Experiment
 from p2pfl.management.logger import logger
 from p2pfl.stages.local_state.node_state import LocalNodeState
 

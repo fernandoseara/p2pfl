@@ -17,7 +17,7 @@
 #
 """Utils tests."""
 
-from unittest.mock import MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call
 
 import numpy as np
 import pytest
@@ -52,6 +52,7 @@ def test_generate_matrix(topology_type, expected_matrix):
     assert np.array_equal(matrix, expected_matrix)
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "adjacency_matrix, expected_calls",
     [
@@ -75,11 +76,15 @@ def test_generate_matrix(topology_type, expected_matrix):
         ),
     ],
 )
-def test_connect_nodes(adjacency_matrix, expected_calls):
+async def test_connect_nodes(adjacency_matrix, expected_calls):
     """Test that nodes are connected according to the provided adjacency matrix."""
     num_nodes = adjacency_matrix.shape[0]  # Get num_nodes from matrix shape
     nodes = [MockNode(f"address_{i}") for i in range(num_nodes)]
-    TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+    # Replace connect with AsyncMock for async compatibility
+    for node in nodes:
+        node.connect = AsyncMock()
+
+    await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
 
     for i, calls in enumerate(expected_calls):
         nodes[i].connect.assert_has_calls(calls, any_order=True)
@@ -90,6 +95,56 @@ def test_invalid_topology_type():
     """Test that an exception is raised when an invalid topology type is passed."""
     with pytest.raises(ValueError):
         TopologyFactory.generate_matrix("invalid_type", 4)
+
+
+@pytest.mark.parametrize(
+    "topology_type, num_nodes",
+    [
+        (TopologyType.RANDOM_2, 0),
+        (TopologyType.RANDOM_2, 1),
+        (TopologyType.RANDOM_2, 2),
+        (TopologyType.RANDOM_2, 10),
+        (TopologyType.RANDOM_3, 0),
+        (TopologyType.RANDOM_3, 1),
+        (TopologyType.RANDOM_3, 2),
+        (TopologyType.RANDOM_3, 10),
+        (TopologyType.RANDOM_4, 0),
+        (TopologyType.RANDOM_4, 1),
+        (TopologyType.RANDOM_4, 2),
+        (TopologyType.RANDOM_4, 10),
+    ],
+)
+def test_generate_random_matrix_properties(topology_type, num_nodes):
+    """Test properties of randomly generated adjacency matrices."""
+    matrix = TopologyFactory.generate_matrix(topology_type, num_nodes)
+
+    # Check shape
+    assert matrix.shape == (num_nodes, num_nodes)
+
+    # Check diagonal is zero
+    assert np.all(np.diag(matrix) == 0)
+
+    # Check symmetry
+    assert np.array_equal(matrix, matrix.T)
+
+    # Check number of edges
+    if num_nodes <= 1:
+        expected_num_edges = 0
+    else:
+        if topology_type == TopologyType.RANDOM_2:
+            avg_degree = 2
+        elif topology_type == TopologyType.RANDOM_3:
+            avg_degree = 3
+        else:  # RANDOM_4
+            avg_degree = 4
+
+        # Calculate expected number of edges based on implementation logic
+        num_edges_target = round(num_nodes * avg_degree / 2)
+        max_possible_edges = num_nodes * (num_nodes - 1) // 2
+        expected_num_edges = min(num_edges_target, max_possible_edges)
+
+    actual_num_edges = np.sum(matrix) // 2
+    assert actual_num_edges == expected_num_edges
 
 
 class MockNodeComponent(NodeComponent):
@@ -116,7 +171,7 @@ def test_node_component_initialization():
     assert component.address == ""
 
     address = "test_address"
-    returned_addr = component.set_addr(address)
+    returned_addr = component.set_address(address)
     assert component.address == address
     assert returned_addr == address
 
@@ -132,5 +187,5 @@ def test_node_component_methods():
 
     # Method call with addr set should succeed
     addr = "test_address"
-    component.set_addr(addr)
+    component.set_address(addr)
     assert component.example_method() == addr

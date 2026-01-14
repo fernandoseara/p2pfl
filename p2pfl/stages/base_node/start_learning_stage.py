@@ -21,14 +21,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from p2pfl.management.logger import logger
 from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
 
-class StartLearningStage:
+class StartLearningStage(Stage):
     """Start learning stage."""
 
     @staticmethod
@@ -38,7 +37,7 @@ class StartLearningStage:
         epochs: int,
         trainset_size: int,
         node: Node,
-        ) -> None:
+    ) -> None:
         """Execute the stage."""
         state = node.get_local_state()
         learner = node.get_learner()

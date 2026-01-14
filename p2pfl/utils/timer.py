@@ -19,12 +19,14 @@
 """Timer."""
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, ClassVar, Dict, Optional
+from typing import ClassVar
 
 
 class TimerError(Exception):
     """A custom exception used to report errors in use of Timer class."""
+
 
 @dataclass
 class Timer:
@@ -38,11 +40,11 @@ class Timer:
 
     """
 
-    timers: ClassVar[Dict[str, float]] = {}
-    name: Optional[str] = None
+    timers: ClassVar[dict[str, float]] = {}
+    name: str | None = None
     text: str = "Elapsed time: {:0.4f} seconds"
-    logger: Optional[Callable[[str], None]] = print
-    _start_time: Optional[float] = field(default=None, init=False, repr=False)
+    logger: Callable[[str], None] | None = print
+    _start_time: float | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Add timer to dict of timers after initialization."""
@@ -50,7 +52,7 @@ class Timer:
             self.timers.setdefault(self.name, 0)
 
     def start(self) -> None:
-        """Start a new timer"""
+        """Start a new timer."""
         if self._start_time is not None:
             raise TimerError("Timer is running. Use .stop() to stop it.")
 

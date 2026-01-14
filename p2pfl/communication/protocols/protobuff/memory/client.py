@@ -17,8 +17,6 @@
 
 """Memory client."""
 
-from typing import Optional
-
 from p2pfl.communication.protocols.exceptions import CommunicationError, NeighborNotConnectedError
 from p2pfl.communication.protocols.protobuff.client import ProtobuffClient
 from p2pfl.communication.protocols.protobuff.memory.singleton_dict import SingletonDict
@@ -42,7 +40,7 @@ class MemoryClient(ProtobuffClient):
         super().__init__(self_addr, nei_addr)
 
         # In-memory
-        self.stub: Optional[ProtobuffServer] = None
+        self.stub: ProtobuffServer | None = None
 
     ####
     # Connection
@@ -112,7 +110,7 @@ class MemoryClient(ProtobuffClient):
         temporal_connection: bool = False,
         raise_error: bool = False,
         disconnect_on_error: bool = True,
-    ) -> None:
+    ) -> str:
         """
         Send a message to the neighbor.
 
@@ -123,7 +121,7 @@ class MemoryClient(ProtobuffClient):
             disconnect_on_error: Disconnect if an error occurs.
 
         """
-        # Check if connected (threadsafe)
+        # Check if connected
         if not self.is_connected():
             if temporal_connection:
                 self._temporal_connection_uses += 1
@@ -135,10 +133,15 @@ class MemoryClient(ProtobuffClient):
             elif raise_error:
                 raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
             else:
-                return
+                raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
 
         # Send
         res = await self.stub.send(msg, None)  # type: ignore
+
+        # Log successful message sending
+        if not res.error:
+            self.log_successful_send(msg)
+
         if res.error:
             logger.info(
                 self.self_addr,
@@ -156,3 +159,5 @@ class MemoryClient(ProtobuffClient):
         # Raise
         if res.error and raise_error:
             raise CommunicationError(f"Error while sending a message: {msg.cmd}: {res.error}")
+
+        return res.response

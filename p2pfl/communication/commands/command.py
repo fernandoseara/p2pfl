@@ -30,7 +30,7 @@ class Command(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def execute(self, source: str, round: int, **kwargs) -> None:
+    async def execute(self, source: str, round: int, **kwargs) -> str | None:
         """
         Execute the command.
 
@@ -38,6 +38,9 @@ class Command(abc.ABC):
             source: The source of the command.
             round: The round of the command.
             **kwargs: The command arguments.
+
+        Returns:
+            Optional response string.
 
         """
         raise NotImplementedError

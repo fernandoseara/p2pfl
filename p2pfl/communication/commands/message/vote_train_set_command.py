@@ -20,11 +20,9 @@
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 from p2pfl.communication.commands.command import Command
-from p2pfl.management.logger import logger
 
 if TYPE_CHECKING:  # Only imports the below statements during type checking
     from p2pfl.node import Node
@@ -59,7 +57,7 @@ class VoteTrainSetCommand(Command):
         await self._node.get_learning_workflow().vote(source, round, votes)
 
     @staticmethod
-    def parse_votes_list(votes_list: list[str]) -> list[tuple[str, int]]:
+    def parse_votes_list(votes_list: tuple[str, ...]) -> list[tuple[str, int]]:
         """Parse a flat list [peer_voted, weight, peer_voted, weight, ...] into (peer_voted, weight) tuples."""
         if len(votes_list) % 2 != 0:
             raise ValueError("Votes list must contain an even number of elements (peer, weight pairs).")
