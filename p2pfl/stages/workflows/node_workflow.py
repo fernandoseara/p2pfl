@@ -327,6 +327,7 @@ class NodeWorkflowModel:
         # Loop until the learning workflow is finished
         while await learning_workflow.is_finished() is False:
             await learning_workflow.next_stage()
+            await asyncio.sleep(0.1)
 
         await self.learning_finished()
 
