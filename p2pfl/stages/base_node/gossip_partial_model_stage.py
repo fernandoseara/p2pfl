@@ -30,14 +30,14 @@ from p2pfl.stages.stage import Stage
 if TYPE_CHECKING:
     from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
     from p2pfl.node import Node
-    from p2pfl.stages.network_state.network_state import NetworkState
+    from p2pfl.stages.network_state.basic_network_state import BasicNetworkState
 
 
 class GossipPartialModelStage(Stage):
     """GossipPartialModel stage."""
 
     @staticmethod
-    async def execute(network_state: NetworkState, node: Node, candidates: list[str]) -> None:
+    async def execute(network_state: BasicNetworkState, node: Node, candidates: list[str]) -> None:
         """Execute the stage."""
         # Communicate Aggregation
         await node.get_communication_protocol().broadcast_gossip(
@@ -51,7 +51,7 @@ class GossipPartialModelStage(Stage):
 
     @staticmethod
     async def __gossip_model_aggregation(
-        network_state: NetworkState,
+        network_state: BasicNetworkState,
         node: Node,
         candidates: list[str],
     ) -> None:
@@ -67,7 +67,7 @@ class GossipPartialModelStage(Stage):
 
         def model_fn(n: str) -> Any:
             models: list[P2PFLModel] = network_state.get_all_models()
-            aggregation_sources = network_state.get_aggregation_sources(n)
+            aggregation_sources = network_state.get_aggregation_sources(n) or []
 
             # Filter models whose contributors are not in aggregation sources
             eligible_models = [model for model in models if not set(model.get_contributors()).issubset(aggregation_sources)]
@@ -81,9 +81,12 @@ class GossipPartialModelStage(Stage):
                 logger.info(node.address, f"❔ No models to aggregate for {node.address}.")
                 return None
 
+            experiment = node.get_local_state().get_experiment()
+            if experiment is None or experiment.round is None:
+                raise ValueError("Experiment or round not initialized")
             return node.get_communication_protocol().build_weights(
                 PartialModelCommand.get_name(),
-                node.get_local_state().get_experiment().round,
+                experiment.round,
                 model.encode_parameters(),
                 model.get_contributors(),
                 model.get_num_samples(),

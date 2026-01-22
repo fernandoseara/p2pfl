@@ -95,7 +95,7 @@ class Heartbeater(NodeComponent):
 
             # Send heartbeat
             beat_msg = self.__build_beat_message(time.time())
-            beat_msg.message.ttl = Settings.gossip.TTL
+            beat_msg.gossip_message.ttl = Settings.gossip.TTL
             for client, _ in self.__neighbors.get_all(only_direct=True).values():
                 try:
                     await client.send(beat_msg, raise_error=False, disconnect_on_error=True)

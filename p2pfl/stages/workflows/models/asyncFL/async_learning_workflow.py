@@ -36,6 +36,7 @@ from p2pfl.stages.asyDFL.gossip_model_stage import GossipModelStage
 from p2pfl.stages.asyDFL.select_neighbor_stage import SelectNeighborsStage
 from p2pfl.stages.base_node.evaluate_stage import EvaluateStage
 from p2pfl.stages.workflows.models.learning_workflow_model import LearningWorkflowModel
+from p2pfl.stages.workflows.node_workflow import WorkflowMachineManager
 from p2pfl.utils.pytransitions import StateAdapter, TransitionAdapter
 
 if TYPE_CHECKING:
@@ -194,7 +195,7 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
 
         # Set the experiment parameters
         self.local_state.set_experiment(experiment_name, rounds, epochs, trainset_size)
-        learner.set_epochs(self.local_state.epochs)
+        learner.set_epochs(epochs)
 
         experiment = self.local_state.get_experiment()
         if experiment is None:
@@ -395,7 +396,7 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
     async def get_gossip_candidates(self):
         """Get the candidates from the train set to gossip the partial model."""
         # Compute the candidates priorities
-        neighbor_priorities = await ComputePriorityStage.execute(
+        neighbor_priorities = await ComputePriorityStage.execute(  # TODO: ESTO NO TIENE MUCHO SENTIDO... PARA ESO SE USA UNA FUNCION ...
             network_state=self.network_state,
             node=self.node,
         )
@@ -501,12 +502,13 @@ class AsyncLearningWorkflowModel(LearningWorkflowModel):
         self.local_state.clear()
         logger.experiment_finished(self.node.address)
 
-    async def interrupt(self):
+    async def interrupt(self) -> None:
         """Interrupt the workflow."""
-        global machine
         await asyncio.sleep(1)
-        for task in machine.async_tasks[id(self)]:
-            task.cancel()
-        machine._transition_queue_dict[id(self)].clear()
+        machine = WorkflowMachineManager().get_machine()
+        if machine is not None:
+            for task in machine.async_tasks[id(self)]:
+                task.cancel()
+            machine._transition_queue_dict[id(self)].clear()
 
         await self.stop()

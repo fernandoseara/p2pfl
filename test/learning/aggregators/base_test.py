@@ -145,7 +145,8 @@ def test_aggregator_rejects_empty_list():
 
 @pytest.mark.skip(reason="Aggregators are now stateless - lifecycle methods removed")
 def test_aggregator_lifecycle():
-    """Test aggregator lifecycle: set nodes, add models, wait, clear.
+    """
+    Test aggregator lifecycle: set nodes, add models, wait, clear.
 
     DEPRECATED: Aggregators are now stateless. This test is no longer applicable.
     """
@@ -184,7 +185,8 @@ def test_aggregator_lifecycle():
 
 @pytest.mark.skip(reason="Aggregators are now stateless - partial aggregation methods removed")
 def test_partial_aggregation():
-    """Test partial aggregation returns subset of models.
+    """
+    Test partial aggregation returns subset of models.
 
     DEPRECATED: Aggregators are now stateless. This test is no longer applicable.
     """

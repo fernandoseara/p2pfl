@@ -18,7 +18,6 @@
 
 """Network topologies for the p2pfl package."""
 
-import asyncio
 from enum import Enum
 
 import numpy as np
@@ -110,7 +109,7 @@ class TopologyFactory:
         return matrix
 
     @staticmethod
-    async def connect_nodes(adjacency_matrix: np.ndarray, nodes: list[Node]):
+    def connect_nodes(adjacency_matrix: np.ndarray, nodes: list[Node]) -> None:
         """
         Connect nodes based on the adjacency matrix.
 
@@ -119,19 +118,13 @@ class TopologyFactory:
             nodes: The list of nodes in the network.
 
         """
-        tasks = []
         num_nodes = len(nodes)
-
-        async def connect(i, j):
-            try:
-                await nodes[i].connect(nodes[j].address)
-                print(f"Connected nodes {nodes[i].address} and {nodes[j].address}")
-            except Exception as e:
-                print(f"Error connecting nodes {nodes[i].address} and {nodes[j].address}: {e}")
 
         for i in range(num_nodes):
             for j in range(i + 1, num_nodes):
                 if adjacency_matrix[i, j] == 1:
-                    tasks.append(connect(i, j))
-
-        await asyncio.gather(*tasks)
+                    try:
+                        nodes[i].connect(nodes[j].address)
+                        print(f"Connected nodes {nodes[i].address} and {nodes[j].address}")
+                    except Exception as e:
+                        print(f"Error connecting nodes {nodes[i].address} and {nodes[j].address}: {e}")

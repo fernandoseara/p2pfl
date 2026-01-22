@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 class ComputePriorityStage:
-    """Compute priority stage."""
+    """Compute priority utility for AsyncDFL workflow."""
 
     @staticmethod
     async def execute(network_state: AsyncNetworkState, node: Node) -> list[tuple[str, float]]:
@@ -55,10 +55,10 @@ class ComputePriorityStage:
             avg_neighbor_loss = sum(neighbor_loss) / len(neighbor_loss) if neighbor_loss else 0.0
 
             priority = ComputePriorityStage.compute_priority(
-                local_state.round,
-                network_state.get_push_time(neighbor),
-                network_state.get_p2p_updating_idx(neighbor),
-                network_state.get_round(neighbor),
+                local_state.round or 0,
+                network_state.get_push_time(neighbor) or 0,
+                network_state.get_p2p_updating_idx(neighbor) or 0,
+                network_state.get_round(neighbor) or 0,
                 avg_local_loss,
                 avg_neighbor_loss,
                 5,

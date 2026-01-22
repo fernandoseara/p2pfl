@@ -20,24 +20,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from p2pfl.communication.commands.command import Command
 from p2pfl.exceptions import NodeRunningException
 from p2pfl.management.logger import logger
 from p2pfl.stages.workflow_type import WorkflowType
 
-if TYPE_CHECKING:
-    from p2pfl.node import Node
-
 
 class StartLearningCommand(Command):
-    """StartLearning command."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        super().__init__()
-        self.__node = node
+    """StartLearning command (infrastructure, uses node directly)."""
 
     @staticmethod
     def get_name() -> str:
@@ -56,7 +46,7 @@ class StartLearningCommand(Command):
         **kwargs,
     ) -> None:
         """
-        Execute the command. Start learning thread.
+        Execute the command. Start learning.
 
         Args:
             source: The source of the command.
@@ -73,7 +63,7 @@ class StartLearningCommand(Command):
             raise ValueError("Learning rounds and epochs, trainset size, experiment name, and workflow are required")
 
         try:
-            await self.__node.get_node_workflow().peer_learning_initiated(
+            await self.node.get_node_workflow().peer_learning_initiated(
                 workflow_type=WorkflowType(workflow),
                 experiment_name=experiment_name,
                 rounds=int(learning_rounds),
@@ -83,4 +73,4 @@ class StartLearningCommand(Command):
             )
 
         except NodeRunningException as e:
-            logger.debug(self.__node.address, str(e))
+            logger.debug(self.node.address, str(e))

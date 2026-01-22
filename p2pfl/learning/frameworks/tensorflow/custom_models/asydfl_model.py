@@ -3,15 +3,44 @@
 from __future__ import annotations
 
 import importlib
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
 
-from p2pfl.learning.frameworks.p2pfl_model import P2PFLModelDecorator
+from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
-if TYPE_CHECKING:
-    from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
+
+class P2PFLModelDecorator(P2PFLModel):
+    """Dynamic wrapper for P2PFLModel. Used to extend KerasModel with push-sum weight for async DFL."""
+
+    def __init__(self, wrapped_model: P2PFLModel) -> None:
+        """Initialize wrapper with a P2PFLModel instance."""
+        object.__setattr__(self, "_wrapped_model", wrapped_model)
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate attribute access to wrapped model."""
+        return getattr(self._wrapped_model, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Delegate attribute setting to wrapped model."""
+        if name == "_wrapped_model":
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._wrapped_model, name, value)
+
+    def get_parameters(self) -> Any:
+        """Get model parameters."""
+        return self._wrapped_model.get_parameters()
+
+    def set_parameters(self, params: Any) -> None:
+        """Set model parameters."""
+        self._wrapped_model.set_parameters(params)
+
+    def get_framework(self) -> str:
+        """Get framework name."""
+        return self._wrapped_model.get_framework()
 
 
 @tf.keras.utils.register_keras_serializable(package="p2pfl")
@@ -29,9 +58,20 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
         """Initialize the model."""
         super().__init__(**kwargs)
         self.model = model
-        self.push_sum_weight = tf.Variable(push_sum_weight, dtype=tf.float32, trainable=False)
+        self.push_sum_weight = tf.Variable(tf.constant(push_sum_weight, dtype=tf.float32), dtype=tf.float32, trainable=False)
 
-        self.loss = self.model.loss
+        self._custom_loss = self.model.loss
+
+    @property
+    def loss(self):
+        """Get the loss function of the model."""
+        return self._custom_loss
+
+    @loss.setter
+    def loss(self, value):
+        """Set the loss function of the model."""
+        self._custom_loss = value
+        self.model.loss = value
 
     @property
     def optimizer(self):
@@ -101,15 +141,14 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
         # Return a dict mapping metric names to current value
         return {m.name: m.result() for m in self.metrics}
 
-    def call(self, inputs, training=None) -> tf.Tensor:
+    def call(self, inputs, training=None, mask=None) -> tf.Tensor:
         """
         Call the model with the given inputs.
 
         Args:
             inputs: The input data.
             training: Whether the model is in training mode.
-            *args: Positional arguments for the model.
-            **kwargs: Keyword arguments for the model.
+            mask: Optional mask tensor.
 
         Returns:
             The model output.
@@ -135,12 +174,13 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
         return config
 
     @classmethod
-    def from_config(cls, config: dict) -> DeBiasedAsyDFLKerasModel:
+    def from_config(cls, config: dict[str, Any], custom_objects=None) -> DeBiasedAsyDFLKerasModel:
         """
         Create an instance from the configuration dictionary.
 
         Args:
             config: The configuration dictionary.
+            custom_objects: Optional custom objects.
 
         Returns:
             The model instance.
@@ -167,9 +207,9 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
 
     def get_weights(self) -> list[np.ndarray]:
         """Get the weights of the model."""
-        return self.model.get_weights()
+        return self.model.get_weights()  # type: ignore[no-untyped-call]
 
-    def set_weights(self, weights: list[np.ndarray]) -> None:
+    def set_weights(self, weights: Sequence[np.ndarray]) -> None:
         """
         Set the weights of the model.
 
@@ -243,7 +283,9 @@ class AsyDFLKerasP2PFLModel(P2PFLModelDecorator):
         copied_model = self._wrapped_model.build_copy(**kwargs)
 
         # Recover push_sum_weight from the model if needed
-        push_sum_weight = copied_model.model.push_sum_weight.numpy() if isinstance(copied_model.model, DeBiasedAsyDFLKerasModel) else 1.0
+        push_sum_weight: float = (
+            float(copied_model.model.push_sum_weight.numpy()) if isinstance(copied_model.model, DeBiasedAsyDFLKerasModel) else 1.0
+        )
 
         return AsyDFLKerasP2PFLModel(
             wrapped_model=copied_model,

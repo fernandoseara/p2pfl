@@ -248,7 +248,7 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
 
         # Set the experiment parameters
         self.local_state.set_experiment(experiment_name, rounds, epochs, trainset_size)
-        learner.set_epochs(self.local_state.epochs)
+        learner.set_epochs(epochs)
 
         experiment = self.local_state.get_experiment()
         if experiment is None:
@@ -571,10 +571,9 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         logger.info(self.node.address, "📦 Full model received.")
 
         try:
-            if round != self.local_state.round + 1:
-                logger.warning(
-                    self.node.address, f"⚠️ Full model round {round} does not match local round {self.local_state.round+1}. Ignoring."
-                )
+            local_round = self.local_state.round or 0
+            if round != local_round + 1:
+                logger.warning(self.node.address, f"⚠️ Full model round {round} does not match local round {local_round+1}. Ignoring.")
                 return
 
             # Set new weights and increase round

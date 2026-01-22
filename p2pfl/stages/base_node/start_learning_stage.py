@@ -44,4 +44,4 @@ class StartLearningStage(Stage):
 
         # Set the experiment parameters
         state.set_experiment(experiment_name, rounds, epochs, trainset_size)
-        learner.set_epochs(state.epochs)
+        learner.set_epochs(epochs)

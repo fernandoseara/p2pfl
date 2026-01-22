@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from p2pfl.communication.commands.message.vote_train_set_command import VoteTrainSetCommand
 from p2pfl.management.logger import logger
@@ -28,6 +28,7 @@ from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
+    from p2pfl.stages.workflows.models.basicDFL.basic_learning_workflow import BasicLearningWorkflowModel
 
 
 class VoteTrainSetStage(Stage):
@@ -50,17 +51,22 @@ class VoteTrainSetStage(Stage):
         candidates.sort()
 
         # Send vote
-        samples = min(state.get_experiment().trainset_size, len(candidates))
+        experiment = state.get_experiment()
+        if experiment is None or experiment.trainset_size is None:
+            raise ValueError("Experiment or trainset_size not initialized")
+        if state.round is None:
+            raise ValueError("Round not initialized")
+        samples = min(experiment.trainset_size, len(candidates))
         nodes_voted = generator.sample(candidates, samples)
         weights = [math.floor(generator.randint(0, 1000) / (i + 1)) for i in range(samples)]
 
         # Add self vote (send it to itself)
         self_vote = list(zip(nodes_voted, weights, strict=False))
         logger.debug(node.address, f"🪞🗳️ Self Vote: {self_vote}")
-        await node.get_learning_workflow().vote(node.address, state.round, self_vote)
+        await cast("BasicLearningWorkflowModel", node.get_learning_workflow()).vote(node.address, state.round, self_vote)
 
         # Convert self vote to a plain list
-        votes_list = []
+        votes_list: list[str | int] = []
         for peer_voted, weight in self_vote:
             votes_list.append(peer_voted)
             votes_list.append(weight)

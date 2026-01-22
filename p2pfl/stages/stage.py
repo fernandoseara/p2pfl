@@ -25,7 +25,7 @@ class Stage:
     """Abstract class for a stage."""
 
     @staticmethod
-    async def execute(**kwargs) -> None:
+    async def execute(*args, **kwargs) -> None:
         """Execute the stage."""
         raise NotImplementedError("Stage execute not implemented.")
 
@@ -52,7 +52,7 @@ def check_early_stop(state: LocalNodeState, raise_exception: bool = True) -> boo
 
     """
     if state.round is None:
-        logger.info(state.address, "Stopping Wokflow.")
+        logger.info(state.address, "Stopping Workflow.")
         if raise_exception:
             raise EarlyStopException("Early stopping.")
         return True

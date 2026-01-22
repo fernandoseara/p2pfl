@@ -26,7 +26,7 @@ from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
-    from p2pfl.stages.network_state.network_state import NetworkState
+    from p2pfl.stages.network_state.basic_network_state import BasicNetworkState
 
 
 class AggregatingVoteTrainSetStage(Stage):
@@ -34,7 +34,7 @@ class AggregatingVoteTrainSetStage(Stage):
 
     @staticmethod
     async def execute(
-        network_state: NetworkState,
+        network_state: BasicNetworkState,
         node: Node,
     ) -> None:
         """Execute the stage."""
@@ -49,7 +49,7 @@ class AggregatingVoteTrainSetStage(Stage):
         )
 
     @staticmethod
-    async def __aggregate_votes(network_state: NetworkState, node: Node) -> list[str]:
+    async def __aggregate_votes(network_state: BasicNetworkState, node: Node) -> list[str]:
         # Get all votes
         results: dict[str, int] = {}
         for node_vote in list(network_state.get_all_votes().values()):
@@ -64,7 +64,10 @@ class AggregatingVoteTrainSetStage(Stage):
         # Order by votes and get TOP X
         results_ordered = sorted(results.items(), key=lambda x: x[0], reverse=True)  # to equal solve of draw (node name alphabetical order)
         results_ordered = sorted(results_ordered, key=lambda x: x[1], reverse=True)
-        top = min(len(results_ordered), node.get_local_state().experiment.trainset_size)
+        experiment = node.get_local_state().experiment
+        if experiment is None or experiment.trainset_size is None:
+            raise ValueError("Experiment or trainset_size not initialized")
+        top = min(len(results_ordered), experiment.trainset_size)
         results_ordered = results_ordered[0:top]
         # Clear votes
         network_state.clear_all_votes()
@@ -74,8 +77,6 @@ class AggregatingVoteTrainSetStage(Stage):
     @staticmethod
     def __validate_train_set(train_set: list[str], node: Node) -> list[str]:
         # Verify if node set is valid
-        # (can happend that a node was down when the votes were being processed)
-        for tsn in train_set:
-            if tsn not in list(node.get_communication_protocol().get_neighbors(only_direct=False)) and (tsn != node.address):
-                train_set.remove(tsn)
-        return train_set
+        # (can happen that a node was down when the votes were being processed)
+        neighbors = list(node.get_communication_protocol().get_neighbors(only_direct=False))
+        return [tsn for tsn in train_set if tsn in neighbors or tsn == node.address]

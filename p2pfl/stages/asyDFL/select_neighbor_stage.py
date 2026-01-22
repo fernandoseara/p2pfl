@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 class SelectNeighborsStage:
-    """Compute priority stage."""
+    """Select neighbors utility for AsyncDFL workflow."""
 
     @staticmethod
     async def execute(
@@ -70,4 +70,4 @@ class SelectNeighborsStage:
             list: The selected neighbors.
 
         """
-        pass
+        return []  # TODO: Implement neighbor selection logic

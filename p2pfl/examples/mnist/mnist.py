@@ -155,7 +155,7 @@ async def mnist(
 
     try:
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
-        await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+        TopologyFactory.connect_nodes(adjacency_matrix, nodes)
 
         await wait_convergence(nodes, n - 1, only_direct=False, wait=60)  # type: ignore
 

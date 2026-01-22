@@ -23,6 +23,7 @@ This node only starts, create a node2 and connect to it in order to start the fe
 """
 
 import argparse
+import asyncio
 
 from p2pfl.examples.mnist.model.mlp_pytorch import model_build_fn
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
@@ -38,7 +39,7 @@ def __get_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def node1(port: int) -> None:
+async def node1(port: int) -> None:
     """
     Start a node1 and waits for a key press to stop it.
 
@@ -47,13 +48,13 @@ def node1(port: int) -> None:
 
     """
     node = Node(model_build_fn(), P2PFLDataset.from_huggingface("p2pfl/MNIST"), address=f"127.0.0.1:{port}")
-    node.start()
+    await node.start()
 
     input("Press any key to stop\n")
 
-    node.stop()
+    await node.stop()
 
 
 if __name__ == "__main__":
     args = __get_args()
-    node1(args.port)
+    asyncio.run(node1(args.port))

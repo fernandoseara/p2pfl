@@ -21,14 +21,15 @@
 import threading
 
 import ray
-from ray.util.placement_group import placement_group, remove_placement_group
+from ray.util.placement_group import PlacementGroup, placement_group, remove_placement_group
 
 
 class PlacementGroupManager:
     """Singleton manager for a shared Ray placement group using all available resources by default."""
 
-    _instance = None
+    _instance: "PlacementGroupManager | None" = None
     _lock = threading.Lock()
+    _initialized: bool
 
     def __new__(cls, bundles: list[dict[str, float]] | None = None) -> "PlacementGroupManager":
         """
@@ -86,7 +87,7 @@ class PlacementGroupManager:
         ray.get(self.pg.ready())
         self._initialized = True
 
-    def get_placement_group(self):
+    def get_placement_group(self) -> PlacementGroup:
         """
         Get the Ray placement group.
 

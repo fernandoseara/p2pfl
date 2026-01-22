@@ -23,7 +23,7 @@ from p2pfl.communication.protocols.protobuff.heartbeater import Heartbeater, hea
 
 
 class HeartbeatCommand(Command):
-    """Heartbeat command."""
+    """Heartbeat command (infrastructure, no workflow dependency)."""
 
     def __init__(self, heartbeat: Heartbeater) -> None:
         """Initialize the command."""

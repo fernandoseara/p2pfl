@@ -155,7 +155,7 @@ class Learner(ABC, NodeComponent):
         self.epochs = epochs
 
     @allow_no_addr_check
-    def get_steps_per_epoch(self) -> int:
+    def get_steps_per_epoch(self) -> int | None:
         """
         Get the number of steps per epoch of the model.
 
@@ -343,7 +343,7 @@ class LearnerDecorator(Learner):
         """
         self._learner.set_epochs(epochs)
 
-    def get_steps_per_epoch(self) -> int:
+    def get_steps_per_epoch(self) -> int | None:
         """
         Get the number of steps per epoch of the model.
 

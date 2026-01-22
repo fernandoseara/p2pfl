@@ -30,7 +30,6 @@ from datasets import DatasetDict, load_dataset
 from mocks import WeightBasedModelMock
 
 from p2pfl.examples.mnist.model.mlp_pytorch import MLP
-from p2pfl.stages.local_state.experiment import Experiment
 from p2pfl.learning.aggregators.fedavg import FedAvg
 from p2pfl.learning.aggregators.fedmedian import FedMedian
 from p2pfl.learning.aggregators.fedopt import FedAdagrad, FedAdam, FedYogi
@@ -42,6 +41,7 @@ from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.learning.frameworks.pytorch.lightning_model import LightningModel
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
+from p2pfl.stages.local_state.experiment import Experiment
 
 ###############################################
 # FedAvg Tests

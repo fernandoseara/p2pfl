@@ -18,24 +18,16 @@
 
 """Metrics command."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
 
-if TYPE_CHECKING:  # Only imports the below statements during type checking
-    from p2pfl.node import Node
-
 
 class MetricsCommand(Command):
-    """MetricsCommand."""
+    """MetricsCommand (infrastructure, no workflow dependency)."""
 
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        super().__init__()
-        self._node = node
+    def __init__(self) -> None:
+        """Initialize the command (no node required)."""
+        pass
 
     @staticmethod
     def get_name() -> str:

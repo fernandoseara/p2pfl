@@ -18,29 +18,59 @@
 
 """Command interface."""
 
+from __future__ import annotations
+
 import abc
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from p2pfl.node import Node
 
 
 class Command(abc.ABC):
-    """Command interface."""
+    """Base class for all commands."""
+
+    def __init__(self, node: Node | None = None) -> None:
+        """
+        Initialize the command.
+
+        Args:
+            node: The node instance for workflow access. Optional for infrastructure commands.
+
+        """
+        self._node = node
+
+    @property
+    def node(self) -> Node:
+        """Get the node instance. Raises if not configured."""
+        if self._node is None:
+            raise RuntimeError("This command requires a node but none was provided")
+        return self._node
+
+    @property
+    def workflow(self) -> Any:
+        """Get the workflow."""
+        return self.node.get_learning_workflow()
 
     @staticmethod
+    @abc.abstractmethod
     def get_name() -> str:
         """Get the command name."""
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
-    async def execute(self, source: str, round: int, **kwargs) -> str | None:
+    async def execute(self, source: str, round: int, *args, **kwargs) -> str | None:
         """
         Execute the command.
 
         Args:
             source: The source of the command.
             round: The round of the command.
-            **kwargs: The command arguments.
+            *args: Additional positional arguments for subclasses.
+            **kwargs: Additional keyword arguments for subclasses.
 
         Returns:
             Optional response string.
 
         """
-        raise NotImplementedError
+        ...

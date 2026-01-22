@@ -20,20 +20,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from p2pfl.communication.commands.command import Command
-
-if TYPE_CHECKING:  # Only imports the below statements during type checking
-    from p2pfl.node import Node
 
 
 class VoteTrainSetCommand(Command):
-    """VoteTrainSetCommand."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        self._node = node
+    """VoteTrainSetCommand for BasicDFL workflow."""
 
     @staticmethod
     def get_name() -> str:
@@ -51,10 +42,8 @@ class VoteTrainSetCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        # build vote dict
         votes = VoteTrainSetCommand.parse_votes_list(args)
-
-        await self._node.get_learning_workflow().vote(source, round, votes)
+        await self.workflow.vote(source, round, votes)
 
     @staticmethod
     def parse_votes_list(votes_list: tuple[str, ...]) -> list[tuple[str, int]]:

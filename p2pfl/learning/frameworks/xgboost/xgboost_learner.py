@@ -85,7 +85,7 @@ class XGBoostLearner(Learner):
         return xgb_model, X, y
 
     @allow_no_addr_check
-    def fit(self) -> P2PFLModel:
+    async def fit(self) -> P2PFLModel:
         """
         Fit the XGBoost sklearn model on training data.
 
@@ -123,7 +123,18 @@ class XGBoostLearner(Learner):
         return self.get_model()
 
     @allow_no_addr_check
-    def interrupt_fit(self) -> None:
+    async def train_on_batch(self) -> P2PFLModel:
+        """
+        Train the model on the next batch manually.
+
+        Raises:
+            NotImplementedError: XGBoost sklearn API does not support batch training.
+
+        """
+        raise NotImplementedError("XGBoost sklearn does not support batch training")
+
+    @allow_no_addr_check
+    async def interrupt_fit(self) -> None:
         """
         Interrupt an in-progress XGBoost training.
 
@@ -131,7 +142,6 @@ class XGBoostLearner(Learner):
             NotImplementedError: XGBoost sklearn API does not support interruption.
 
         """
-        # Placeholder: XGBoost sklearn does not support interrupt; could set a flag for custom callback
         raise NotImplementedError("Interrupting XGBoost sklearn fit is not supported")
 
     # def set_model(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
@@ -139,7 +149,7 @@ class XGBoostLearner(Learner):
     #     self.__model = model
 
     @allow_no_addr_check
-    def evaluate(self) -> dict[str, float]:
+    async def evaluate(self) -> dict[str, float]:
         """
         Evaluate the model on test data.
 

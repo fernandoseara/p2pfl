@@ -20,21 +20,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
 
-if TYPE_CHECKING:  # Only imports the below statements during type checking
-    from p2pfl.node import Node
-
 
 class StopLearningCommand(Command):
-    """StopLearning command."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        self._node = node
+    """StopLearning command (infrastructure, uses node directly)."""
 
     @staticmethod
     def get_name() -> str:
@@ -43,7 +34,7 @@ class StopLearningCommand(Command):
 
     async def execute(self, source: str, round: int, **kwargs) -> None:
         """
-        Execute the command. Start learning thread.
+        Execute the command. Stop learning.
 
         Args:
             source: The source of the command.
@@ -51,6 +42,5 @@ class StopLearningCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        logger.info(self._node.address, "Stopping learning received")
-
-        await self._node.get_node_workflow().stop_node()
+        logger.info(self.node.address, "Stopping learning received")
+        await self.node.get_node_workflow().stop_node()

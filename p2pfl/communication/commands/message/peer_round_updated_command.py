@@ -20,21 +20,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from p2pfl.communication.commands.command import Command
-
-if TYPE_CHECKING:  # Only imports the below statements during type checking
-    from p2pfl.node import Node
 
 
 class PeerRoundUpdatedCommand(Command):
-    """PeerRoundUpdated command."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        super().__init__()
-        self._node = node
+    """PeerRoundUpdated command for BasicDFL workflow."""
 
     @staticmethod
     def get_name() -> str:
@@ -51,4 +41,4 @@ class PeerRoundUpdatedCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        await self._node.get_learning_workflow().peer_round_updated(source, round)
+        await self.workflow.peer_round_updated(source, round)

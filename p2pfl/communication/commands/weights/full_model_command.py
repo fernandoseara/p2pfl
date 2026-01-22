@@ -20,21 +20,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
 
-if TYPE_CHECKING:
-    from p2pfl.node import Node
-
 
 class FullModelCommand(Command):
-    """FullModelCommand."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize FullModelCommand."""
-        self.__node = node
+    """FullModelCommand for BasicDFL workflow."""
 
     @staticmethod
     def get_name() -> str:
@@ -50,7 +41,7 @@ class FullModelCommand(Command):
     ) -> None:
         """Execute the command."""
         if weights is None:
-            logger.error(self.__node.address, "❌ FullModelCommand: Weights are None.")
+            logger.error(self.node.address, "❌ FullModelCommand: Weights are None.")
             return
 
-        await self.__node.get_learning_workflow().full_model_received(source, round, weights)
+        await self.workflow.full_model_received(source, round, weights)

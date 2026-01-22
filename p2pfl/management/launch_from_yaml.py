@@ -270,14 +270,14 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
                 Some messages will not be delivered depending on the topology."""
             )
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
-        await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+        TopologyFactory.connect_nodes(adjacency_matrix, nodes)
         await wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=False)  # type: ignore
 
         # Additional connections
         additional_connections = network_config.get("additional_connections")
         if additional_connections:
             for source, connect_to in additional_connections:
-                await nodes[source].connect(nodes[connect_to].address)
+                nodes[source].connect(nodes[connect_to].address)
 
         # Start Learning
         r = experiment_config.get("rounds")

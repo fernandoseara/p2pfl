@@ -20,7 +20,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from abc import abstractmethod
+from typing import Any
 
 from p2pfl.stages.workflows.models.workflow_model import WorkflowModel
 
@@ -28,21 +29,30 @@ from p2pfl.stages.workflows.models.workflow_model import WorkflowModel
 class LearningWorkflowModel(WorkflowModel):
     """Base for the training workflow."""
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize the learning workflow model."""
-        self._background_tasks: set[asyncio.Task] = set()
+        self._background_tasks: set[asyncio.Task[Any]] = set()
         super().__init__(*args, **kwargs)
 
+    @abstractmethod
     async def is_finished(self) -> bool:
         """Check if the workflow has finished."""
-        raise NotImplementedError("Should be overridden by subclasses.")
+        ...
+
+    @abstractmethod
+    async def node_started(self, source: str) -> bool:
+        """Handle peer started notification."""
+        ...
 
     ########################################
     # EVENTS (Overridden by pytransitions) #
     ########################################
+    # These methods are dynamically created by pytransitions based on
+    # the transitions defined in the state machine.
+
     async def next_stage(self) -> bool:
         """Handle the next stage event."""
-        raise RuntimeError("Should be overridden!")
+        raise NotImplementedError
 
     async def setup(
         self,
@@ -53,8 +63,8 @@ class LearningWorkflowModel(WorkflowModel):
         trainset_size: int,
     ) -> bool:
         """Handle the setup event."""
-        raise RuntimeError("Should be overridden!")
+        raise NotImplementedError
 
     async def stop_learning(self) -> bool:
         """Handle the stop learning event."""
-        raise RuntimeError("Should be overridden!")
+        raise NotImplementedError

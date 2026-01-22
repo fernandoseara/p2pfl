@@ -250,7 +250,12 @@ async def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_
 
     # Check for failures
     if raise_on_error:
-        failed = [(n.address, n.get_node_workflow().error) for n in nodes if n.get_node_workflow().failed and n.get_node_workflow().error]
+        failed: list[tuple[str, Exception]] = []
+        for n in nodes:
+            workflow = n.get_node_workflow()
+            error = workflow.error
+            if workflow.failed and error is not None:
+                failed.append((n.address, error))
         if failed:
             raise NodeLearningError(failed)
 

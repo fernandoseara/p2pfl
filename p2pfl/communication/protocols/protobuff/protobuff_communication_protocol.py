@@ -346,15 +346,9 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         return self._neighbors.get_all(only_direct)
 
     @running
-    def wait_for_termination(self) -> None:
-        """
-        Get the neighbors.
-
-        Args:
-            only_direct: The only direct flag.
-
-        """
-        self._server.wait_for_termination()
+    async def wait_for_termination(self) -> None:
+        """Wait for the server to terminate."""
+        await self._server.wait_for_termination()
 
     @running
     async def gossip_weights(

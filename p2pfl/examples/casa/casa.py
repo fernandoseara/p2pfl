@@ -19,6 +19,7 @@
 """Example IoT casa dataset for Human Daily Activity Recognition (HDAR)."""
 
 import argparse
+import asyncio
 import time
 from pathlib import Path
 
@@ -157,7 +158,7 @@ def save_experiment_results(output_dir: Path, start_time: float | None = None) -
             print(f"Error saving execution time: {e}")
 
 
-def casa(
+async def casa(
     n: int,
     r: int,
     e: int,
@@ -233,9 +234,9 @@ def casa(
             node_data[i],
             aggregator=aggregator_class(),
             protocol=MemoryCommunicationProtocol() if protocol == "memory" else GrpcCommunicationProtocol(),
-            addr=address,
+            address=address,
         )
-        node.start()
+        await node.start()
         nodes.append(node)
 
     try:
@@ -251,7 +252,7 @@ def casa(
         nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=max(1, n // 2))
 
         # Wait and check
-        wait_to_finish(nodes, timeout=60 * 60)  # 1 hour
+        await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour
 
         # Local Logs
         if show_metrics:
@@ -293,7 +294,7 @@ def casa(
     finally:
         # Stop Nodes
         for node in nodes:
-            node.stop()
+            await node.stop()
 
         if measure_time:
             print("--- %s seconds ---" % (time.time() - start_time))
@@ -319,16 +320,18 @@ if __name__ == "__main__":
         Settings.general.SEED = args.seed
 
     # Launch experiment
-    casa(
-        args.nodes,
-        args.rounds,
-        args.epochs,
-        show_metrics=args.show_metrics,
-        measure_time=args.measure_time,
-        protocol=args.protocol,
-        topology=args.topology,
-        batch_size=args.batch_size,
-        save_csv=args.save_csv,
-        output_dir=args.output_dir,
-        aggregator=args.aggregator,
+    asyncio.run(
+        casa(
+            args.nodes,
+            args.rounds,
+            args.epochs,
+            show_metrics=args.show_metrics,
+            measure_time=args.measure_time,
+            protocol=args.protocol,
+            topology=args.topology,
+            batch_size=args.batch_size,
+            save_csv=args.save_csv,
+            output_dir=args.output_dir,
+            aggregator=args.aggregator,
+        )
     )

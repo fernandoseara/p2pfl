@@ -11,7 +11,13 @@ import google.protobuf.empty_pb2
 import grpc
 import grpc.aio # type: ignore
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
+import sys
 import typing
+
+if sys.version_info >= (3, 13):
+    import typing as typing_extensions
+else:
+    import typing_extensions
 
 _T = typing.TypeVar("_T")
 
@@ -20,40 +26,127 @@ class _MaybeAsyncIterator(collections.abc.AsyncIterator[_T], collections.abc.Ite
 class _ServicerContext(grpc.ServicerContext, grpc.aio.ServicerContext):  # type: ignore[misc, type-arg]
     ...
 
-
-class NodeServicesStub:
-    handshake: grpc.aio.UnaryUnaryMultiCallable[
+GRPC_GENERATED_VERSION: str
+GRPC_VERSION: str
+_NodeServiceshandshakeType = typing_extensions.TypeVar(
+    '_NodeServiceshandshakeType',
+    grpc.UnaryUnaryMultiCallable[
         node_pb2.HandShakeRequest,
         node_pb2.ResponseMessage,
-    ]
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        node_pb2.HandShakeRequest,
+        node_pb2.ResponseMessage,
+    ],
+    default=grpc.UnaryUnaryMultiCallable[
+        node_pb2.HandShakeRequest,
+        node_pb2.ResponseMessage,
+    ],
+)
 
-    disconnect: grpc.aio.UnaryUnaryMultiCallable[
+_NodeServicesdisconnectType = typing_extensions.TypeVar(
+    '_NodeServicesdisconnectType',
+    grpc.UnaryUnaryMultiCallable[
         node_pb2.HandShakeRequest,
         google.protobuf.empty_pb2.Empty,
-    ]
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        node_pb2.HandShakeRequest,
+        google.protobuf.empty_pb2.Empty,
+    ],
+    default=grpc.UnaryUnaryMultiCallable[
+        node_pb2.HandShakeRequest,
+        google.protobuf.empty_pb2.Empty,
+    ],
+)
 
-    send: grpc.aio.UnaryUnaryMultiCallable[
+_NodeServicessendType = typing_extensions.TypeVar(
+    '_NodeServicessendType',
+    grpc.UnaryUnaryMultiCallable[
         node_pb2.RootMessage,
         node_pb2.ResponseMessage,
-    ]
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        node_pb2.RootMessage,
+        node_pb2.ResponseMessage,
+    ],
+    default=grpc.UnaryUnaryMultiCallable[
+        node_pb2.RootMessage,
+        node_pb2.ResponseMessage,
+    ],
+)
+
+class NodeServicesStub(typing.Generic[_NodeServiceshandshakeType, _NodeServicesdisconnectType, _NodeServicessendType]):
+    @typing.overload
+    def __init__(self: NodeServicesStub[
+        grpc.UnaryUnaryMultiCallable[
+            node_pb2.HandShakeRequest,
+            node_pb2.ResponseMessage,
+        ],
+        grpc.UnaryUnaryMultiCallable[
+            node_pb2.HandShakeRequest,
+            google.protobuf.empty_pb2.Empty,
+        ],
+        grpc.UnaryUnaryMultiCallable[
+            node_pb2.RootMessage,
+            node_pb2.ResponseMessage,
+        ],
+    ], channel: grpc.Channel) -> None: ...
+
+    @typing.overload
+    def __init__(self: NodeServicesStub[
+        grpc.aio.UnaryUnaryMultiCallable[
+            node_pb2.HandShakeRequest,
+            node_pb2.ResponseMessage,
+        ],
+        grpc.aio.UnaryUnaryMultiCallable[
+            node_pb2.HandShakeRequest,
+            google.protobuf.empty_pb2.Empty,
+        ],
+        grpc.aio.UnaryUnaryMultiCallable[
+            node_pb2.RootMessage,
+            node_pb2.ResponseMessage,
+        ],
+    ], channel: grpc.aio.Channel) -> None: ...
+
+    handshake: _NodeServiceshandshakeType
+
+    disconnect: _NodeServicesdisconnectType
+
+    send: _NodeServicessendType
+
+NodeServicesAsyncStub: typing_extensions.TypeAlias = NodeServicesStub[
+    grpc.aio.UnaryUnaryMultiCallable[
+        node_pb2.HandShakeRequest,
+        node_pb2.ResponseMessage,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        node_pb2.HandShakeRequest,
+        google.protobuf.empty_pb2.Empty,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        node_pb2.RootMessage,
+        node_pb2.ResponseMessage,
+    ],
+]
 
 class NodeServicesServicer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    async def handshake(
+    def handshake(
         self,
         request: node_pb2.HandShakeRequest,
         context: _ServicerContext,
     ) -> typing.Union[node_pb2.ResponseMessage, collections.abc.Awaitable[node_pb2.ResponseMessage]]: ...
 
     @abc.abstractmethod
-    async def disconnect(
+    def disconnect(
         self,
         request: node_pb2.HandShakeRequest,
         context: _ServicerContext,
     ) -> typing.Union[google.protobuf.empty_pb2.Empty, collections.abc.Awaitable[google.protobuf.empty_pb2.Empty]]: ...
 
     @abc.abstractmethod
-    async def send(
+    def send(
         self,
         request: node_pb2.RootMessage,
         context: _ServicerContext,

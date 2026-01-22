@@ -129,21 +129,17 @@ addopts = "-v --cov=p2pfl"
 relative_files = true
 
 [tool.mypy]
-exclude = "p2pfl/proto"
 disallow_untyped_calls = true
 
 [[tool.mypy.overrides]]
-module = "grpc.*"
+module = [
+    "grpc.*",
+    "torchvision.*",
+    "datasets.*",
+    "sklearn.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "torchvision.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "datasets.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "sklearn.*"
-ignore_missing_imports = true
+module = "p2pfl.communication.protocols.protobuff.proto.*"
+ignore_errors = true

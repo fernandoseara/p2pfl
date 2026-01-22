@@ -97,8 +97,9 @@ class NodeWorkflowModel:
         self.node = node
         self.is_initiator: bool = False
 
-        # self.event_log: list = []
-        # self.state_log: collections.deque = collections.deque(maxlen=state_history_length)
+        # Error tracking
+        self.failed: bool = False
+        self.error: Exception | None = None
 
         self.workflow_state_manager: WorkflowStateManager | None = None
         WorkflowMachineManager().add_model(self)
@@ -406,11 +407,12 @@ class NodeWorkflowModel:
 
     async def interrupt(self) -> None:
         """Interrupt the workflow."""
-        global machine
         await asyncio.sleep(1)
-        for task in machine.async_tasks[id(self)]:
-            task.cancel()
-        machine._transition_queue_dict[id(self)].clear()
+        machine = WorkflowMachineManager().get_machine()
+        if machine is not None:
+            for task in machine.async_tasks[id(self)]:
+                task.cancel()
+            machine._transition_queue_dict[id(self)].clear()
 
         await self.stop()
 

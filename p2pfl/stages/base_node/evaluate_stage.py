@@ -48,6 +48,6 @@ class EvaluateStage(Stage):
                 node.get_communication_protocol().build_msg(
                     MetricsCommand.get_name(),
                     flattened_metrics,
-                    round=node.get_local_state().get_experiment().round,
+                    round=node.get_local_state().round,
                 )
             )

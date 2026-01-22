@@ -39,6 +39,7 @@ from p2pfl.stages.workflows.workflow_state_manager import WorkflowStateManager
 from p2pfl.utils.pytransitions import TimeoutMachine
 
 if TYPE_CHECKING:
+    from p2pfl.communication.commands.command import Command
     from p2pfl.node import Node
 
 
@@ -102,6 +103,8 @@ class BasicDFLWorkflowBuilder(WorkflowBuilder):
         """Create a workflow model."""
         if self._network_state is None:
             raise ValueError("Network state is not set.")
+        if self._local_state is None:
+            raise ValueError("Local state is not set.")
 
         self._workflow_state_manager.add_learning_workflow(
             BasicLearningWorkflowModel(node, self._local_state, self._network_state), initialState="waitingSetup"
@@ -109,7 +112,7 @@ class BasicDFLWorkflowBuilder(WorkflowBuilder):
 
     def create_commands(self, node: Node) -> None:
         """Create commands list."""
-        commands = [
+        commands: list[Command] = [
             NodeInitializedCommand(node),
             PeerRoundUpdatedCommand(node),
             VoteTrainSetCommand(node),

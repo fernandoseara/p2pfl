@@ -119,7 +119,8 @@ class TestLearnerWrapping:
     @pytest.mark.skip(reason="VirtualNodeLearner has Ray serialization issues with ABC-based actors")
     @pytest.mark.uses_ray
     def test_learner_wrapped_when_ray_enabled(self):
-        """Verify learner IS wrapped in VirtualNodeLearner when Ray is enabled.
+        """
+        Verify learner IS wrapped in VirtualNodeLearner when Ray is enabled.
 
         SKIPPED: The VirtualLearnerActor inherits from LearnerDecorator which extends
         Learner(ABC). Ray cannot serialize classes with ABC metaclass.

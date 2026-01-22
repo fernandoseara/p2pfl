@@ -133,7 +133,7 @@ class Node:
             [
                 StartLearningCommand(self),
                 StopLearningCommand(self),
-                MetricsCommand(self),
+                MetricsCommand(),
             ]
         )
 

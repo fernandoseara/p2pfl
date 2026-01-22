@@ -20,27 +20,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from transitions import MachineError
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.management.logger import logger
 
-if TYPE_CHECKING:
-    from p2pfl.node import Node
-
 
 class PartialModelCommand(Command):
-    """PartialModelCommand."""
-
-    def __init__(
-        self,
-        node: Node,
-    ) -> None:
-        """Initialize PartialModelCommand."""
-        self.__node = node
+    """PartialModelCommand for BasicDFL workflow."""
 
     @staticmethod
     def get_name() -> str:
@@ -52,7 +40,7 @@ class PartialModelCommand(Command):
         source: str,
         round: int,
         weights: bytes | None = None,
-        contributors: list[str] | None = None,  # TIPO ESTA MAL (NECESARIO CASTEARLO AL LLAMAR)
+        contributors: list[str] | None = None,
         num_samples: int | None = None,
         **kwargs,
     ) -> None:
@@ -63,7 +51,7 @@ class PartialModelCommand(Command):
         try:
             # Add model to aggregator
             model = (
-                self.__node.get_learner()
+                self.node.get_learner()
                 .get_model()
                 .build_copy(
                     params=weights,
@@ -72,13 +60,13 @@ class PartialModelCommand(Command):
                 )
             )
 
-            await self.__node.get_learning_workflow().aggregate(model, source)
+            await self.workflow.aggregate(model, source)
 
         except MachineError:
-            logger.debug(self.__node.address, "Invalid state.")
+            logger.debug(self.node.address, "Invalid state.")
         except DecodingParamsError:
-            logger.error(self.__node.address, "Error decoding parameters.")
+            logger.error(self.node.address, "Error decoding parameters.")
         except ModelNotMatchingError:
-            logger.error(self.__node.address, "Models not matching.")
+            logger.error(self.node.address, "Models not matching.")
         except Exception as e:
-            logger.error(self.__node.address, f"Unknown error adding model: {e}")
+            logger.error(self.node.address, f"Unknown error adding model: {e}")

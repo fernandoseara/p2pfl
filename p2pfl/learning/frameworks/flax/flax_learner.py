@@ -103,7 +103,17 @@ class FlaxLearner(Learner):
         nwe_state, loss, acc = compute_grads(state.params)
         return nwe_state, loss, acc
 
-    def fit(self) -> P2PFLModel:
+    async def train_on_batch(self) -> P2PFLModel:
+        """
+        Train the model on the next batch manually.
+
+        Raises:
+            NotImplementedError: Flax does not support batch training yet.
+
+        """
+        raise NotImplementedError("Flax does not support batch training yet")
+
+    async def fit(self) -> P2PFLModel:
         """Fit the model."""
         try:
             if self.epochs > 0:
@@ -138,7 +148,7 @@ class FlaxLearner(Learner):
             logger.error(self.address, f"Error in training with Flax: {e}")
             raise e
 
-    def evaluate(self) -> dict[str, float]:
+    async def evaluate(self) -> dict[str, float]:
         """Evaluate the Flax model."""
 
         # TODO: test jit
@@ -164,7 +174,7 @@ class FlaxLearner(Learner):
             logger.error(self.address, f"Evaluation error with Flax: {e}")
             raise e
 
-    def interrupt_fit(self) -> None:
+    async def interrupt_fit(self) -> None:
         """Interrupt the fit process."""
         # Flax doesn't have a direct way to interrupt fit.
         # Need to implement a custom callback or use a flag to stop training.

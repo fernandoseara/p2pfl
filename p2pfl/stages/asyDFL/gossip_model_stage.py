@@ -27,12 +27,13 @@ from p2pfl.communication.commands.message.asyDFL.ctx_info_updating_command impor
 )
 from p2pfl.management.logger import logger
 from p2pfl.stages.network_state.async_network_state import AsyncNetworkState
+from p2pfl.stages.stage import Stage
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
 
 
-class GossipModelStage:
+class GossipModelStage(Stage):
     """Gossip model stage."""
 
     @staticmethod
@@ -46,7 +47,7 @@ class GossipModelStage:
         for neighbor in candidates:
             await GossipModelStage.__send_model(neighbor, node)
             await GossipModelStage.__send_push_sum_weight(network_state, neighbor, node)
-            network_state.update_push_time(neighbor, node.get_local_state().round)
+            network_state.update_push_time(neighbor, node.get_local_state().round or 0)
 
     @staticmethod
     async def __send_model(neighbor: str, node: Node) -> None:
@@ -67,7 +68,7 @@ class GossipModelStage:
                 nei=neighbor,
                 msg=communication_protocol.build_weights(
                     ModelInformationUpdatingCommand.get_name(),
-                    node.get_local_state().round,
+                    node.get_local_state().round or 0,
                     model.encode_parameters(),
                     model.get_contributors(),
                     model.get_num_samples(),

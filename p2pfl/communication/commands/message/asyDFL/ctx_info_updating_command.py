@@ -18,17 +18,13 @@
 
 """Context Information Updating commands."""
 
+from __future__ import annotations
+
 from p2pfl.communication.commands.command import Command
-from p2pfl.node import Node
 
 
 class LossInformationUpdatingCommand(Command):
-    """LossInformationUpdatingCommand."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        super().__init__()
-        self.__node = node
+    """LossInformationUpdatingCommand for AsyncDFL workflow."""
 
     @staticmethod
     def get_name() -> str:
@@ -46,20 +42,14 @@ class LossInformationUpdatingCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        # Save loss
         if loss is None:
             raise ValueError("Loss is required")
 
-        await self.__node.get_learning_workflow().loss_information_received(source, round, float(loss))
+        await self.workflow.loss_information_received(source, round, float(loss))
 
 
 class IndexInformationUpdatingCommand(Command):
-    """IndexInformationUpdatingCommand."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        super().__init__()
-        self.__node = node
+    """IndexInformationUpdatingCommand for AsyncDFL workflow."""
 
     @staticmethod
     def get_name() -> str:
@@ -76,20 +66,14 @@ class IndexInformationUpdatingCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        # Save index of local iteration about model updating
         if round is None:
             raise ValueError("Index is required")
 
-        await self.__node.get_learning_workflow().iteration_index_received(source, index=round)
+        await self.workflow.iteration_index_received(source, index=round)
 
 
 class ModelInformationUpdatingCommand(Command):
-    """ModelInformationUpdatingCommand."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        super().__init__()
-        self.__node = node
+    """ModelInformationUpdatingCommand for AsyncDFL workflow."""
 
     @staticmethod
     def get_name() -> str:
@@ -120,16 +104,11 @@ class ModelInformationUpdatingCommand(Command):
         if weights is None or contributors is None or num_samples is None:
             raise ValueError("Weights, contributors and weight are required")
 
-        await self.__node.get_learning_workflow().model_received(source, round, weights, num_samples, list(contributors))
+        await self.workflow.model_received(source, round, weights, num_samples, list(contributors))
 
 
 class PushSumWeightInformationUpdatingCommand(Command):
-    """PushSumWeightInformationUpdatingCommand."""
-
-    def __init__(self, node: Node) -> None:
-        """Initialize the command."""
-        super().__init__()
-        self.__node = node
+    """PushSumWeightInformationUpdatingCommand for AsyncDFL workflow."""
 
     @staticmethod
     def get_name() -> str:
@@ -147,8 +126,7 @@ class PushSumWeightInformationUpdatingCommand(Command):
             **kwargs: The command keyword arguments.
 
         """
-        # Save push-sum weight
         if push_sum_weight is None:
             raise ValueError("Push-sum weight is required")
 
-        await self.__node.get_learning_workflow().push_sum_weight_received(source, push_sum_weight=float(push_sum_weight))
+        await self.workflow.push_sum_weight_received(source, push_sum_weight=float(push_sum_weight))

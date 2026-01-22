@@ -37,22 +37,23 @@ class VirtualNodeLearner(Learner):
         pg_manager = PlacementGroupManager()
         pg = pg_manager.get_placement_group()
 
-        self.actor = VirtualLearnerActor.options(
+        self.actor = VirtualLearnerActor.options(  # type: ignore[attr-defined]
             placement_group=pg,
             placement_group_capture_child_tasks=True,
             # ).remote(learner_class(**learner_args))
         ).remote(learner)
 
-    async def fit(self) -> None:
+    async def fit(self) -> P2PFLModel:
         """Fit the model."""
         try:
             await self.actor.fit.remote()
+            return self.get_model()
         except Exception as ex:
             logger.error(self.address, traceback.format_exc())
             logger.error(self.address, f"An error occurred during remote fit: {ex}")
             raise ex
 
-    async def train_on_batch(self) -> None:
+    async def train_on_batch(self) -> P2PFLModel:
         """
         Train the model on the next batch manually.
 
@@ -62,12 +63,13 @@ class VirtualNodeLearner(Learner):
         """
         try:
             await self.actor.train_on_batch.remote()
+            return self.get_model()
         except Exception as ex:
             logger.error(self.address, traceback.format_exc())
             logger.error(self.address, f"An error occurred during remote train_on_batch: {ex}")
             raise ex
 
-    def interrupt_fit(self) -> None:
+    async def interrupt_fit(self) -> None:
         """Interrupt the fit process."""
         # TODO: Need to implement this!
         raise NotImplementedError
@@ -116,7 +118,7 @@ class VirtualNodeLearner(Learner):
         """Set the number of epochs on the remote actor."""
         ray.get(self.actor.set_epochs.remote(epochs))
 
-    def get_steps_per_epoch(self) -> int:
+    def get_steps_per_epoch(self) -> int | None:
         """Get the steps per epoch from the remote actor."""
         return ray.get(self.actor.get_steps_per_epoch.remote())
 

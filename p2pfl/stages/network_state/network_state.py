@@ -17,7 +17,13 @@
 #
 """Network state."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
 
 class NetworkState(ABC):
@@ -35,7 +41,45 @@ class NetworkState(ABC):
         """Set the node as the initiator of the network."""
         self.is_initiator = is_initiator
 
+    # Core peer management - abstract methods
     @abstractmethod
-    def add_peer(self, address: str):
+    def add_peer(self, address: str) -> None:
         """Add a new peer to the network state."""
+        pass
+
+    @abstractmethod
+    def list_peers(self) -> list[str]:
+        """List all addresses in the network state."""
+        pass
+
+    @abstractmethod
+    def clear(self) -> None:
+        """Clear the network state."""
+        pass
+
+    # Common model operations - abstract methods
+    @abstractmethod
+    def add_model(self, model: P2PFLModel, source: str) -> None:
+        """Add a model to a peer's state."""
+        pass
+
+    @abstractmethod
+    def get_all_models(self) -> list[P2PFLModel]:
+        """Get all models currently stored."""
+        pass
+
+    @abstractmethod
+    def get_all_contributors(self) -> list[str]:
+        """Get all contributors for the models."""
+        pass
+
+    # Round management - abstract methods
+    @abstractmethod
+    def update_round(self, address: str, round_number: int) -> None:
+        """Update the round number for a peer's state."""
+        pass
+
+    @abstractmethod
+    def get_round(self, address: str) -> int | None:
+        """Retrieve the peer round number."""
         pass

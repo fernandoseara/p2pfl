@@ -97,7 +97,7 @@ class Gossiper(NodeComponent):
 
         # Check if message was already processed
         async with self._processed_messages_lock:
-            if msg.message.hash in self._processed_messages:
+            if msg.gossip_message.hash in self._processed_messages:
                 return False
 
             # If there are more than X messages, remove the oldest one
@@ -105,7 +105,7 @@ class Gossiper(NodeComponent):
                 self._processed_messages.pop(0)
 
             # Add message
-            self._processed_messages.append(msg.message.hash)
+            self._processed_messages.append(msg.gossip_message.hash)
             return True
 
     async def _run(self) -> None:

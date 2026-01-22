@@ -50,12 +50,11 @@ class GossipFullModelStage(Stage):
         node: Node,
     ) -> None:
         def model_fn(_: str) -> Any:
-            if node.get_local_state().get_experiment().round is None:
+            experiment = node.get_local_state().get_experiment()
+            if experiment is None or experiment.round is None:
                 raise Exception("Round not initialized")
             encoded_model = node.get_learner().get_model().encode_parameters()
-            return node.get_communication_protocol().build_weights(
-                FullModelCommand.get_name(), node.get_local_state().get_experiment().round, encoded_model
-            )
+            return node.get_communication_protocol().build_weights(FullModelCommand.get_name(), experiment.round, encoded_model)
 
         for neighbor in candidates:
             payload = model_fn(neighbor)

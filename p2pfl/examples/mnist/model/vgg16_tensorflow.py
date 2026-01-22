@@ -18,6 +18,8 @@
 
 """Simple MLP on Tensorflow Keras for MNIST."""
 
+from typing import Any
+
 import tensorflow as tf  # type: ignore
 from tensorflow.keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, Resizing  # type: ignore
 from tensorflow.keras.losses import SparseCategoricalCrossentropy  # type: ignore
@@ -35,14 +37,20 @@ from p2pfl.utils.seed import set_seed
 class VGG16(tf.keras.Model):
     """VGG16-like CNN model for image classification using Keras."""
 
-    def __init__(self, input_shape=(224, 224, 3), out_channels=10, lr_rate=0.001, **kwargs):
+    def __init__(
+        self,
+        input_shape: tuple[int, int, int] = (224, 224, 3),
+        out_channels: int = 10,
+        lr_rate: float = 0.001,
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize the VGG16-like CNN.
 
         Args:
-            input_shape (tuple): Shape of the input images.
-            out_channels (int): Number of output classes.
-            lr_rate (float): Learning rate for the Adam optimizer.
+            input_shape: Shape of the input images.
+            out_channels: Number of output classes.
+            lr_rate: Learning rate for the Adam optimizer.
             kwargs: Additional keyword arguments.
 
         """
@@ -85,14 +93,16 @@ class VGG16(tf.keras.Model):
         self.fc2 = Dense(4096, activation="relu")
         self.output_layer = Dense(out_channels)
 
-        # Compile config
-        self.loss = SparseCategoricalCrossentropy(from_logits=True)
-        self.optimizer = Adam(learning_rate=lr_rate)
-
         # Force the model to be built
         self(tf.zeros((1, *input_shape)))
 
-    def call(self, inputs):
+        # Compile with default loss and optimizer
+        self.compile(
+            loss=SparseCategoricalCrossentropy(from_logits=True),
+            optimizer=Adam(learning_rate=lr_rate),
+        )
+
+    def call(self, inputs: Any, training: bool | None = None, mask: Any = None) -> tf.Tensor:
         """Forward pass of the VGG16 model."""
         if tf.rank(inputs) == 3:
             inputs = tf.expand_dims(inputs, axis=0)  # Add batch dimension
@@ -127,14 +137,19 @@ class VGG16(tf.keras.Model):
         return self.output_layer(x)
 
 
-def model_build_fn(*args, **kwargs) -> KerasModel:
+def model_build_fn(
+    input_shape: tuple[int, int, int] = (224, 224, 3),
+    out_channels: int = 10,
+    lr_rate: float = 0.001,
+    compression: dict[str, dict[str, Any]] | None = None,
+) -> KerasModel:
     """Export the model build function."""
-    compression = kwargs.pop("compression", None)
-    return KerasModel(VGG16(*args, **kwargs), compression=compression)
+    model = VGG16(input_shape=input_shape, out_channels=out_channels, lr_rate=lr_rate)
+    return KerasModel(model, compression=compression)
 
 
 if __name__ == "__main__":
     # Example usage
     model = model_build_fn(input_shape=(224, 224, 3), out_channels=10, lr_rate=0.001)
     model.get_model().compile(optimizer="adam", metrics=["accuracy"])
-    print(model.get_model().summary())
+    model.get_model().summary()  # summary() prints directly, returns None
