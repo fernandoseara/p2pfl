@@ -17,7 +17,7 @@ def try_init_learner_with_ray(learner: Learner) -> Learner:
 
     """
     if ray_installed():
-        from p2pfl.learning.frameworks.simulation.virtual_learner import VirtualNodeLearner
+        from p2pfl.learning.frameworks.ray.virtual_learner import VirtualNodeLearner
 
         learner = VirtualNodeLearner(learner)
     return learner

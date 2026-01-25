@@ -21,27 +21,35 @@ import traceback
 
 import ray
 
-from p2pfl.learning.frameworks.learner import Learner
+from p2pfl.learning.frameworks.learner import Learner, LearnerDecorator
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
-from p2pfl.learning.frameworks.simulation.actor_pool import VirtualLearnerActor
-from p2pfl.learning.frameworks.simulation.placement_group_manager import PlacementGroupManager
+from p2pfl.learning.frameworks.ray.placement_group_manager import PlacementGroupManager
 from p2pfl.management.logger import logger
 
 
+@ray.remote
+class VirtualLearnerActor(LearnerDecorator):
+    """Ray actor wrapper for learners."""
+
+    def terminate(self) -> None:
+        """Manually terminate Actor object."""
+        logger.debug(self.__class__.__name__, f"Manually terminating {self.__class__.__name__}")
+        ray.actor.exit_actor()
+
+
 class VirtualNodeLearner(Learner):
-    """Decorator for the learner to be used in the simulation."""
+    """Wrapper that runs a Learner as a Ray actor for distributed execution."""
 
     def __init__(self, learner: Learner) -> None:
         """Initialize the learner."""
-        self.address = "test"
         pg_manager = PlacementGroupManager()
         pg = pg_manager.get_placement_group()
 
         self.actor = VirtualLearnerActor.options(  # type: ignore[attr-defined]
             placement_group=pg,
             placement_group_capture_child_tasks=True,
-            # ).remote(learner_class(**learner_args))
         ).remote(learner)
+        self.address = learner.address
 
     async def fit(self) -> P2PFLModel:
         """Fit the model."""
@@ -90,6 +98,13 @@ class VirtualNodeLearner(Learner):
             raise ex
 
     # Proxy configuration & lifecycle methods
+    def set_address(self, address: str) -> str:
+        """Set the address on both local and remote actor."""
+        ray.get(self.actor.set_address.remote(address))
+        # Cache because is expensive and highly used on logs
+        self.address = address
+        return super().set_address(address)
+
     def set_model(self, model) -> None:
         """Set the P2PFL model on the remote actor."""
         ray.get(self.actor.set_model.remote(model))

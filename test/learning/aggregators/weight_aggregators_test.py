@@ -175,8 +175,9 @@ def test_fedprox_aggregation():
     assert set(result.get_contributors()) == {"n1", "n2"}
 
 
+@pytest.mark.asyncio
 @pytest.mark.e2e_train
-def test_fedprox_e2e_two_rounds():
+async def test_fedprox_e2e_two_rounds():
     """Test FedProx aggregator + callback integration over two rounds."""
     # Dataset
     dataset = P2PFLDataset(
@@ -213,7 +214,7 @@ def test_fedprox_e2e_two_rounds():
 
     # Round 1: First round - no proximal term (callback skips first round)
     learner.set_epochs(1)
-    trained_model = learner.fit()
+    trained_model = await learner.fit()
     assert trained_model is not None
     assert trained_model.get_num_samples() == 100
 
@@ -222,11 +223,11 @@ def test_fedprox_e2e_two_rounds():
     learner.set_model(aggregated_model)
 
     # Round 2: Proximal term applied (callback reads proximal_mu, snapshots params)
-    trained_model_r2 = learner.fit()
+    trained_model_r2 = await learner.fit()
     assert trained_model_r2 is not None
 
     # Evaluate
-    learner.evaluate()
+    await learner.evaluate()
 
 
 ###############################################

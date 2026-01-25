@@ -36,7 +36,7 @@ from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
-from p2pfl.learning.frameworks.simulation import try_init_learner_with_ray
+from p2pfl.learning.frameworks.ray import try_init_learner_with_ray
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
 from p2pfl.stages.local_state.node_state import LocalNodeState
@@ -115,8 +115,8 @@ class Node:
         # Learner
         if learner is None:  # if no learner, use factory default
             learner = LearnerFactory.create_learner(model)()
-        learner.set_address(address)
         self.learner = try_init_learner_with_ray(learner)
+        self.learner.set_address(address)
         self.learner.set_model(model)
         self.learner.set_data(data)
         self.learner.indicate_aggregator(self.aggregator)

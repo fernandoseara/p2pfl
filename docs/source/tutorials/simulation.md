@@ -6,9 +6,9 @@ P2PFL leverages **[Ray](https://www.ray.io/)**, a powerful distributed computing
 
 P2PFL seamlessly integrates with Ray to distribute the learning process. When Ray is installed, P2PFL automatically creates a pool of **actors**, which are independent Python processes that can be distributed across your cluster. Each actor hosts a `Learner` instance, allowing for parallel training and evaluation.
 
-### 🧩 Actor Pool
+### 🧩 Virtual Learners
 
-The core of P2PFL's simulation capabilities is the `SuperActorPool`. This pool manages the lifecycle of `VirtualNodeLearner` actors. Each `VirtualNodeLearner` wraps a standard `Learner`, enabling it to be executed remotely by Ray. This means that each node in your federated learning simulation can be run as an independent actor, managed by the pool.
+The core of P2PFL's simulation capabilities is the `VirtualNodeLearner`. Each `VirtualNodeLearner` wraps a standard `Learner` and runs it as a Ray actor, enabling remote execution. This means that each node in your federated learning simulation can be run as an independent actor distributed across your cluster.
 
 ### 🚀 Benefits of Using Ray
 

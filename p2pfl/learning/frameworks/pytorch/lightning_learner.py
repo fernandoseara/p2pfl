@@ -116,6 +116,16 @@ class LightningLearner(Learner):
             )
             raise e
 
+    async def train_on_batch(self) -> P2PFLModel:
+        """
+        Train the model on the next batch manually.
+
+        Raises:
+            NotImplementedError: PyTorch Lightning does not support batch training yet.
+
+        """
+        raise NotImplementedError("PyTorch Lightning does not support batch training yet")
+
     async def interrupt_fit(self) -> None:
         """Interrupt the fit."""
         if self.__trainer is not None:

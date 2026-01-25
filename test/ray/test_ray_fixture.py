@@ -18,7 +18,27 @@
 
 """Tests to verify the @pytest.mark.uses_ray marker and Ray initialization."""
 
+from unittest.mock import MagicMock
+
 import pytest
+
+try:
+    import ray
+
+    RAY_INSTALLED = True
+except ImportError:
+    RAY_INSTALLED = False
+
+from p2pfl.learning.frameworks.learner import Learner
+from p2pfl.learning.frameworks.ray import try_init_learner_with_ray
+from p2pfl.learning.frameworks.ray.virtual_learner import VirtualNodeLearner
+from p2pfl.management.logger import logger
+from p2pfl.management.logger.decorators.ray_logger import RayP2PFLogger
+from p2pfl.settings import Settings
+from p2pfl.utils.check_ray import ray_installed
+
+# Skip all tests in this module if Ray is not installed
+pytestmark = pytest.mark.skipif(not RAY_INSTALLED, reason="Ray is not installed")
 
 
 class TestRayMarker:
@@ -31,31 +51,20 @@ class TestRayMarker:
 
     def test_ray_disabled_by_default(self):
         """Verify Ray is disabled by default in tests via Settings."""
-        from p2pfl.settings import Settings
-        from p2pfl.utils.check_ray import ray_installed
-
         assert Settings.general.DISABLE_RAY is True, "DISABLE_RAY should be True by default in tests"
         assert ray_installed() is False, "ray_installed() should return False when DISABLE_RAY=True"
 
     @pytest.mark.uses_ray
     def test_ray_enabled_with_marker(self):
         """Verify Ray can be enabled using the @pytest.mark.uses_ray marker."""
-        from p2pfl.settings import Settings
-        from p2pfl.utils.check_ray import ray_installed
-
         assert Settings.general.DISABLE_RAY is False, "DISABLE_RAY should be False with uses_ray marker"
         assert ray_installed() is True, "ray_installed() should return True with uses_ray marker"
 
         # Verify Ray is actually initialized
-        import ray
-
         assert ray.is_initialized(), "Ray should be initialized"
 
     def test_ray_remains_disabled_after_uses_ray_test(self):
         """Verify Ray is disabled again after a uses_ray test completes."""
-        from p2pfl.settings import Settings
-        from p2pfl.utils.check_ray import ray_installed
-
         assert Settings.general.DISABLE_RAY is True, "DISABLE_RAY should be True after uses_ray test"
         assert ray_installed() is False, "ray_installed() should return False in normal tests"
 
@@ -65,23 +74,15 @@ class TestRayLogger:
 
     def test_logger_uses_ray_when_available(self):
         """Verify logger is RayP2PFLogger when Ray is installed."""
-        from p2pfl.management.logger import logger
-        from p2pfl.management.logger.decorators.ray_logger import RayP2PFLogger
-
         # Logger should be Ray-based since Ray was initialized at import time
         assert isinstance(logger, RayP2PFLogger), f"Expected RayP2PFLogger, got {type(logger).__name__}"
 
     def test_ray_initialized_at_import(self):
         """Verify Ray is initialized (was initialized when logger was imported)."""
-        import ray
-
         assert ray.is_initialized(), "Ray should be initialized at conftest import time"
 
     def test_ray_installed_respects_disable_setting(self):
         """Verify ray_installed() respects Settings.general.DISABLE_RAY."""
-        from p2pfl.settings import Settings
-        from p2pfl.utils.check_ray import ray_installed
-
         # Default in tests: disabled
         assert Settings.general.DISABLE_RAY is True
         assert ray_installed() is False
@@ -100,13 +101,6 @@ class TestLearnerWrapping:
 
     def test_learner_not_wrapped_when_ray_disabled(self):
         """Verify learner is NOT wrapped in VirtualNodeLearner when Ray is disabled."""
-        from unittest.mock import MagicMock
-
-        from p2pfl.learning.frameworks.learner import Learner
-        from p2pfl.learning.frameworks.simulation import try_init_learner_with_ray
-        from p2pfl.learning.frameworks.simulation.virtual_learner import VirtualNodeLearner
-        from p2pfl.settings import Settings
-
         assert Settings.general.DISABLE_RAY is True
 
         # Use a mock instead of abstract LightningLearner
@@ -125,13 +119,6 @@ class TestLearnerWrapping:
         SKIPPED: The VirtualLearnerActor inherits from LearnerDecorator which extends
         Learner(ABC). Ray cannot serialize classes with ABC metaclass.
         """
-        from unittest.mock import MagicMock
-
-        from p2pfl.learning.frameworks.learner import Learner
-        from p2pfl.learning.frameworks.simulation import try_init_learner_with_ray
-        from p2pfl.learning.frameworks.simulation.virtual_learner import VirtualNodeLearner
-        from p2pfl.settings import Settings
-
         assert Settings.general.DISABLE_RAY is False
 
         # Use a mock instead of abstract LightningLearner

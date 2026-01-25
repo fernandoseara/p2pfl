@@ -338,8 +338,9 @@ def __test_flax_export_strategy():
 ################################
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("build_model_fn", [model_build_fn_torch, model_build_fn_tensorflow])  # TODO: Flax
-def test_learner_train(build_model_fn):
+async def test_learner_train(build_model_fn):
     """Test the training and testing of the learner."""
     # Dataset
     dataset = P2PFLDataset(
@@ -370,7 +371,7 @@ def test_learner_train(build_model_fn):
 
     # Train
     learner.set_epochs(1)
-    learner.fit()
+    await learner.fit()
 
     # Test
-    learner.evaluate()
+    await learner.evaluate()

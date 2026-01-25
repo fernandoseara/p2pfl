@@ -22,19 +22,33 @@ These tests mock the Ray actor and placement group to avoid actually running Ray
 which would fail with MagicMock learners (not serializable).
 """
 
-import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+try:
+    import ray  # noqa: F401
+
+    RAY_INSTALLED = True
+except ImportError:
+    RAY_INSTALLED = False
 
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 
-# These tests DON'T need Ray - they mock the actor entirely
+if RAY_INSTALLED:
+    from p2pfl.learning.frameworks.ray.virtual_learner import VirtualNodeLearner
 
-with contextlib.suppress(ImportError):
-    from p2pfl.learning.frameworks.simulation.virtual_learner import VirtualNodeLearner
+# Skip all tests in this module if Ray is not installed
+pytestmark = pytest.mark.skipif(not RAY_INSTALLED, reason="Ray is not installed")
+
+
+def create_mock_learner(address: str = "") -> MagicMock:
+    """Create a mock Learner with the address attribute set (required by VirtualNodeLearner)."""
+    learner = MagicMock(spec=Learner)
+    learner.address = address  # NodeComponent sets this via metaclass; mocks need it explicitly
+    return learner
 
 
 @pytest.fixture
@@ -52,14 +66,14 @@ def mock_ray_components():
 
     with (
         patch(
-            "p2pfl.learning.frameworks.simulation.virtual_learner.VirtualLearnerActor",
+            "p2pfl.learning.frameworks.ray.virtual_learner.VirtualLearnerActor",
             mock_actor_class,
         ),
         patch(
-            "p2pfl.learning.frameworks.simulation.virtual_learner.PlacementGroupManager",
+            "p2pfl.learning.frameworks.ray.virtual_learner.PlacementGroupManager",
             return_value=mock_pg_manager,
         ),
-        patch("p2pfl.learning.frameworks.simulation.virtual_learner.ray") as mock_ray,
+        patch("p2pfl.learning.frameworks.ray.virtual_learner.ray") as mock_ray,
     ):
         # Setup ray.get to return whatever the remote call returns
         mock_ray.get.side_effect = lambda x: x
@@ -73,7 +87,7 @@ def mock_ray_components():
 
 def test_virtual_node_learner_initialization(mock_ray_components):
     """Test the initialization of the VirtualNodeLearner class."""
-    learner = MagicMock(spec=Learner)
+    learner = create_mock_learner()
     virtual_learner = VirtualNodeLearner(learner)
     address = "test_addr"
     virtual_learner.set_address(address)
@@ -84,7 +98,7 @@ def test_virtual_node_learner_initialization(mock_ray_components):
 
 def test_set_model(mock_ray_components):
     """Test the set_model method of the VirtualNodeLearner class."""
-    learner = MagicMock(spec=Learner)
+    learner = create_mock_learner()
     virtual_learner = VirtualNodeLearner(learner)
     virtual_learner.set_address("test_addr")
     model = MagicMock(spec=P2PFLModel)
@@ -97,7 +111,7 @@ def test_set_model(mock_ray_components):
 
 def test_get_model(mock_ray_components):
     """Test the get_model method of the VirtualNodeLearner class."""
-    learner = MagicMock(spec=Learner)
+    learner = create_mock_learner()
     virtual_learner = VirtualNodeLearner(learner)
     virtual_learner.set_address("test_addr")
     model = MagicMock(spec=P2PFLModel)
@@ -112,7 +126,7 @@ def test_get_model(mock_ray_components):
 
 def test_set_data(mock_ray_components):
     """Test the set_data method of the VirtualNodeLearner class."""
-    learner = MagicMock(spec=Learner)
+    learner = create_mock_learner()
     virtual_learner = VirtualNodeLearner(learner)
     virtual_learner.set_address("test_addr")
     data = MagicMock(spec=P2PFLDataset)
@@ -124,7 +138,7 @@ def test_set_data(mock_ray_components):
 
 def test_get_data(mock_ray_components):
     """Test the get_data method of the VirtualNodeLearner class."""
-    learner = MagicMock(spec=Learner)
+    learner = create_mock_learner()
     virtual_learner = VirtualNodeLearner(learner)
     virtual_learner.set_address("test_addr")
     data = MagicMock(spec=P2PFLDataset)
@@ -139,7 +153,7 @@ def test_get_data(mock_ray_components):
 
 def test_set_epochs(mock_ray_components):
     """Test the set_epochs method of the VirtualNodeLearner class."""
-    learner = MagicMock(spec=Learner)
+    learner = create_mock_learner()
     virtual_learner = VirtualNodeLearner(learner)
     virtual_learner.set_address("test_addr")
     epochs = 10
@@ -152,7 +166,7 @@ def test_set_epochs(mock_ray_components):
 @pytest.mark.asyncio
 async def test_fit(mock_ray_components):
     """Test the fit method of the VirtualNodeLearner class."""
-    learner = MagicMock(spec=Learner)
+    learner = create_mock_learner()
     virtual_learner = VirtualNodeLearner(learner)
     virtual_learner.set_address("test_addr")
 
@@ -173,7 +187,7 @@ def _test_interrupt_fit():
 @pytest.mark.asyncio
 async def test_evaluate(mock_ray_components):
     """Test the evaluate method of the VirtualNodeLearner class."""
-    learner = MagicMock(spec=Learner)
+    learner = create_mock_learner()
     virtual_learner = VirtualNodeLearner(learner)
     virtual_learner.set_address("test_addr")
     evaluation_result = {"accuracy": 0.9}

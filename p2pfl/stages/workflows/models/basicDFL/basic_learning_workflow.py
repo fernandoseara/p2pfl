@@ -314,14 +314,14 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         )
 
         # Save own round update
-        await self.save_peer_round_updated(
-            self.node.address, self.local_state.round
-        )
+        await self.save_peer_round_updated(self.node.address, self.local_state.round)
 
         # Communicate round update
         await self.node.get_communication_protocol().broadcast_gossip(
-            self.node.get_communication_protocol().build_msg(PeerRoundUpdatedCommand.get_name(),
-                                                    round=self.local_state.get_experiment().round))
+            self.node.get_communication_protocol().build_msg(
+                PeerRoundUpdatedCommand.get_name(), round=self.local_state.get_experiment().round
+            )
+        )
 
     async def on_enter_gossipingFullModel(self):
         """Gossip the model."""
@@ -365,10 +365,7 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         )
 
         # Send aggregated model to the workflow
-        await self.aggregate(
-            self.node.get_learner().get_P2PFLModel(),
-            self.node.address
-        )
+        await self.aggregate(self.node.get_learner().get_P2PFLModel(), self.node.address)
 
     async def on_enter_p2pLearning_gossipingPartialAggregation(self):
         """Gossip the partial model."""
@@ -385,7 +382,6 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         self.node.get_learner().set_P2PFLModel(agg_model)
         # Increase round
         self.local_state.increase_round()
-
 
     async def on_enter_p2pLearning_aggregationFinished(self):
         """Finish the aggregation."""
@@ -409,7 +405,6 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         self.network_state.clear()
 
         logger.info(self.node.address, "😋 Training finished!!")
-
 
     ##############
     # CONDITIONS #
@@ -452,12 +447,12 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         """Check if all models have been received."""
         return len(self.local_state.train_set) == len(self.network_state.get_all_models())
 
-
     ########################
     # CANDIDATES CALLBACKS #
     ########################
     def get_partial_gossiping_candidates(self):
         """Get the candidates from the train set to gossip the partial model."""
+
         def candidate_condition(node: str) -> set[str]:
             return set(self.local_state.train_set) - set(self.network_state.get_aggregation_sources(node) or [])
 
@@ -468,6 +463,7 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
     def get_full_gossiping_candidates(self):
         """Get the candidates from the train set to gossip the full model."""
         fixed_round = self.local_state.round
+
         def candidate_condition(node: str) -> bool:
             return self.network_state.get_round(node) < fixed_round
 
@@ -554,41 +550,36 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
         except Exception as e:
             logger.error(self.node.address, f"❌ Error creating peer {source}: {e}")
 
-    async def save_peer_round_updated(self,
-            source: str,
-            round: int,
-        ):
+    async def save_peer_round_updated(
+        self,
+        source: str,
+        round: int,
+    ):
         """Initialize model."""
         local_model_round = self.local_state.round
         if local_model_round is None:
             logger.error(self.node.address, f"Local state is None, cannot update round for {source}")
             return
 
-        if round in [local_model_round, local_model_round+1]:
+        if round in [local_model_round, local_model_round + 1]:
             self.network_state.update_round(source, round)
             logger.debug(self.node.address, f"📡 Peer round updated: {source} -> {round}")
         else:
             logger.error(self.node.address, f"📡 Peer round not updated: {source} -> {round} (local round: {local_model_round})")
 
-
-    async def save_full_model(self,
-            source: str,
-            round: int,
-            weights: bytes
-        ):
+    async def save_full_model(self, source: str, round: int, weights: bytes):
         """Initialize model."""
         # Check source
         logger.info(self.node.address, "📦 Full model received.")
 
         try:
-            if round != self.local_state.round + 1:
-                logger.warning(
-                    self.node.address, f"⚠️ Full model round {round} does not match local round {self.local_state.round+1}. Ignoring."
-                )
+            local_round = self.local_state.round
+            if local_round is None or round != local_round + 1:
+                logger.warning(self.node.address, f"⚠️ Full model round {round} does not match local round {local_round}. Ignoring.")
                 return
 
             # Set new weights and increase round
-            self.node.get_learner().set_P2PFLModel(weights)
+            self.node.get_learner().set_model(weights)
             self.local_state.increase_round()
 
             logger.info(self.node.address, "🤖 Model Weights Initialized")
@@ -608,10 +599,11 @@ class BasicLearningWorkflowModel(LearningWorkflowModel):
 
             logger.debug(self.node.address, f"📦 Aggregated models received from {source}: {aggregated_models}")
         else:
-            logger.error(self.node.address, f"📦 Aggregated models not received from {source}: {aggregated_models}\
-                         (expected {self.local_state.round})")
-
-
+            logger.error(
+                self.node.address,
+                f"📦 Aggregated models not received from {source}: {aggregated_models}\
+                         (expected {self.local_state.round})",
+            )
 
     ############################
     # EVENT HANDLER CONDITIONS #
