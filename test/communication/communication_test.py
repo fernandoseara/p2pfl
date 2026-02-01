@@ -93,7 +93,7 @@ async def test_connect_invalid_node(protocol_builder: ProtocolBuilder):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("protocol_builder", build_protocols_fns)
 async def test_basic_communication(protocol_builder: ProtocolBuilder):
-    """Test the start and stop methods."""
+    """Test full communication lifecycle: start, connect, send, and command execution."""
     # Create 2 communication protocols
     protocol1 = protocol_builder()
     protocol2 = protocol_builder()
@@ -150,8 +150,8 @@ async def test_basic_communication(protocol_builder: ProtocolBuilder):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("protocol_builder", build_protocols_fns)
-async def test_neightboor_management_and_gossip(protocol_builder: ProtocolBuilder):
-    """Test the neighbor management."""
+async def test_neighbor_management_and_gossip(protocol_builder: ProtocolBuilder):
+    """Test 5-node topology neighbor discovery, gossip propagation, and disconnect handling."""
     # Create the protocols
     protocol1 = protocol_builder()
     protocol2 = protocol_builder()

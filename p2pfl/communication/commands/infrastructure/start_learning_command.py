@@ -1,7 +1,6 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-
 """StartLearning command."""
 
 from __future__ import annotations
@@ -23,7 +21,7 @@ from __future__ import annotations
 from p2pfl.communication.commands.command import Command
 from p2pfl.exceptions import NodeRunningException
 from p2pfl.management.logger import logger
-from p2pfl.stages.workflow_type import WorkflowType
+from p2pfl.workflow.factory import WorkflowType
 
 
 class StartLearningCommand(Command):
@@ -63,7 +61,7 @@ class StartLearningCommand(Command):
             raise ValueError("Learning rounds and epochs, trainset size, experiment name, and workflow are required")
 
         try:
-            await self.node.get_node_workflow().peer_learning_initiated(
+            await self.node.peer_learning_initiated(
                 workflow_type=WorkflowType(workflow),
                 experiment_name=experiment_name,
                 rounds=int(learning_rounds),

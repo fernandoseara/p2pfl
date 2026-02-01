@@ -1,7 +1,6 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,31 +14,32 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-
-"""ModelsAggregated command."""
+"""StopLearning command."""
 
 from __future__ import annotations
 
 from p2pfl.communication.commands.command import Command
+from p2pfl.management.logger import logger
 
 
-class ModelsAggregatedCommand(Command):
-    """ModelsAggregated command for BasicDFL workflow."""
+class StopLearningCommand(Command):
+    """StopLearning command (infrastructure, uses node directly)."""
 
     @staticmethod
     def get_name() -> str:
         """Get the command name."""
-        return "models_aggregated"
+        return "stop_learning"
 
-    async def execute(self, source: str, round: int, *args, **kwargs) -> None:
+    async def execute(self, source: str, round: int, **kwargs) -> None:
         """
-        Execute the command.
+        Execute the command. Stop learning.
 
         Args:
             source: The source of the command.
             round: The round of the command.
-            *args: List of models that contribute to the aggregated model.
             **kwargs: The command keyword arguments.
 
         """
-        await self.workflow.aggregated_models_received(source, round, list(args))
+        logger.info(self.node.address, "Stopping learning received")
+        if self.node.is_learning:
+            await self.node.get_learning_workflow().stop_learning()

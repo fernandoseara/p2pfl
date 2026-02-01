@@ -38,9 +38,9 @@ from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrate
 from p2pfl.management.logger import logger
 from p2pfl.node import Node
 from p2pfl.settings import Settings
-from p2pfl.stages.workflow_type import WorkflowType
 from p2pfl.utils.topologies import TopologyFactory, TopologyType
 from p2pfl.utils.utils import set_standalone_settings, wait_convergence, wait_to_finish
+from p2pfl.workflow.factory import WorkflowType
 
 
 def __parse_args() -> argparse.Namespace:

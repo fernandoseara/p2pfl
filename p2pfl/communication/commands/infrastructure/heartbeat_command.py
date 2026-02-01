@@ -1,7 +1,6 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,30 +14,36 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-
-"""PeerRoundUpdated command."""
-
-from __future__ import annotations
+"""Heartbeat command."""
 
 from p2pfl.communication.commands.command import Command
+from p2pfl.communication.protocols.protobuff.heartbeater import Heartbeater, heartbeater_cmd_name
 
 
-class PeerRoundUpdatedCommand(Command):
-    """PeerRoundUpdated command for BasicDFL workflow."""
+class HeartbeatCommand(Command):
+    """Heartbeat command (infrastructure, no workflow dependency)."""
+
+    def __init__(self, heartbeat: Heartbeater) -> None:
+        """Initialize the command."""
+        self.__heartbeat = heartbeat
 
     @staticmethod
     def get_name() -> str:
         """Get the command name."""
-        return "peer_round_updated"
+        return heartbeater_cmd_name
 
-    async def execute(self, source: str, round: int, **kwargs) -> None:
+    async def execute(self, source: str, round: int, time: str | None = None, **kwargs) -> None:
         """
         Execute the command.
 
         Args:
             source: The source of the command.
             round: The round of the command.
-            **kwargs: The command keyword arguments.
+            time: The time of the command.
+            **kwargs: The command arguments.
 
         """
-        await self.workflow.peer_round_updated(source, round)
+        if time is None:
+            raise ValueError("Time is required")
+
+        await self.__heartbeat.beat(source, time=float(time))

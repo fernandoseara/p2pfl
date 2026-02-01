@@ -23,7 +23,6 @@ import random
 from collections.abc import Callable
 from typing import Any
 
-from p2pfl.communication.commands.message.pre_send_model_command import PreSendModelCommand
 from p2pfl.communication.protocols.protobuff.client import ProtobuffClient
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
@@ -204,18 +203,7 @@ class Gossiper(NodeComponent):
                 if model is None:
                     continue
 
-                # Pre send weights
-                presend_msg = self.build_msg_fn(PreSendModelCommand.get_name(), [command_name] + model_hashes, round_num, direct=True)
-                presend_response = await client.send(presend_msg, temporal_connection=temporal_connection)
-
-                # Send model only if pre-send was accepted
-                if presend_response != "true":
-                    logger.debug(
-                        self.address, f"Avoiding concurrent model sending to {client.nei_addr}. Msg: {command_name} | Hash: {model_hashes}"
-                    )
-                    continue
-
-                # Send
+                # Send model weights
                 logger.debug(self.address, f"🗣️ Gossiping model to {client.nei_addr}.")
                 await client.send(model, temporal_connection=temporal_connection)
 

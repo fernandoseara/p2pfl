@@ -1,10 +1,53 @@
+#
+# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 """
-Here all the the `Commands` that can be used in the `p2pfl` communication protocol can be found.
+Commands module for the p2pfl communication protocol.
 
-Please check the command class for more information.
+Commands are divided into two categories:
 
-.. todo:: Create tests for each command.
+1. **Infrastructure commands** (`infrastructure/`):
+   Always active at the node level. Handle core protocol operations
+   like heartbeats, metrics, and learning lifecycle (start/stop).
 
-.. todo:: Improve the node error handling (crash on remote nodes).
-
+2. **Workflow commands** (`workflow/`):
+   Dynamically route messages to the active learning workflow.
+   Registered when a workflow starts, removed when it stops.
+   - MessageCommand: Routes string-based gossip/direct messages
+   - WeightsCommand: Routes binary model weight transfers
 """
+
+from p2pfl.communication.commands.command import Command
+from p2pfl.communication.commands.infrastructure import (
+    HeartbeatCommand,
+    MetricsCommand,
+    StartLearningCommand,
+    StopLearningCommand,
+)
+from p2pfl.communication.commands.workflow import MessageCommand, WeightsCommand
+
+__all__ = [
+    # Base
+    "Command",
+    # Infrastructure
+    "HeartbeatCommand",
+    "MetricsCommand",
+    "StartLearningCommand",
+    "StopLearningCommand",
+    # Workflow
+    "MessageCommand",
+    "WeightsCommand",
+]

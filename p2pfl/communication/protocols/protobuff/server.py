@@ -1,6 +1,6 @@
 #
 # This file is part of the federated_learning_p2p (p2pfl) distribution (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -168,14 +168,22 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         if request.cmd in self.__commands:
             try:
                 if request.HasField("gossip_message"):
+                    # Gossip messages are fire-and-forget (no response needed)
                     task = asyncio.create_task(
                         self.__commands[request.cmd].execute(request.source, request.round, *request.gossip_message.args)
                     )
+                    # Add task to the set. This creates a strong reference.
+                    self._background_tasks.add(task)
+                    # To prevent keeping references to finished tasks forever,
+                    # make each task remove its own reference from the set after completion:
+                    task.add_done_callback(self._background_tasks.discard)
                 elif request.HasField("direct_message"):
-                    task = asyncio.create_task(
-                        self.__commands[request.cmd].execute(request.source, request.round, *request.direct_message.args)
-                    )
+                    # Direct messages may expect responses - await them
+                    result = await self.__commands[request.cmd].execute(request.source, request.round, *request.direct_message.args)
+                    if result is not None:
+                        cmd_out = str(result)
                 elif request.HasField("weights"):
+                    # Weights are fire-and-forget (no response needed)
                     task = asyncio.create_task(
                         self.__commands[request.cmd].execute(
                             request.source,
@@ -185,18 +193,15 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                             num_samples=request.weights.num_samples,
                         )
                     )
+                    # Add task to the set. This creates a strong reference.
+                    self._background_tasks.add(task)
+                    # To prevent keeping references to finished tasks forever,
+                    # make each task remove its own reference from the set after completion:
+                    task.add_done_callback(self._background_tasks.discard)
                 else:
                     error_text = f"Error while processing command: {request.cmd}: No message or weights."
                     logger.error(self.address, error_text)
                     return node_pb2.ResponseMessage(error=error_text)
-
-                # Add task to the set. This creates a strong reference.
-                self._background_tasks.add(task)
-
-                # To prevent keeping references to finished tasks forever,
-                # make each task remove its own reference from the set after
-                # completion:
-                task.add_done_callback(self._background_tasks.discard)
             except Exception as e:
                 error_text = f"Error while processing command: {request.cmd}. {type(e).__name__}: {e}"
                 logger.error(self.address, error_text + f"\n{traceback.format_exc()}")

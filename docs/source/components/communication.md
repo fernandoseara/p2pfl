@@ -77,3 +77,38 @@ node = Node(
 ```
 
 Make sure the directory for the socket file exists and is accessible to the user running the P2PFL node.  Each node should use a unique socket file path.
+
+## Message Types
+
+The communication protocol supports three message types:
+
+| Type | Behavior | Use Case |
+|------|----------|----------|
+| **Gossip** | Fire-and-forget, propagates with TTL | Votes, notifications, control signals |
+| **Direct** | Point-to-point, returns response | Request-response patterns |
+| **Weights** | Fire-and-forget, binary payload | Model weight transfers |
+
+```python
+# Gossip message (propagates through network)
+msg = protocol.build_msg("vote", args=["peer1", "5"], round=1)
+await protocol.broadcast_gossip(msg)
+
+# Direct message (point-to-point with response)
+msg = protocol.build_msg("check_ready", args=[], round=1, direct=True)
+response = await protocol.send(neighbor, msg)  # Returns response string
+
+# Weights message
+msg = protocol.build_weights("add_model", round=1, serialized_model=weights)
+await protocol.send(neighbor, msg)
+```
+
+## Architecture
+
+The communication protocol is a **pure transport layer**. It handles sending and receiving bytes without knowledge of workflow-specific logic.
+
+| Layer | Responsibility |
+|-------|----------------|
+| **Protocol** | Transport: send, receive, gossip, broadcast |
+| **Workflow** | Logic: message semantics, coordination, validation |
+
+Workflow-specific behaviors (e.g., pre-send handshakes, deduplication) are implemented in the workflow layer, not the protocol.

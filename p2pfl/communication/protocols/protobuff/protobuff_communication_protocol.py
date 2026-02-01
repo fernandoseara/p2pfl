@@ -1,6 +1,6 @@
 #
 # This file is part of the federated_learning_p2p (p2pfl) distribution (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ from functools import wraps
 from typing import Any
 
 from p2pfl.communication.commands.command import Command
-from p2pfl.communication.commands.message.heartbeat_command import HeartbeatCommand
+from p2pfl.communication.commands.infrastructure import HeartbeatCommand
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.communication.protocols.exceptions import CommunicationError, ProtocolNotStartedError
 from p2pfl.communication.protocols.protobuff.client import ProtobuffClient
@@ -179,7 +179,8 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
             cmd: Command of the message.
             args: Arguments of the message.
             round: Round of the message.
-            direct: If direct message.
+            direct: If True, builds a point-to-point message (no propagation, can return response).
+                If False (default), builds a gossip message (propagates with TTL, fire-and-forget).
 
         Returns:
             Message to send.
@@ -256,7 +257,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         raise_error: bool = False,
         remove_on_error: bool = True,
         temporal_connection: bool = False,
-    ) -> None:
+    ) -> str:
         """
         Send a message to a neighbor.
 
@@ -267,9 +268,12 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
             remove_on_error: If remove on error.
             temporal_connection: If temporal connection.
 
+        Returns:
+            The response from the neighbor (for direct messages).
+
         """
         try:
-            await self._neighbors.get(nei).send(
+            return await self._neighbors.get(nei).send(
                 msg, temporal_connection=temporal_connection, raise_error=raise_error, disconnect_on_error=remove_on_error
             )
         except CommunicationError as e:
@@ -277,6 +281,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
                 await self._neighbors.remove(nei)
             if raise_error:
                 raise e
+            return ""
 
     @running
     async def broadcast(self, msg: node_pb2.RootMessage, node_list: list[str] | None = None) -> None:

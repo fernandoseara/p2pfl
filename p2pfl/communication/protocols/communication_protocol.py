@@ -1,7 +1,7 @@
 #
 # This file is part of the federated_learning_p2p (p2pfl) distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,7 +16,14 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Communication protocol."""
+"""
+Communication protocol.
+
+Message Types:
+    - **Gossip**: Fire-and-forget, propagates through network with TTL. No response.
+    - **Direct**: Point-to-point, awaited for response. Use for request-response patterns.
+    - **Weights**: Binary model data, fire-and-forget. No response.
+"""
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -75,14 +82,16 @@ class CommunicationProtocol(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    def build_msg(self, command_name: str, content: list[Any] | None = None, round: int | None = None) -> Any:
+    def build_msg(self, cmd: str, args: list[Any] | None = None, round: int | None = None, direct: bool = False) -> Any:
         """
         Build a message to send to the neighbors.
 
         Args:
-            command_name: Command of the message.
-            content: Content of the message.
+            cmd: Command of the message.
+            args: Arguments of the message.
             round: Round of the message.
+            direct: If True, builds a point-to-point message (no propagation, can return response).
+                If False (default), builds a gossip message (propagates with TTL, fire-and-forget).
 
         Returns:
             Message to send.
@@ -120,7 +129,7 @@ class CommunicationProtocol(ABC, NodeComponent):
         raise_error: bool = False,
         remove_on_error: bool = True,
         temporal_connection: bool = False,
-    ) -> None:
+    ) -> str:
         """
         Send a message to a neighbor.
 
@@ -130,6 +139,9 @@ class CommunicationProtocol(ABC, NodeComponent):
             raise_error: If raise error.
             remove_on_error: If remove on error.
             temporal_connection: If temporal connection.
+
+        Returns:
+            The response from the neighbor (for direct messages).
 
         """
         pass

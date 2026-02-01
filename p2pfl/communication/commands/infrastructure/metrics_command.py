@@ -1,7 +1,6 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,37 +14,36 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-
-"""Heartbeat command."""
+"""Metrics command."""
 
 from p2pfl.communication.commands.command import Command
-from p2pfl.communication.protocols.protobuff.heartbeater import Heartbeater, heartbeater_cmd_name
+from p2pfl.management.logger import logger
 
 
-class HeartbeatCommand(Command):
-    """Heartbeat command (infrastructure, no workflow dependency)."""
+class MetricsCommand(Command):
+    """MetricsCommand (infrastructure, no workflow dependency)."""
 
-    def __init__(self, heartbeat: Heartbeater) -> None:
-        """Initialize the command."""
-        self.__heartbeat = heartbeat
+    def __init__(self) -> None:
+        """Initialize the command (no node required)."""
+        pass
 
     @staticmethod
     def get_name() -> str:
         """Get the command name."""
-        return heartbeater_cmd_name
+        return "metrics"
 
-    async def execute(self, source: str, round: int, time: str | None = None, **kwargs) -> None:
+    async def execute(self, source: str, round: int, *args, **kwargs) -> None:
         """
         Execute the command.
 
         Args:
             source: The source of the command.
             round: The round of the command.
-            time: The time of the command.
-            **kwargs: The command arguments.
+            *args: Metric values (pairs of key and values).
+            **kwargs: The command keyword arguments.
 
         """
-        if time is None:
-            raise ValueError("Time is required")
-
-        await self.__heartbeat.beat(source, time=float(time))
+        for i in range(0, len(args), 2):
+            key = args[i]
+            value = float(args[i + 1])
+            logger.log_metric(source, metric=key, value=value, round=round)

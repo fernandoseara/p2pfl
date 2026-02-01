@@ -38,7 +38,7 @@ class Heartbeater(NodeComponent):
     def __init__(self, neighbors: Neighbors, build_msg: Callable[..., node_pb2.RootMessage]) -> None:
         """Initialize the heartbeat task."""
         self.__neighbors = neighbors
-        self.__build_beat_message: Callable[[float], node_pb2.RootMessage] = lambda time: build_msg(heartbeater_cmd_name, content=[time])
+        self.__build_beat_message: Callable[[float], node_pb2.RootMessage] = lambda time: build_msg(heartbeater_cmd_name, args=[time])
         self.__heartbeat_task: asyncio.Task | None = None
         self.__stop_event = asyncio.Event()
         self.name = "heartbeater-async-unknown"
