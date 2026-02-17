@@ -19,8 +19,8 @@
 
 import asyncio
 import traceback
-import typing
 from abc import ABC, abstractmethod
+from typing import Any
 
 import google.protobuf.empty_pb2
 import grpc
@@ -67,7 +67,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         self._neighbors = neighbors
 
         # Background tasks
-        self._background_tasks: set[typing.Awaitable] = set()
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
     ####
     # Management
@@ -172,11 +172,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                     task = asyncio.create_task(
                         self.__commands[request.cmd].execute(request.source, request.round, *request.gossip_message.args)
                     )
-                    # Add task to the set. This creates a strong reference.
-                    self._background_tasks.add(task)
-                    # To prevent keeping references to finished tasks forever,
-                    # make each task remove its own reference from the set after completion:
-                    task.add_done_callback(self._background_tasks.discard)
+                    self._track_background_task(task, request.cmd)
                 elif request.HasField("direct_message"):
                     # Direct messages may expect responses - await them
                     result = await self.__commands[request.cmd].execute(request.source, request.round, *request.direct_message.args)
@@ -193,11 +189,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                             num_samples=request.weights.num_samples,
                         )
                     )
-                    # Add task to the set. This creates a strong reference.
-                    self._background_tasks.add(task)
-                    # To prevent keeping references to finished tasks forever,
-                    # make each task remove its own reference from the set after completion:
-                    task.add_done_callback(self._background_tasks.discard)
+                    self._track_background_task(task, request.cmd)
                 else:
                     error_text = f"Error while processing command: {request.cmd}: No message or weights."
                     logger.error(self.address, error_text)
@@ -218,6 +210,17 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             await self._gossiper.add_message(request)
 
         return node_pb2.ResponseMessage(response=cmd_out)
+
+    def _track_background_task(self, task: asyncio.Task[Any], cmd_name: str) -> None:
+        """Track a background task and log any exceptions it raises."""
+        self._background_tasks.add(task)
+
+        def _on_task_done(t: asyncio.Task[Any]) -> None:
+            self._background_tasks.discard(t)
+            if not t.cancelled() and t.exception() is not None:
+                logger.error(self.address, f"Background command '{cmd_name}' failed: {t.exception()}")
+
+        task.add_done_callback(_on_task_done)
 
     ####
     # Commands
@@ -241,17 +244,20 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             raise Exception("Command not valid")
 
     @allow_no_addr_check
-    def remove_command(self, cmds: Command | list[Command]) -> None:
+    def remove_command(self, cmds: str | Command | list[str | Command]) -> None:
         """
         Remove a command.
 
         Args:
-            cmds: Command or list of commands to be removed.
+            cmds: Command name, Command instance, or list of either.
 
         """
         if isinstance(cmds, list):
             for cmd in cmds:
-                self.__commands.pop(cmd.get_name(), None)
+                name = cmd if isinstance(cmd, str) else cmd.get_name()
+                self.__commands.pop(name, None)
+        elif isinstance(cmds, str):
+            self.__commands.pop(cmds, None)
         elif isinstance(cmds, Command):
             self.__commands.pop(cmds.get_name(), None)
         else:

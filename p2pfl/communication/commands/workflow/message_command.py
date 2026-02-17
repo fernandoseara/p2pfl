@@ -15,19 +15,15 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 """
-Message command for routing gossip/direct messages to workflows.
+Message command for routing gossip/direct messages to workflow handlers.
 
-This command routes string-based messages (GossipMessage or DirectMessage payloads)
-to the appropriate handler method on the active workflow.
-
-Protocol mapping:
-    Message name "node_initialized" -> workflow.on_message_node_initialized(source, round, *args)
-    Message name "vote-train-set"   -> workflow.on_message_vote_train_set(source, round, *args)
+Created automatically by the Workflow from its ``get_message_registry()``.
+At execution time, resolves the handler on the current active workflow.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
@@ -38,10 +34,10 @@ if TYPE_CHECKING:
 
 class MessageCommand(Command):
     """
-    Command that routes gossip/direct messages to workflow handlers.
+    Command that routes gossip/direct messages to a workflow handler.
 
-    Routes to `on_message_<name>` methods on the workflow.
-    Used for control signals, votes, notifications - anything with string arguments.
+    At execution time, resolves the handler by looking up the command name
+    in the active workflow's ``get_message_registry()``.
     """
 
     def __init__(self, node: Node, message_name: str) -> None:
@@ -49,8 +45,8 @@ class MessageCommand(Command):
         Initialize the command.
 
         Args:
-            node: The node instance for workflow access.
-            message_name: The name of the message (used for routing).
+            node: The node instance.
+            message_name: The command name used for message routing.
 
         """
         super().__init__(node)
@@ -60,24 +56,29 @@ class MessageCommand(Command):
         """Get the command name."""
         return self._message_name
 
-    async def execute(self, source: str, round: int, *args: str, **kwargs) -> None:
+    async def execute(self, source: str, round: int, *args: str, **kwargs: Any) -> str | None:
         """
-        Execute the command by routing to the appropriate workflow handler.
+        Execute the command by resolving and calling the workflow handler.
 
         Args:
             source: The source of the command.
             round: The round of the command.
             *args: String arguments from the message.
-            **kwargs: Unused (for compatibility).
+            **kwargs: Additional keyword arguments (unused).
+
+        Returns:
+            Optional response string (for direct messages).
 
         """
-        if not self.node.is_learning:
-            logger.debug(self.node.address, f"No active workflow for message {self._message_name}")
+        if not self.node.state.is_learning:
+            logger.debug(self.node.address, f"No active workflow for message '{self._message_name}'")
             return None
 
-        handler_name = f"on_message_{self._message_name.replace('-', '_')}"
-        handler = getattr(self.workflow, handler_name, None)
-        if handler is None:
-            logger.warning(self.node.address, f"Workflow doesn't implement {handler_name}")
+        workflow = self.workflow
+        entry = workflow.get_message_registry().get(self._message_name)
+        if entry is None:
+            logger.warning(self.node.address, f"Workflow has no handler for '{self._message_name}'")
             return None
+
+        handler = getattr(workflow, entry.method_name)
         return await handler(source, round, *args)

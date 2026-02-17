@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/federated_learning_p2p).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution
+# (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,6 +26,11 @@ from p2pfl.management.logger.decorators.web_logger import WebP2PFLogger
 from p2pfl.management.logger.logger import P2PFLogger
 from p2pfl.utils.check_ray import ray_installed
 
+__all__ = ["logger", "P2PFLogger", "AsyncLogger", "FileLogger", "SingletonLogger", "WandbLogger", "WebP2PFLogger"]
+
+# Module-level type annotation for mypy
+logger: P2PFLogger
+
 # Check if 'ray' is installed in the Python environment
 if ray_installed():
     import ray
@@ -34,7 +39,7 @@ if ray_installed():
 
     # This is executed multiple times on each python process (unique context)
     try:
-        logger: P2PFLogger = RayP2PFLogger.from_actor(ray.get_actor("p2pfl_ray_logger"))
+        logger = RayP2PFLogger.from_actor(ray.get_actor("p2pfl_ray_logger"))
     except ValueError:
         logger = RayP2PFLogger(lambda: WandbLogger(WebP2PFLogger(FileLogger(P2PFLogger(disable_locks=True)))))
 

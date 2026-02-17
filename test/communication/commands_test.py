@@ -36,6 +36,7 @@ from p2pfl.communication.protocols.protobuff.proto import node_pb2
 from p2pfl.exceptions import NodeRunningException
 from p2pfl.settings import Settings
 from p2pfl.utils.utils import set_standalone_settings
+from p2pfl.workflow import CommandEntry
 from p2pfl.workflow.factory import WorkflowType
 
 set_standalone_settings()
@@ -50,7 +51,7 @@ set_standalone_settings()
 def mock_node_not_learning():
     """Mock node that is not learning."""
     node = MagicMock()
-    node.is_learning = False
+    node.state.is_learning = False
     node.address = "127.0.0.1:8000"
     return node
 
@@ -59,10 +60,10 @@ def mock_node_not_learning():
 def mock_node_learning():
     """Mock node that is learning with a mock workflow."""
     node = MagicMock()
-    node.is_learning = True
+    node.state.is_learning = True
     node.address = "127.0.0.1:8000"
     node.workflow = MagicMock()
-    node.get_learning_workflow.return_value = node.workflow
+    node.workflow.get_message_registry.return_value = {}
     return node
 
 
@@ -101,19 +102,22 @@ class TestWorkflowCommands:
     @pytest.mark.parametrize(
         "cmd_class,cmd_name,handler_name,execute_kwargs",
         [
-            (MessageCommand, "vote-train-set", "on_message_vote_train_set", {}),
-            (WeightsCommand, "add-model", "on_weights_add_model", {"weights": b"data"}),
+            (MessageCommand, "vote_train_set", "handle_vote_train_set", {}),
+            (WeightsCommand, "add_model", "handle_add_model", {"weights": b"data"}),
         ],
     )
-    async def test_execute_converts_dashes_to_underscores(self, mock_node_learning, cmd_class, cmd_name, handler_name, execute_kwargs):
-        """Test that command names with dashes are converted to underscores for handler lookup."""
+    async def test_execute_routes_via_message_registry(self, mock_node_learning, cmd_class, cmd_name, handler_name, execute_kwargs):
+        """Test that commands are routed via message_registry to the correct handler."""
+        is_weights = cmd_class is WeightsCommand
+        mock_node_learning.workflow.get_message_registry.return_value = {
+            cmd_name: CommandEntry(method_name=handler_name, is_weights=is_weights),
+        }
         setattr(mock_node_learning.workflow, handler_name, AsyncMock(return_value="ok"))
 
         cmd = cmd_class(mock_node_learning, cmd_name)
-        result = await cmd.execute("source", 1, **execute_kwargs)
+        await cmd.execute("source", 1, **execute_kwargs)
 
         getattr(mock_node_learning.workflow, handler_name).assert_called_once()
-        assert result == "ok"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -125,7 +129,7 @@ class TestWorkflowCommands:
     )
     async def test_execute_returns_none_when_handler_missing(self, mock_node_learning, cmd_class, execute_kwargs):
         """Test that execute returns None when workflow doesn't have the handler."""
-        mock_node_learning.get_learning_workflow.return_value = MagicMock(spec=[])
+        mock_node_learning.workflow.get_message_registry.return_value = {}
 
         cmd = cmd_class(mock_node_learning, "unknown_cmd")
         result = await cmd.execute("source", 1, **execute_kwargs)
@@ -134,25 +138,30 @@ class TestWorkflowCommands:
 
     @pytest.mark.asyncio
     async def test_message_command_routes_to_handler(self, mock_node_learning):
-        """Test that MessageCommand routes to on_message_* handler with args."""
-        mock_node_learning.workflow.on_message_test = AsyncMock(return_value="success")
+        """Test that MessageCommand routes to handler via message_registry with args."""
+        mock_node_learning.workflow.get_message_registry.return_value = {
+            "test": CommandEntry(method_name="handle_test", is_weights=False),
+        }
+        mock_node_learning.workflow.handle_test = AsyncMock(return_value="success")
 
         cmd = MessageCommand(mock_node_learning, "test")
         result = await cmd.execute("source", 1, "arg1", "arg2")
 
-        mock_node_learning.workflow.on_message_test.assert_called_once_with("source", 1, "arg1", "arg2")
+        mock_node_learning.workflow.handle_test.assert_called_once_with("source", 1, "arg1", "arg2")
         assert result == "success"
 
     @pytest.mark.asyncio
     async def test_weights_command_routes_to_handler_with_all_params(self, mock_node_learning):
-        """Test that WeightsCommand routes to on_weights_* handler with all params."""
-        mock_node_learning.workflow.on_weights_partial_model = AsyncMock(return_value="ok")
+        """Test that WeightsCommand routes to handler via message_registry with all params."""
+        mock_node_learning.workflow.get_message_registry.return_value = {
+            "partial_model": CommandEntry(method_name="handle_partial_model", is_weights=True),
+        }
+        mock_node_learning.workflow.handle_partial_model = AsyncMock(return_value="ok")
 
         cmd = WeightsCommand(mock_node_learning, "partial_model")
-        result = await cmd.execute("source", 1, weights=b"model_data", contributors=["node1", "node2"], num_samples=100)
+        await cmd.execute("source", 1, weights=b"model_data", contributors=["node1", "node2"], num_samples=100)
 
-        mock_node_learning.workflow.on_weights_partial_model.assert_called_once_with("source", 1, b"model_data", ["node1", "node2"], 100)
-        assert result == "ok"
+        mock_node_learning.workflow.handle_partial_model.assert_called_once_with("source", 1, b"model_data", ["node1", "node2"], 100)
 
     @pytest.mark.asyncio
     async def test_weights_command_returns_none_when_weights_missing(self, mock_node_learning):
@@ -219,10 +228,10 @@ class TestStartLearningCommand:
             await cmd.execute("source", 1, trainset_size=100, experiment_name="test", **kwargs)
 
     @pytest.mark.asyncio
-    async def test_execute_calls_peer_learning_initiated(self):
-        """Test that execute calls node.peer_learning_initiated with correct args."""
+    async def test_execute_calls_start_learning_workflow(self):
+        """Test that execute calls node._start_learning_workflow with correct args."""
         mock_node = MagicMock()
-        mock_node.peer_learning_initiated = AsyncMock()
+        mock_node._start_learning_workflow = AsyncMock()
 
         cmd = StartLearningCommand(mock_node)
         await cmd.execute(
@@ -230,18 +239,17 @@ class TestStartLearningCommand:
             1,
             learning_rounds="10",
             learning_epochs="5",
-            trainset_size="100",
             experiment_name="my_experiment",
             workflow="basic",
+            workflow_kwargs={"trainset_size": 100},
         )
 
-        mock_node.peer_learning_initiated.assert_called_once_with(
+        mock_node._start_learning_workflow.assert_called_once_with(
             workflow_type=WorkflowType.BASIC,
             experiment_name="my_experiment",
             rounds=10,
             epochs=5,
             trainset_size=100,
-            source="source",
         )
 
     @pytest.mark.asyncio
@@ -249,7 +257,7 @@ class TestStartLearningCommand:
         """Test that NodeRunningException is caught and logged."""
         mock_node = MagicMock()
         mock_node.address = "127.0.0.1:8000"
-        mock_node.peer_learning_initiated = AsyncMock(side_effect=NodeRunningException("Already running"))
+        mock_node._start_learning_workflow = AsyncMock(side_effect=NodeRunningException("Already running"))
 
         cmd = StartLearningCommand(mock_node)
 
@@ -276,12 +284,12 @@ class TestStopLearningCommand:
     @pytest.mark.asyncio
     async def test_execute_stops_learning_when_active(self, mock_node_learning):
         """Test that execute stops learning when node is actively learning."""
-        mock_node_learning.workflow.stop_learning = AsyncMock()
+        mock_node_learning.workflow.stop = AsyncMock()
 
         cmd = StopLearningCommand(mock_node_learning)
         await cmd.execute("source", 1)
 
-        mock_node_learning.workflow.stop_learning.assert_called_once()
+        mock_node_learning.workflow.stop.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_does_nothing_when_not_learning(self, mock_node_not_learning):
@@ -289,7 +297,8 @@ class TestStopLearningCommand:
         cmd = StopLearningCommand(mock_node_not_learning)
         await cmd.execute("source", 1)
 
-        mock_node_not_learning.get_learning_workflow.assert_not_called()
+        # StopLearningCommand checks is_learning, which is False, so workflow.stop() should not be called
+        mock_node_not_learning.workflow.stop.assert_not_called()
 
 
 # =============================================================================
@@ -579,8 +588,8 @@ class TestCommandBase:
         with pytest.raises(RuntimeError, match="requires a node"):
             _ = cmd.node
 
-    def test_workflow_property_calls_get_learning_workflow(self):
-        """Test that workflow property delegates to node.get_learning_workflow()."""
+    def test_workflow_property_delegates_to_node_workflow(self):
+        """Test that Command.workflow delegates to node.workflow."""
 
         class TestCommand(Command):
             @staticmethod
@@ -592,9 +601,8 @@ class TestCommandBase:
 
         mock_node = MagicMock()
         mock_workflow = MagicMock()
-        mock_node.get_learning_workflow.return_value = mock_workflow
+        mock_node.workflow = mock_workflow
 
         cmd = TestCommand(node=mock_node)
 
         assert cmd.workflow == mock_workflow
-        mock_node.get_learning_workflow.assert_called_once()

@@ -19,7 +19,9 @@
 """Protocol agnostic gossiper."""
 
 import asyncio
+import contextlib
 import random
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
@@ -47,8 +49,8 @@ class Gossiper(NodeComponent):
         self.period = period or Settings.gossip.PERIOD
         self.messages_per_period = messages_per_period or Settings.gossip.MESSAGES_PER_PERIOD
 
-        # State
-        self._processed_messages: list[int] = []
+        # State — OrderedDict for O(1) lookup and FIFO eviction
+        self._processed_messages: OrderedDict[int, None] = OrderedDict()
         self._pending_msgs: list[tuple[node_pb2.RootMessage, list[ProtobuffClient]]] = []
 
         # Concurrency
@@ -79,7 +81,9 @@ class Gossiper(NodeComponent):
         logger.info(self.address, "🛑 Stopping gossiper...")
         self._terminate_event.set()
         if self._task:
-            await self._task
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
 
     async def add_message(self, msg: node_pb2.RootMessage) -> None:
         """Queue a message to be gossiped to all direct neighbors."""
@@ -99,12 +103,12 @@ class Gossiper(NodeComponent):
             if msg.gossip_message.hash in self._processed_messages:
                 return False
 
-            # If there are more than X messages, remove the oldest one
-            if len(self._processed_messages) > Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED:
-                self._processed_messages.pop(0)
+            # Evict oldest if at capacity
+            if len(self._processed_messages) >= Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED:
+                self._processed_messages.popitem(last=False)
 
             # Add message
-            self._processed_messages.append(msg.gossip_message.hash)
+            self._processed_messages[msg.gossip_message.hash] = None
             return True
 
     async def _run(self) -> None:
@@ -129,7 +133,10 @@ class Gossiper(NodeComponent):
             # Send messages
             for msg, clients in messages_to_send:
                 for client in clients:
-                    await client.send(msg)
+                    try:
+                        await client.send(msg)
+                    except Exception as e:
+                        logger.warning(self.address, f"Failed to gossip to {client.nei_addr}: {e}")
 
             elapsed = asyncio.get_event_loop().time() - start_time
             await asyncio.sleep(max(0, self.period - elapsed))

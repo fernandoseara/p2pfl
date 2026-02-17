@@ -1,7 +1,7 @@
 #
 # This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -35,9 +35,9 @@ from p2pfl.learning.frameworks.pytorch.lightning_dataset import PyTorchExportStr
 from p2pfl.learning.frameworks.pytorch.lightning_logger import FederatedLogger
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
-from p2pfl.stages.local_state.experiment import Experiment
 from p2pfl.utils.check_ray import ray_installed
 from p2pfl.utils.seed import set_seed
+from p2pfl.workflow.engine.experiment import Experiment
 
 torch.set_num_threads(1)
 

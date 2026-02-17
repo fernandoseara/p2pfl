@@ -88,16 +88,16 @@ You can get and set the model and data for the learner using the following metho
 
 ```python
 # Set the model
-node.set_model(new_model)
+node.model = new_model
 
 # Set the data
-node.set_data(new_data)
+node.data = new_data
 
 # Get the current model
-model = node.get_model()
+model = node.model
 
 # Get the current data
-data = node.get_data()
+data = node.data
 
 # Set the number of epochs for local training
 node.set_epochs(5)

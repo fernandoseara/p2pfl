@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -127,7 +127,7 @@ async def mnist(
 
         model_fn = model_build_fn  # type: ignore
     else:
-        raise ValueError(f"Framework {args.framework} not added on this example.")
+        raise ValueError(f"Framework {framework} not added on this example.")
 
     # Data
     data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
@@ -147,7 +147,7 @@ async def mnist(
             model_fn(),
             partitions[i],
             protocol=MemoryCommunicationProtocol() if protocol == "memory" else GrpcCommunicationProtocol(),
-            addr=address,
+            address=address,
             aggregator=Scaffold() if aggregator == "scaffold" else None,
         )
         await node.start()
@@ -155,7 +155,7 @@ async def mnist(
 
     try:
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
-        TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+        await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
 
         await wait_convergence(nodes, n - 1, only_direct=False, wait=60)  # type: ignore
 

@@ -18,6 +18,7 @@
 
 """Component of a node (Learner, Aggregator, Communication Protocol...)."""
 
+import asyncio
 from abc import ABCMeta
 from collections.abc import Callable
 from functools import wraps
@@ -46,22 +47,35 @@ class AddressRequiredMeta(ABCMeta):
     @staticmethod
     def ensure_address_set(method: Callable[..., Any]) -> Callable[..., Any]:
         """Wrap a method to ensure the address is set before it is called, unless the method is decorated with @allow_no_addr_check."""
+        # Check if the method is async and create appropriate wrapper
+        if asyncio.iscoroutinefunction(method):
 
-        @wraps(method)
-        def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-            if hasattr(method, "__no_addr_check__"):
-                # Method is marked as exempt, allow execution without address check
+            @wraps(method)
+            async def async_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+                if hasattr(method, "__no_addr_check__"):
+                    return await method(self, *args, **kwargs)
+                if not hasattr(self, "address") or self.address == "":
+                    raise ValueError("Address must be set before calling this method.")
+                return await method(self, *args, **kwargs)
+
+            return async_wrapper
+        else:
+
+            @wraps(method)
+            def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+                if hasattr(method, "__no_addr_check__"):
+                    return method(self, *args, **kwargs)
+                if not hasattr(self, "address") or self.address == "":
+                    raise ValueError("Address must be set before calling this method.")
                 return method(self, *args, **kwargs)
-            if not hasattr(self, "address") or self.address == "":
-                raise ValueError("Address must be set before calling this method.")
-            return method(self, *args, **kwargs)
 
-        return wrapper
+            return wrapper
 
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
-        """Create an instance of the class and initialize the address attribute to an empty string."""
+        """Create an instance of the class and initialize the address attribute if not already set."""
         instance = super().__call__(*args, **kwargs)
-        instance.address = ""
+        if not hasattr(instance, "address") or not instance.address:
+            instance.address = ""
         return instance
 
     def set_address(cls, instance: Any, address: str) -> None:

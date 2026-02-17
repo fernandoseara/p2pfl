@@ -25,6 +25,7 @@ import numpy as np
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.management.logger import logger
 from p2pfl.node import Node
+from p2pfl.node_state import NodeState
 from p2pfl.settings import Settings
 
 """
@@ -189,7 +190,7 @@ def _print_connectivity_matrix(
         logger.info("Waiting for convergence", matrix_display)
 
 
-def full_connection(node: Node, nodes: list[Node]) -> None:
+async def full_connection(node: Node, nodes: list[Node]) -> None:
     """
     Connect node to all nodes.
 
@@ -199,7 +200,7 @@ def full_connection(node: Node, nodes: list[Node]) -> None:
 
     """
     for n in nodes:
-        node.connect(n.address)
+        await node.connect(n.address)
 
 
 class NodeLearningError(Exception):
@@ -233,15 +234,16 @@ async def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_
         NodeLearningError: If any node failed during learning (when raise_on_error=True).
 
     """
-    # Wait until all nodes finish the workflow
+    # Wait until all nodes finish the workflow (either success or failure)
     start = time.time()
     while True:
         if debug:
             logger.info(
                 "Waiting for nodes to finish",
-                str([n.get_node_workflow().finished for n in nodes]),
+                str([(n.state.value,) for n in nodes]),
             )
-        if all(n.get_node_workflow().finished for n in nodes):
+        # Exit loop when all nodes have completed (success or failure)
+        if all(n.state.is_terminal for n in nodes):
             break
         await asyncio.sleep(1)
         elapsed = time.time() - start
@@ -252,10 +254,8 @@ async def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_
     if raise_on_error:
         failed: list[tuple[str, Exception]] = []
         for n in nodes:
-            workflow = n.get_node_workflow()
-            error = workflow.error
-            if workflow.failed and error is not None:
-                failed.append((n.address, error))
+            if n.state == NodeState.FAILED and n.workflow is not None and n.workflow.error is not None:
+                failed.append((n.address, n.workflow.error))
         if failed:
             raise NodeLearningError(failed)
 
@@ -275,7 +275,7 @@ def check_equal_models(nodes: list[Node]) -> None:
     first = True
     for node in nodes:
         if first:
-            model_params = node.get_learner().get_model().get_parameters()
+            model_params = node.model.get_parameters()
             first = False
         else:
             # compare layers with a tolerance
@@ -284,6 +284,6 @@ def check_equal_models(nodes: list[Node]) -> None:
             for i, layer in enumerate(model_params):
                 assert np.allclose(
                     layer,
-                    node.get_learner().get_model().get_parameters()[i],
+                    node.model.get_parameters()[i],
                     atol=1e-1,
                 )

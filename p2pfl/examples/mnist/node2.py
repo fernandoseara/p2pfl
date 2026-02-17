@@ -49,18 +49,18 @@ async def node2(port: int) -> None:
     """
     node = Node(model_build_fn(), P2PFLDataset.from_huggingface("p2pfl/MNIST"), address="127.0.0.1")
     await node.start()
-    node.connect(f"127.0.0.1:{port}")  # Node.connect is sync
+    await node.connect(f"127.0.0.1:{port}")
     await asyncio.sleep(4)
 
     print("Start learning")
-    node.set_start_learning(rounds=2, epochs=1)
+    await node.set_start_learning(rounds=2, epochs=1)
 
     # Wait 4 results
 
     while True:
         await asyncio.sleep(1)
 
-        if node.get_local_state().round is None:
+        if node.state.is_terminal:
             break
 
     await node.stop()

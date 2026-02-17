@@ -109,7 +109,7 @@ class TopologyFactory:
         return matrix
 
     @staticmethod
-    def connect_nodes(adjacency_matrix: np.ndarray, nodes: list[Node]) -> None:
+    async def connect_nodes(adjacency_matrix: np.ndarray, nodes: list[Node]) -> None:
         """
         Connect nodes based on the adjacency matrix.
 
@@ -124,7 +124,7 @@ class TopologyFactory:
             for j in range(i + 1, num_nodes):
                 if adjacency_matrix[i, j] == 1:
                     try:
-                        nodes[i].connect(nodes[j].address)
+                        await nodes[i].connect(nodes[j].address)
                         print(f"Connected nodes {nodes[i].address} and {nodes[j].address}")
                     except Exception as e:
                         print(f"Error connecting nodes {nodes[i].address} and {nodes[j].address}: {e}")

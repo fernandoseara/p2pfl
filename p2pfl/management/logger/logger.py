@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/federated_learning_p2p).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution
+# (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,16 +23,20 @@ P2PFL Logger.
 
 """
 
+from __future__ import annotations
+
 import copy
 import datetime
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from p2pfl.management.message_storage import MessageEntryType, MessageStorage
 from p2pfl.management.metric_storage import GlobalLogsType, GlobalMetricStorage, LocalLogsType, LocalMetricStorage
 from p2pfl.management.node_monitor import NodeMonitor
 from p2pfl.settings import Settings
-from p2pfl.stages.local_state.experiment import Experiment
+
+if TYPE_CHECKING:
+    from p2pfl.workflow.engine.experiment import Experiment
 
 ###################
 #    Exception    #
@@ -305,7 +309,7 @@ class P2PFLogger:
 
         # Get Round
         if round is None:
-            round = experiment.round
+            round = self._nodes[addr].get("round")
             if round is None:
                 raise Exception("No round provided. Needed for training metrics.")
 
@@ -396,6 +400,18 @@ class P2PFLogger:
 
         """
         self._nodes[address]["Experiment"] = experiment
+        self._nodes[address]["round"] = 0
+
+    def round_updated(self, address: str, round: int) -> None:
+        """
+        Notify a round update.
+
+        Args:
+            address: The node address.
+            round: The new round number.
+
+        """
+        self._nodes[address]["round"] = round
 
     def experiment_updated(self, address: str, experiment: Experiment) -> None:
         """
@@ -478,11 +494,10 @@ class P2PFLogger:
         # If round_num is not specified but we're in an experiment, get the current round
         if round_num is None or round_num < 0:
             try:
-                # Look for the node in registered nodes
-                if node in self._nodes and "Experiment" in self._nodes[node]:
-                    experiment = self._nodes[node]["Experiment"]
-                    if experiment is not None and hasattr(experiment, "round") and experiment.round is not None:
-                        round_num = experiment.round
+                if node in self._nodes and "round" in self._nodes[node]:
+                    stored_round = self._nodes[node]["round"]
+                    if stored_round is not None:
+                        round_num = stored_round
             except Exception:
                 # If we can't get the round, just continue with default round_num (None)
                 pass
@@ -500,8 +515,7 @@ class P2PFLogger:
 
         # Log the message at debug level
         if cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and cmd == "beat"):
-            pass
-            # self.debug(node, message)
+            self.debug(node, message)
 
         # Get actual round number for storage (default to 0 if None)
         storage_round = 0 if round_num is None or round_num < 0 else round_num

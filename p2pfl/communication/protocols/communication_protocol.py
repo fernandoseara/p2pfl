@@ -238,7 +238,7 @@ class CommunicationProtocol(ABC, NodeComponent):
         return self.address
 
     @abstractmethod
-    def wait_for_termination(self) -> None:
+    async def wait_for_termination(self) -> None:
         """Wait for termination."""
         pass
 

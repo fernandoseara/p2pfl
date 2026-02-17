@@ -15,21 +15,15 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 """
-Weights command for routing model weight transfers to workflows.
+Weights command for routing model weight transfers to workflow handlers.
 
-This command routes binary weight messages (Weights payload) to the appropriate
-handler method on the active workflow.
-
-Protocol mapping:
-    Weight name "partial_model" -> workflow.on_weights_partial_model(source, round, weights, contributors, num_samples)
-    Weight name "add_model"     -> workflow.on_weights_add_model(source, round, weights, contributors, num_samples)
-
-Note: Weight messages are always direct (not gossiped) due to their size.
+Created automatically by the Workflow from its ``get_message_registry()``.
+At execution time, resolves the handler on the current active workflow.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
@@ -40,10 +34,10 @@ if TYPE_CHECKING:
 
 class WeightsCommand(Command):
     """
-    Command that routes weight messages to workflow handlers.
+    Command that routes weight messages to a workflow handler.
 
-    Routes to `on_weights_<name>` methods on the workflow.
-    Used for binary model weight transfers with typed parameters.
+    At execution time, resolves the handler by looking up the command name
+    in the active workflow's ``get_message_registry()``.
     """
 
     def __init__(self, node: Node, message_name: str) -> None:
@@ -51,8 +45,8 @@ class WeightsCommand(Command):
         Initialize the command.
 
         Args:
-            node: The node instance for workflow access.
-            message_name: The name of the message (used for routing).
+            node: The node instance.
+            message_name: The command name used for message routing.
 
         """
         super().__init__(node)
@@ -66,14 +60,14 @@ class WeightsCommand(Command):
         self,
         source: str,
         round: int,
-        *args,
+        *args: Any,
         weights: bytes | None = None,
         contributors: list[str] | None = None,
         num_samples: int | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """
-        Execute the command by routing to the appropriate workflow handler.
+        Execute the command by resolving and calling the workflow handler.
 
         Args:
             source: The source of the command.
@@ -85,18 +79,19 @@ class WeightsCommand(Command):
             **kwargs: Additional keyword arguments (unused).
 
         """
-        if not self.node.is_learning:
-            logger.debug(self.node.address, f"No active workflow for weights {self._message_name}")
+        if not self.node.state.is_learning:
+            logger.debug(self.node.address, f"No active workflow for weights '{self._message_name}'")
             return None
 
         if weights is None:
-            logger.error(self.node.address, f"Missing weights for {self._message_name}")
+            logger.error(self.node.address, f"Missing weights for '{self._message_name}'")
             return None
 
-        handler_name = f"on_weights_{self._message_name.replace('-', '_')}"
-        handler = getattr(self.workflow, handler_name, None)
-        if handler is None:
-            logger.warning(self.node.address, f"Workflow doesn't implement {handler_name}")
+        workflow = self.workflow
+        entry = workflow.get_message_registry().get(self._message_name)
+        if entry is None:
+            logger.warning(self.node.address, f"Workflow has no handler for '{self._message_name}'")
             return None
 
-        return await handler(source, round, weights, contributors, num_samples)
+        handler = getattr(workflow, entry.method_name)
+        await handler(source, round, weights, contributors, num_samples)

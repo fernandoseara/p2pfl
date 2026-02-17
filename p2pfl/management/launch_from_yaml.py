@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,9 +32,9 @@ from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.logger import logger
 from p2pfl.node import Node
 from p2pfl.settings import Settings
-from p2pfl.stages.workflow_type import WorkflowType
 from p2pfl.utils.topologies import TopologyFactory
 from p2pfl.utils.utils import wait_convergence, wait_to_finish
+from p2pfl.workflow.factory import WorkflowType
 
 
 def load_by_package_and_name(package_name, class_name) -> Any:
@@ -270,14 +270,14 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
                 Some messages will not be delivered depending on the topology."""
             )
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
-        TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+        await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
         await wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=False)  # type: ignore
 
         # Additional connections
         additional_connections = network_config.get("additional_connections")
         if additional_connections:
             for source, connect_to in additional_connections:
-                nodes[source].connect(nodes[connect_to].address)
+                await nodes[source].connect(nodes[connect_to].address)
 
         # Start Learning
         r = experiment_config.get("rounds")

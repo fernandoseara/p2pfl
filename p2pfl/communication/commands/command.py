@@ -50,7 +50,7 @@ class Command(abc.ABC):
     @property
     def workflow(self) -> Any:
         """Get the workflow."""
-        return self.node.get_learning_workflow()
+        return self.node.workflow
 
     @staticmethod
     @abc.abstractmethod

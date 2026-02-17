@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/federated_learning_p2p).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution
+# (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,15 +18,19 @@
 
 """Decorator for the logger to be used in the simulation."""
 
+from __future__ import annotations
+
 import datetime
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from p2pfl.management.logger.logger import P2PFLogger
 from p2pfl.management.message_storage import MessageEntryType
 from p2pfl.management.metric_storage import GlobalLogsType, LocalLogsType
-from p2pfl.stages.local_state.experiment import Experiment
+
+if TYPE_CHECKING:
+    from p2pfl.workflow.engine.experiment import Experiment
 
 
 class LoggerDecorator(P2PFLogger):
@@ -183,6 +187,17 @@ class LoggerDecorator(P2PFLogger):
 
         """
         self._p2pfl_logger.experiment_started(node, experiment)
+
+    def round_updated(self, node: str, round: int) -> None:
+        """
+        Notify a round update.
+
+        Args:
+            node: The node address.
+            round: The new round number.
+
+        """
+        self._p2pfl_logger.round_updated(node, round)
 
     def experiment_updated(self, node: str, experiment: Experiment) -> None:
         """

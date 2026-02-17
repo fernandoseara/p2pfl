@@ -17,7 +17,7 @@
 #
 """Utils tests."""
 
-from unittest.mock import MagicMock, Mock, call
+from unittest.mock import AsyncMock, MagicMock, call
 
 import numpy as np
 import pytest
@@ -76,15 +76,15 @@ def test_generate_matrix(topology_type, expected_matrix):
         ),
     ],
 )
-def test_connect_nodes(adjacency_matrix, expected_calls):
+async def test_connect_nodes(adjacency_matrix, expected_calls):
     """Test that nodes are connected according to the provided adjacency matrix."""
     num_nodes = adjacency_matrix.shape[0]  # Get num_nodes from matrix shape
     nodes = [MockNode(f"address_{i}") for i in range(num_nodes)]
-    # Replace connect with Mock
+    # Replace connect with AsyncMock
     for node in nodes:
-        node.connect = Mock()
+        node.connect = AsyncMock()
 
-    TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+    await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
 
     for i, calls in enumerate(expected_calls):
         nodes[i].connect.assert_has_calls(calls, any_order=True)

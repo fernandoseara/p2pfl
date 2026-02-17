@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/federated_learning_p2p).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution
+# (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,10 +26,11 @@ from typing import TYPE_CHECKING, Any
 
 from p2pfl.management.logger.decorators.logger_decorator import LoggerDecorator
 from p2pfl.management.logger.logger import P2PFLogger
-from p2pfl.stages.local_state.experiment import Experiment
 
 if TYPE_CHECKING:
     from wandb.sdk.wandb_run import Run
+
+    from p2pfl.workflow.engine.experiment import Experiment
 
 # Optional wandb import
 wandb_module: types.ModuleType | None

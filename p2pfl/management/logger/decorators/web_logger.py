@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/federated_learning_p2p).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution
+# (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,15 +18,19 @@
 
 """Web Logger."""
 
+from __future__ import annotations
+
 import datetime
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from p2pfl.management.logger.decorators.logger_decorator import LoggerDecorator
 from p2pfl.management.logger.logger import P2PFLogger
 from p2pfl.management.p2pfl_web_services import P2pflWebServices
-from p2pfl.stages.local_state.experiment import Experiment
+
+if TYPE_CHECKING:
+    from p2pfl.workflow.engine.experiment import Experiment
 
 #########################################
 #    Logging handler (transmit logs)    #
@@ -200,19 +204,20 @@ class WebP2PFLogger(LoggerDecorator):
         super().log_metric(addr=addr, metric=metric, value=value, step=step, round=round)
 
         if self._p2pfl_web_services is not None:
-            # Get Experiment
+            # Get Experiment and round
             try:
                 experiment: Experiment = self._nodes[addr]["Experiment"]
+                current_round = self._nodes[addr].get("round", 0)
             except KeyError:
                 # If no experiment is registered for this node, skip web logging
                 return
 
             if step is None:
                 # Global Metrics
-                self._p2pfl_web_services.send_global_metric(experiment.exp_name, experiment.round, metric, addr, value)
+                self._p2pfl_web_services.send_global_metric(experiment.exp_name, current_round, metric, addr, value)
             else:
                 # Local Metrics
-                self._p2pfl_web_services.send_local_metric(experiment.exp_name, experiment.round, metric, addr, value, step)
+                self._p2pfl_web_services.send_local_metric(experiment.exp_name, current_round, metric, addr, value, step)
 
     def log_communication(
         self,
