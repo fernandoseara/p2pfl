@@ -40,7 +40,7 @@ from p2pfl.node import Node
 from p2pfl.settings import Settings
 from p2pfl.utils.topologies import TopologyFactory, TopologyType
 from p2pfl.utils.utils import set_standalone_settings, wait_convergence, wait_to_finish
-from p2pfl.workflow.factory import WorkflowType
+from p2pfl.workflow.factory import list_workflows
 
 
 def __parse_args() -> argparse.Namespace:
@@ -54,7 +54,7 @@ def __parse_args() -> argparse.Namespace:
     parser.add_argument("--protocol", type=str, help="The protocol to use.", default="grpc", choices=["grpc", "unix", "memory"])
     parser.add_argument("--framework", type=str, help="The framework to use.", default="pytorch", choices=["pytorch", "tensorflow", "flax"])
     parser.add_argument("--aggregator", type=str, help="The aggregator to use.", default="fedavg", choices=["fedavg", "scaffold"])
-    parser.add_argument("--workflow", type=str, help="The workflow to use", default="basic", choices=["basic", "async"])
+    parser.add_argument("--workflow", type=str, help="The workflow to use", default="basic", choices=list_workflows())
     parser.add_argument("--profiling", action="store_true", help="Enable profiling.", default=False)
     parser.add_argument("--reduced_dataset", action="store_true", help="Use a reduced dataset just for testing.", default=False)
     parser.add_argument("--use_scaffold", action="store_true", help="Use the Scaffold aggregator.", default=False)
@@ -163,7 +163,7 @@ async def mnist(
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        await nodes[0].set_start_learning(rounds=r, epochs=e, workflow=WorkflowType.ASYNC if workflow == "async" else WorkflowType.BASIC)
+        await nodes[0].set_start_learning(rounds=r, epochs=e, workflow=workflow)
 
         # Wait and check
         await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour

@@ -34,7 +34,6 @@ from p2pfl.node import Node
 from p2pfl.settings import Settings
 from p2pfl.utils.topologies import TopologyFactory
 from p2pfl.utils.utils import wait_convergence, wait_to_finish
-from p2pfl.workflow.factory import WorkflowType
 
 
 def load_by_package_and_name(package_name, class_name) -> Any:
@@ -230,10 +229,7 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     workflow = experiment_config.get("workflow")
     if not workflow:
         raise ValueError("Missing 'workflow' configuration in YAML file.")
-    workflow_type = WorkflowType(workflow)
-
-    def workflow_fn() -> WorkflowType:
-        return workflow_type
+    workflow_name: str = workflow
 
     ###########
     # Network #
@@ -287,7 +283,7 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size, workflow=workflow_fn())
+        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size, workflow=workflow_name)
 
         # Wait and check
         # Get wait_timeout from experiment config (in minutes), default to 60 minutes (1 hour)

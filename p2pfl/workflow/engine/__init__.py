@@ -14,14 +14,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Workflow engine components."""
+"""Workflow engine."""
 
+from .context import TContext, WorkflowContext
 from .experiment import Experiment
+from .message import MessageEntry, OnMessage, on_message
 from .stage import Stage
-from .workflow import Workflow
+from .workflow import Workflow, WorkflowStatus
 
 __all__ = [
+    "MessageEntry",
     "Experiment",
+    "TContext",
     "Stage",
     "Workflow",
+    "WorkflowContext",
+    "WorkflowStatus",
+    "OnMessage",
+    "on_message",
 ]

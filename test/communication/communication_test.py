@@ -1,6 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/p2pfl).
+# This file is part of the p2pfl (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2024 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify

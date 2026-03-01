@@ -14,10 +14,4 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Async DFL workflow implementation."""
-
-from .workflow import AsyncDFL
-
-__all__ = [
-    "AsyncDFL",
-]
+"""AsyncDFL asynchronous decentralized federated learning workflow."""

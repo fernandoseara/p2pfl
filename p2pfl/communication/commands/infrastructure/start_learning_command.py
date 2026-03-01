@@ -18,10 +18,12 @@
 
 from __future__ import annotations
 
+import json
+
 from p2pfl.communication.commands.command import Command
 from p2pfl.exceptions import NodeRunningException
 from p2pfl.management.logger import logger
-from p2pfl.workflow.factory import WorkflowType
+from p2pfl.workflow.engine.experiment import Experiment
 
 
 class StartLearningCommand(Command):
@@ -60,13 +62,28 @@ class StartLearningCommand(Command):
         if learning_rounds is None or learning_epochs is None or experiment_name is None or workflow is None:
             raise ValueError("Learning rounds, epochs, experiment name, and workflow are required")
 
+        # Deserialize workflow kwargs from JSON string (serialized by node broadcast)
+        parsed_kwargs: dict = {}
+        if workflow_kwargs is not None:
+            if isinstance(workflow_kwargs, str):
+                parsed_kwargs = json.loads(workflow_kwargs)
+            elif isinstance(workflow_kwargs, dict):
+                parsed_kwargs = workflow_kwargs
+
         try:
+            experiment = Experiment.create(
+                exp_name=experiment_name,
+                total_rounds=int(learning_rounds),
+                epochs_per_round=int(learning_epochs),
+                workflow=workflow,
+                is_initiator=False,
+                **parsed_kwargs,
+            )
+
             await self.node._start_learning_workflow(
-                workflow_type=WorkflowType(workflow),
-                experiment_name=experiment_name,
-                rounds=int(learning_rounds),
-                epochs=int(learning_epochs),
-                **(workflow_kwargs or {}),
+                workflow,
+                experiment,
+                **parsed_kwargs,
             )
 
         except NodeRunningException as e:

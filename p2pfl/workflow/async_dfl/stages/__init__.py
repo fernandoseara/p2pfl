@@ -14,14 +14,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Async DFL workflow stages."""
+"""AsyncDFL workflow stages."""
 
-from .compute_priority_stage import ComputePriorityStage
-from .gossip_model_stage import GossipModelStage
-from .select_neighbor_stage import SelectNeighborsStage
+from p2pfl.workflow.shared.finish import FinishStage
+
+from .setup import SetupStage
+from .training_round import TrainingRoundStage
 
 __all__ = [
-    "ComputePriorityStage",
-    "GossipModelStage",
-    "SelectNeighborsStage",
+    "FinishStage",
+    "SetupStage",
+    "TrainingRoundStage",
 ]

@@ -26,8 +26,6 @@ Commands are divided into two categories:
 2. **Workflow commands** (`workflow/`):
    Dynamically route messages to the active learning workflow.
    Registered when a workflow starts, removed when it stops.
-   - MessageCommand: Routes string-based gossip/direct messages
-   - WeightsCommand: Routes binary model weight transfers
 """
 
 from p2pfl.communication.commands.command import Command
@@ -37,7 +35,7 @@ from p2pfl.communication.commands.infrastructure import (
     StartLearningCommand,
     StopLearningCommand,
 )
-from p2pfl.communication.commands.workflow import MessageCommand, WeightsCommand
+from p2pfl.communication.commands.workflow import WorkflowCommand
 
 __all__ = [
     # Base
@@ -48,6 +46,5 @@ __all__ = [
     "StartLearningCommand",
     "StopLearningCommand",
     # Workflow
-    "MessageCommand",
-    "WeightsCommand",
+    "WorkflowCommand",
 ]

@@ -1,5 +1,5 @@
 #
-# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# This file is part of the p2pfl (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,15 +14,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""
-Workflow commands module.
+"""Shared workflow utilities used across BasicDFL and AsyncDFL."""
 
-These commands dynamically route messages to the active learning workflow.
-They are registered when a workflow starts and removed when it stops.
-"""
-
-from p2pfl.communication.commands.workflow.workflow_command import WorkflowCommand
+from .evaluate import evaluate_and_broadcast
+from .finish import FinishStage
+from .gossiping import ModelGate, should_accept_model
+from .utils import wait_with_timeout
 
 __all__ = [
-    "WorkflowCommand",
+    "FinishStage",
+    "ModelGate",
+    "evaluate_and_broadcast",
+    "should_accept_model",
+    "wait_with_timeout",
 ]

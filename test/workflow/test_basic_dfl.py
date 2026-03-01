@@ -1,6 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/p2pfl).
+# This file is part of the p2pfl (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -16,203 +15,268 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Tests for BasicDFL."""
+"""Tests for BasicDFL (new engine)."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from p2pfl.workflow.basic_dfl.workflow import (
-    BasicDFL,
-    BasicPeerState,
-    get_states,
-    get_transitions,
-)
+from p2pfl.workflow.basic_dfl.context import BasicDFLContext, BasicPeerState
+from p2pfl.workflow.basic_dfl.workflow import BasicDFL
 from p2pfl.workflow.engine.experiment import Experiment
-from p2pfl.workflow.factory import WorkflowType
+from p2pfl.workflow.engine.workflow import WorkflowStatus
+from p2pfl.workflow.validation import validate
 
 
 @pytest.fixture
-def mock_node():
-    """Create a mock node for testing."""
-    node = MagicMock()
-    node.address = "test_node_address"
-
-    # Mock communication protocol
-    comm_protocol = MagicMock()
-    node.get_communication_protocol.return_value = comm_protocol
-    node.communication_protocol = comm_protocol
-
-    # Mock learner
-    learner = MagicMock()
-    model = MagicMock()
-    learner.get_model.return_value = model
-    node.get_learner.return_value = learner
-
-    # Set workflow_type property
-    node.workflow_type = WorkflowType.BASIC
-
-    return node
+def workflow():
+    """Create a workflow for testing."""
+    return BasicDFL()
 
 
 @pytest.fixture
-def workflow(mock_node):
-    """Create a workflow model for testing."""
-    return BasicDFL(mock_node)
+def ctx():
+    """Create a typed BasicDFLContext for testing."""
+    cp = MagicMock()
+    return BasicDFLContext(
+        address="test_node_address",
+        learner=MagicMock(),
+        aggregator=MagicMock(),
+        cp=cp,
+        generator=MagicMock(),
+        experiment=Experiment("test_exp", 5, trainset_size=3),
+    )
 
 
-class TestBasicWorkflowStatesAndTransitions:
-    """Tests for workflow state machine configuration."""
-
-    def test_get_states_returns_list(self):
-        """Test that get_states returns a list of state dicts."""
-        states = get_states()
-        assert isinstance(states, list)
-        assert len(states) > 0
-        assert all(isinstance(s, dict) for s in states)
-
-    def test_get_transitions_returns_list(self):
-        """Test that get_transitions returns a list of transition dicts."""
-        transitions = get_transitions()
-        assert isinstance(transitions, list)
-        assert len(transitions) > 0
-        assert all(isinstance(t, dict) for t in transitions)
-
-    def test_states_have_required_keys(self):
-        """Test that states have required keys."""
-        states = get_states()
-        for state in states:
-            assert "name" in state
-
-    def test_transitions_have_required_keys(self):
-        """Test that transitions have required keys."""
-        transitions = get_transitions()
-        for transition in transitions:
-            assert "trigger" in transition
-            assert "source" in transition
-            assert "dest" in transition
-
-    def test_initial_state_exists(self):
-        """Test that waitingSetup state exists."""
-        states = get_states()
-        state_names = [s["name"] for s in states]
-        assert "waitingSetup" in state_names
-
-    def test_final_state_exists(self):
-        """Test that trainingFinished state exists."""
-        states = get_states()
-        state_names = [s["name"] for s in states]
-        assert "trainingFinished" in state_names
+@pytest.fixture
+def composed_workflow(workflow, ctx):
+    """Create a workflow with stages composed and ctx wired."""
+    workflow._compose(ctx)
+    return workflow
 
 
 class TestBasicWorkflowCreation:
     """Tests for BasicDFL creation and initialization."""
 
-    def test_init_workflow_returns_workflow(self, mock_node):
+    def test_init_workflow_returns_workflow(self):
         """Test that __init__ returns a properly initialized workflow."""
-        workflow = BasicDFL(mock_node)
+        wf = BasicDFL()
+        assert isinstance(wf, BasicDFL)
 
-        assert isinstance(workflow, BasicDFL)
-        assert workflow.node == mock_node
-        assert isinstance(workflow.peers, dict)
-        assert workflow._machine is not None
+    def test_init_workflow_initial_status(self):
+        """Test that initialized workflow starts with IDLE status."""
+        wf = BasicDFL()
+        assert wf.status == WorkflowStatus.IDLE
 
-    def test_init_workflow_initial_state(self, mock_node):
-        """Test that initialized workflow starts in waitingSetup state."""
-        workflow = BasicDFL(mock_node)
-        assert workflow.state == "waitingSetup"
+    def test_create_context(self):
+        """Test that create_context builds a BasicDFLContext."""
+        wf = BasicDFL()
+        ctx = wf.create_context(
+            address="test",
+            learner=MagicMock(),
+            aggregator=MagicMock(),
+            cp=MagicMock(),
+            generator=MagicMock(),
+            experiment=Experiment("test", total_rounds=5),
+        )
+        assert isinstance(ctx, BasicDFLContext)
+        assert ctx.address == "test"
+        assert ctx.peers == {}
+        assert ctx.train_set == []
+        assert ctx.needs_full_model is False
 
-    def test_init_workflow_does_not_register_commands(self, mock_node):
-        """Test that __init__ does not register commands (start() does)."""
-        BasicDFL(mock_node)
+    def test_factory_creates_basic(self):
+        """Test that factory creates BasicDFL for BASIC type."""
+        from p2pfl.workflow.factory import create_workflow
 
-        # Commands should NOT be registered at __init__ time; they are
-        # registered when start() is called.
-        mock_node.communication_protocol.add_command.assert_not_called()
-
-    def test__cleanup_removes_from_machine(self, mock_node):
-        """Test that _cleanup() removes workflow from its machine."""
-        workflow = BasicDFL(mock_node)
-        workflow._cleanup()
-        # After _cleanup, the workflow is removed from the machine
-        # To reset, create a new workflow instance
-
-    def test_train_set_defaults_empty(self, mock_node):
-        """Test that train_set defaults to empty list."""
-        workflow = BasicDFL(mock_node)
-        assert workflow.train_set == []
+        wf = create_workflow("basic")
+        assert isinstance(wf, BasicDFL)
 
 
-class TestBasicWorkflowConditions:
+class TestBasicStageMap:
+    """Tests for stage map configuration."""
+
+    def test_stage_map_has_all_stages(self):
+        """Test that get_stages returns all expected stages."""
+        wf = BasicDFL()
+        stages = wf.get_stages()
+        expected = {"setup", "round_init", "voting", "learning", "finish"}
+        assert {s.name for s in stages} == expected
+
+    def test_stage_map_types(self):
+        """Test that each stage is the correct type."""
+        from p2pfl.workflow.basic_dfl.stages import (
+            FinishStage,
+            LearningStage,
+            RoundInitStage,
+            SetupStage,
+            VotingStage,
+        )
+
+        wf = BasicDFL()
+        stages = {s.name: s for s in wf.get_stages()}
+
+        assert isinstance(stages["setup"], SetupStage)
+        assert isinstance(stages["round_init"], RoundInitStage)
+        assert isinstance(stages["voting"], VotingStage)
+        assert isinstance(stages["learning"], LearningStage)
+        assert isinstance(stages["finish"], FinishStage)
+
+    def test_stages_have_ctx_reference(self, composed_workflow, ctx):
+        """Test that all stages have a reference to the ctx after composition."""
+        for stage in composed_workflow._stage_map.values():
+            assert stage.ctx is ctx
+
+    def test_initial_stage(self):
+        """Test that initial_stage is 'setup'."""
+        wf = BasicDFL()
+        assert wf.initial_stage == "setup"
+
+
+class TestBasicDeclaredMessages:
+    """Tests for declared messages (before run)."""
+
+    def test_declared_messages_contain_all(self):
+        """Test that get_messages returns all expected messages."""
+        wf = BasicDFL()
+        msgs = wf.get_messages()
+        expected = {
+            "node_initialized",
+            "peer_round_updated",
+            "add_model",
+            "vote_train_set",
+            "models_aggregated",
+            "pre_send_model",
+            "partial_model",
+        }
+        assert set(msgs.keys()) == expected
+
+    def test_weights_messages_flagged(self):
+        """Test that weight messages are properly flagged."""
+        wf = BasicDFL()
+        msgs = wf.get_messages()
+        assert msgs["add_model"].is_weights is True
+        assert msgs["partial_model"].is_weights is True
+        assert msgs["node_initialized"].is_weights is False
+        assert msgs["vote_train_set"].is_weights is False
+
+    def test_during_filters_set(self):
+        """Test that during filters are set on all handlers."""
+        wf = BasicDFL()
+        msgs = wf.get_messages()
+        assert msgs["node_initialized"].during == frozenset({"setup"})
+        assert msgs["peer_round_updated"].during == frozenset({"round_init"})
+        assert msgs["add_model"].during == frozenset({"round_init"})
+        assert msgs["vote_train_set"].during == frozenset({"voting"})
+        assert msgs["models_aggregated"].during == frozenset({"learning"})
+        assert msgs["pre_send_model"].during == frozenset({"learning"})
+        assert msgs["partial_model"].during == frozenset({"learning"})
+
+
+class TestBasicMessageRegistry:
+    """Tests for message registry (after composition)."""
+
+    def test_registry_contains_all_messages(self, composed_workflow):
+        """Test that the message registry contains all expected messages."""
+        registry = composed_workflow.get_messages()
+        expected_messages = {
+            "node_initialized",
+            "peer_round_updated",
+            "add_model",
+            "vote_train_set",
+            "models_aggregated",
+            "pre_send_model",
+            "partial_model",
+        }
+        assert set(registry.keys()) == expected_messages
+
+    def test_weights_messages_flagged(self, composed_workflow):
+        """Test that weight messages are properly flagged."""
+        registry = composed_workflow.get_messages()
+        assert registry["add_model"].is_weights is True
+        assert registry["partial_model"].is_weights is True
+        assert registry["node_initialized"].is_weights is False
+        assert registry["vote_train_set"].is_weights is False
+
+
+class TestBasicConditions:
     """Tests for workflow condition methods."""
 
-    def test_is_all_nodes_started(self, workflow):
-        """Test is_all_nodes_started condition."""
-        # Add peers directly
-        workflow.peers["node_1"] = BasicPeerState()
-        workflow.peers["node_2"] = BasicPeerState()
-        workflow.peers["node_3"] = BasicPeerState()
+    def test_all_nodes_started(self, composed_workflow, ctx):
+        """Test _all_nodes_started condition via setup stage."""
+        ctx.peers["node_1"] = BasicPeerState()
+        ctx.peers["node_2"] = BasicPeerState()
+        ctx.peers["node_3"] = BasicPeerState()
 
-        # Mock get_neighbors to return 2 neighbors (+ self = 3 total)
-        workflow.node.communication_protocol.get_neighbors.return_value = {"node_2": {}, "node_3": {}}
+        ctx.cp.get_neighbors.return_value = {"node_2": {}, "node_3": {}}
 
-        assert workflow.is_all_nodes_started()
+        setup_stage = composed_workflow._stage_map["setup"]
+        assert setup_stage._all_nodes_started(ctx)
 
-    def test_is_all_nodes_started_false_when_missing(self, workflow):
-        """Test is_all_nodes_started returns false when peers are missing."""
-        workflow.peers["node_1"] = BasicPeerState()
-        # Only 1 peer, but we have 2 neighbors
-        workflow.node.communication_protocol.get_neighbors.return_value = {"node_2": {}, "node_3": {}}
+    def test_all_nodes_started_false_when_missing(self, composed_workflow, ctx):
+        """Test _all_nodes_started returns false when peers are missing."""
+        ctx.peers["node_1"] = BasicPeerState()
+        ctx.cp.get_neighbors.return_value = {"node_2": {}, "node_3": {}}
 
-        assert not workflow.is_all_nodes_started()
+        setup_stage = composed_workflow._stage_map["setup"]
+        assert not setup_stage._all_nodes_started(ctx)
 
-    def test_is_initiator_node(self, workflow):
-        """Test is_initiator_node condition."""
-        workflow.experiment = Experiment("test", 5, is_initiator=True)
-        assert workflow.is_initiator_node()
+    def test_in_train_set(self, composed_workflow, ctx):
+        """Test _in_train_set condition via voting stage."""
+        voting_stage = composed_workflow._stage_map["voting"]
 
-        workflow.experiment = Experiment("test", 5, is_initiator=False)
-        assert not workflow.is_initiator_node()
+        ctx.train_set = ["node_1", "node_2"]
+        ctx.address = "node_1"
+        assert voting_stage._in_train_set(ctx)
 
-        workflow.experiment = None
-        assert not workflow.is_initiator_node()
+        ctx.address = "node_3"
+        assert not voting_stage._in_train_set(ctx)
 
-    def test_in_train_set(self, workflow):
-        """Test in_train_set condition."""
-        workflow.train_set = ["node_1", "node_2"]
-        workflow.node.address = "node_1"
-        assert workflow.in_train_set()
+    def test_total_rounds_reached_false_when_total_rounds_is_none(self, composed_workflow, ctx):
+        """Test that _total_rounds_reached returns False when total_rounds is None."""
+        ctx.experiment.total_rounds = None
+        round_init_stage = composed_workflow._stage_map["round_init"]
+        assert round_init_stage._total_rounds_reached(ctx) is False
 
-        workflow.node.address = "node_3"
-        assert not workflow.in_train_set()
+    def test_total_rounds_reached_true_when_reached(self, composed_workflow, ctx):
+        """Test that _total_rounds_reached returns True when round >= total_rounds."""
+        ctx.experiment = Experiment("test", 2, epochs_per_round=1)
+        with patch("p2pfl.workflow.engine.experiment.logger"):
+            ctx.experiment.increase_round("node1")
+            ctx.experiment.increase_round("node1")
+            round_init_stage = composed_workflow._stage_map["round_init"]
+            assert round_init_stage._total_rounds_reached(ctx) is True
+
+    def test_all_votes_received(self, composed_workflow, ctx):
+        """Test _all_votes_received condition via voting stage."""
+        voting_stage = composed_workflow._stage_map["voting"]
+
+        ctx.peers["node_1"] = BasicPeerState()
+        ctx.peers["node_2"] = BasicPeerState()
+        assert not voting_stage._all_votes_received(ctx)
+
+        ctx.peers["node_1"].votes = {"a": 1}
+        assert not voting_stage._all_votes_received(ctx)
+
+        ctx.peers["node_2"].votes = {"b": 2}
+        assert voting_stage._all_votes_received(ctx)
+
+    def test_all_models_received(self, composed_workflow, ctx):
+        """Test _all_models_received condition via learning stage."""
+        learning_stage = composed_workflow._stage_map["learning"]
+        ctx.train_set = ["node_1", "node_2"]
+
+        ctx.peers["node_1"] = BasicPeerState()
+        ctx.peers["node_2"] = BasicPeerState()
+        assert not learning_stage._all_models_received(ctx)
+
+        ctx.peers["node_1"].model = MagicMock()
+        ctx.peers["node_2"].model = MagicMock()
+        assert learning_stage._all_models_received(ctx)
 
 
-class TestBasicWorkflowConditionsNoneGuards:
-    """Tests that workflow conditions handle None values safely."""
-
-    def test_is_total_rounds_reached_returns_false_when_no_experiment(self, workflow):
-        """Test that is_total_rounds_reached returns False when no experiment is set."""
-        assert workflow.experiment is None
-        assert workflow.is_total_rounds_reached() is False
-
-    def test_is_total_rounds_reached_returns_false_when_total_rounds_is_none(self, workflow):
-        """Test that is_total_rounds_reached returns False when total_rounds is None."""
-        workflow.experiment = Experiment("test", 5, epochs_per_round=1)
-        # Force total_rounds to None
-        workflow.experiment.total_rounds = None
-        assert workflow.is_total_rounds_reached() is False
-
-    def test_is_total_rounds_reached_returns_true_when_reached(self, workflow):
-        """Test that is_total_rounds_reached returns True when round >= total_rounds."""
-        with patch("p2pfl.workflow.engine.workflow.logger"):
-            workflow.experiment = Experiment("test", 2, epochs_per_round=1)
-            workflow.increase_round()
-            workflow.increase_round()
-            assert workflow.is_total_rounds_reached() is True
-
-
-class TestBasicWorkflowPeerState:
-    """Tests for peer state operations in workflow."""
+class TestBasicPeerState:
+    """Tests for peer state operations."""
 
     def test_peers_add_and_list(self):
         """Test adding peers to workflow."""
@@ -256,40 +320,41 @@ class TestBasicWorkflowPeerState:
         assert peer.votes == {}
 
 
-class TestBasicWorkflowLocalState:
-    """Tests for local state operations in workflow."""
+class TestBasicWorkflowStatus:
+    """Tests for the workflow status property."""
 
-    def test_workflow_experiment(self):
-        """Test workflow experiment management."""
-        node = MagicMock()
-        node.address = "node_1"
-        workflow = BasicDFL(node)
-        workflow.experiment = Experiment("test_exp", 5, epochs_per_round=2)
+    def test_status_idle_initially(self, workflow):
+        """Test that status is IDLE when no stage is running."""
+        assert workflow.status == WorkflowStatus.IDLE
 
-        assert workflow.experiment.exp_name == "test_exp"
-        assert workflow.experiment.total_rounds == 5
-        assert workflow.experiment.epochs_per_round == 2
+    def test_current_stage_name_none_initially(self, workflow):
+        """Test that _current_stage_name is None initially."""
+        assert workflow._current_stage_name is None
 
-    def test_workflow_train_set(self):
-        """Test workflow train set management."""
-        node = MagicMock()
-        node.address = "node_1"
-        workflow = BasicDFL(node)
-        assert workflow.train_set == []
-        workflow.train_set = ["node_1", "node_2"]
-        assert len(workflow.train_set) == 2
+    def test_current_stage_name_after_compose(self, composed_workflow):
+        """Test _current_stage_name can be set."""
+        composed_workflow._current_stage_name = "setup"
+        assert composed_workflow._current_stage_name == "setup"
 
-    def test_workflow_state_clear(self):
-        """Test workflow state clear on trainingFinished."""
-        node = MagicMock()
-        node.address = "node_1"
-        workflow = BasicDFL(node)
-        workflow.experiment = Experiment("test_exp", 5)
-        workflow.train_set = ["node_1"]
-        # Simulate clearing (what trainingFinished does)
-        workflow.experiment = None
-        workflow.round = 0
-        workflow.train_set = []
 
-        assert workflow.experiment is None
-        assert workflow.train_set == []
+class TestBasicValidation:
+    """Tests for BasicDFL graph validation."""
+
+    def test_validate_is_valid(self):
+        """Test that the workflow graph is valid."""
+        wf = BasicDFL()
+        result = validate(wf)
+        assert result.is_valid, f"Validation errors: {result.errors}"
+
+    def test_validate_transitions(self):
+        """Test that transitions are correctly extracted."""
+        wf = BasicDFL()
+        result = validate(wf)
+        transitions = {k: v.targets for k, v in result.transitions.items()}
+        assert "round_init" in transitions["setup"]
+        assert "voting" in transitions["round_init"]
+        assert "finish" in transitions["round_init"]
+        assert "learning" in transitions["voting"]
+        assert "round_init" in transitions["voting"]
+        assert "round_init" in transitions["learning"]
+        assert transitions["finish"] == {None}

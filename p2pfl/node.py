@@ -26,9 +26,10 @@ import traceback
 from typing import TYPE_CHECKING, Any
 
 from p2pfl.communication.commands.infrastructure import MetricsCommand, StartLearningCommand, StopLearningCommand
+from p2pfl.communication.commands.workflow.workflow_command import WorkflowCommand
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.communication.protocols.protobuff.grpc import GrpcCommunicationProtocol
-from p2pfl.exceptions import LearnerRunningException, NodeRunningException, ZeroRoundsException
+from p2pfl.exceptions import LearnerRunningException, NodeRunningException
 from p2pfl.learning.aggregators import Aggregator, get_default_aggregator
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.learner import Learner
@@ -38,8 +39,8 @@ from p2pfl.learning.frameworks.ray import try_init_learner_with_ray
 from p2pfl.management.logger import logger
 from p2pfl.node_state import NodeState, NodeStatus
 from p2pfl.settings import Settings
-from p2pfl.workflow.engine.workflow import WorkflowStatus
-from p2pfl.workflow.factory import WorkflowType, create_workflow
+from p2pfl.workflow.engine.experiment import Experiment
+from p2pfl.workflow.factory import create_workflow
 
 if TYPE_CHECKING:
     from p2pfl.workflow.engine.workflow import Workflow
@@ -217,14 +218,14 @@ class Node:
         logger.info(self.address, "🛑 Stopping node.")
 
         try:
-            # Stop learning workflow if running
-            if self.state.is_learning:
+            # Stop/clean up workflow if present (active or terminal)
+            if self.workflow is not None:
                 try:
-                    await self.communication_protocol.broadcast_gossip(
-                        self.communication_protocol.build_msg(StopLearningCommand.get_name())
-                    )
-                    assert self.workflow is not None  # guaranteed by is_learning
-                    await self.workflow.stop()
+                    if self.state.is_learning:
+                        await self.communication_protocol.broadcast_gossip(
+                            self.communication_protocol.build_msg(StopLearningCommand.get_name())
+                        )
+                    await self._stop_workflow()
                 except Exception as e:
                     logger.warning(self.address, f"Error stopping learning during shutdown: {e}")
         finally:
@@ -271,18 +272,10 @@ class Node:
     def state(self) -> NodeState:
         """Get the unified lifecycle state of the node."""
         if not self._running:
-            return NodeState.STOPPED
+            return NodeState.OFFLINE
         if self.workflow is None:
             return NodeState.IDLE
-        if self.workflow.status == WorkflowStatus.ERROR:
-            return NodeState.FAILED
-        if self.workflow.status == WorkflowStatus.CANCELLED:
-            return NodeState.CANCELLED
-        if self.workflow.status.is_finished:
-            return NodeState.FINISHED
-        if not self.workflow.status.is_terminal:
-            return NodeState.LEARNING
-        return NodeState.IDLE
+        return NodeState.from_workflow_status(self.workflow.status)
 
     @property
     def status(self) -> NodeStatus:
@@ -292,11 +285,9 @@ class Node:
             address=self.address,
             state=self.state,
             num_neighbors=len(self.communication_protocol.get_neighbors(only_direct=False)),
-            round=wf.round if wf is not None else None,
-            total_rounds=wf.experiment.total_rounds if wf is not None and wf.experiment is not None else None,
-            experiment_name=wf.experiment.exp_name if wf is not None and wf.experiment is not None else None,
+            experiment=wf.experiment if wf is not None else None,
             error=str(wf.error) if wf is not None and wf.error is not None else None,
-            workflow_state=wf.state if wf is not None else None,
+            current_stage_name=wf.current_stage_name if wf is not None else None,
         )
 
     ###############################################
@@ -308,7 +299,7 @@ class Node:
         rounds: int = 1,
         epochs: int = 1,
         experiment_name: str = "experiment",
-        workflow: WorkflowType = WorkflowType.BASIC,
+        workflow: str = "basic",
         **kwargs: Any,
     ) -> str:
         """
@@ -329,22 +320,25 @@ class Node:
         experiment_name = f"{experiment_name}-{time.time()}"
 
         try:
+            # Validate by constructing Experiment before broadcasting
+            experiment = Experiment.create(
+                exp_name=experiment_name,
+                total_rounds=rounds,
+                epochs_per_round=epochs,
+                workflow=workflow,
+                is_initiator=True,
+                **kwargs,
+            )
+
             # Broadcast start learning command to the network
             await self.communication_protocol.broadcast_gossip(
                 self.communication_protocol.build_msg(
                     StartLearningCommand.get_name(),
-                    [rounds, epochs, experiment_name, workflow.value, kwargs],
+                    [rounds, epochs, experiment_name, workflow, kwargs],
                 )
             )
 
-            await self._start_learning_workflow(
-                workflow_type=workflow,
-                experiment_name=experiment_name,
-                rounds=rounds,
-                epochs=epochs,
-                is_initiator=True,
-                **kwargs,
-            )
+            await self._start_learning_workflow(workflow, experiment, **kwargs)
 
             return experiment_name
 
@@ -354,62 +348,78 @@ class Node:
 
     async def _start_learning_workflow(
         self,
-        workflow_type: WorkflowType,
-        experiment_name: str,
-        rounds: int,
-        epochs: int,
-        is_initiator: bool = False,
+        workflow_name: str,
+        experiment: Experiment,
         **kwargs: Any,
     ) -> None:
         """
         Start the learning workflow internally.
 
         Args:
-            workflow_type: The workflow type to use.
-            experiment_name: The name of the experiment.
-            rounds: Number of rounds.
-            epochs: Number of epochs.
-            is_initiator: Whether this node initiated the learning.
+            workflow_name: The registered workflow name (e.g. ``"basic"``, ``"async"``).
+            experiment: A fully constructed Experiment describing this run.
             **kwargs: Workflow-specific parameters forwarded to workflow.start().
 
         Raises:
-            ZeroRoundsException: If rounds is less than 1.
             NodeRunningException: If learning is already in progress.
 
         """
-        if rounds < 1:
-            raise ZeroRoundsException("Rounds must be greater than 0.")
-
-        if self.state.is_learning:
-            raise NodeRunningException("Learning is already in progress.")
-
-        logger.info(self.address, f"⏳ Setting environment for learning. Learning type: {workflow_type.value}")
-
-        # Clean up previous workflow if any
         if self.workflow is not None:
-            await self.workflow.stop()
+            if not self.workflow.status.is_terminal:
+                raise NodeRunningException("Learning is already in progress.")
+            # Clean up completed/failed/cancelled workflow before starting new one
+            self._unregister_workflow_commands()
             self.workflow = None
 
+        logger.info(self.address, f"⏳ Setting environment for learning. Learning type: {workflow_name}")
+
         # Create workflow using factory
-        self.workflow = create_workflow(workflow_type, self)
+        self.workflow = create_workflow(workflow_name)
+
+        # Register workflow message handlers as communication commands
+        self._register_workflow_commands()
 
         try:
             await self.workflow.start(
-                experiment_name=experiment_name,
-                rounds=rounds,
-                epochs=epochs,
-                is_initiator=is_initiator,
+                experiment,
+                address=self.address,
+                learner=self.learner,
+                aggregator=self.aggregator,
+                cp=self.communication_protocol,
+                generator=self.generator,
                 **kwargs,
             )
         except Exception:
+            self._unregister_workflow_commands()
             self.workflow = None
             raise
 
     async def set_stop_learning(self) -> None:
         """Stop the learning process in the entire network."""
-        if not self.state.is_learning:
+        if self.workflow is None:
             logger.info(self.address, "🛑 No learning in progress to stop.")
             return
-        await self.communication_protocol.broadcast_gossip(self.communication_protocol.build_msg(StopLearningCommand.get_name()))
-        assert self.workflow is not None  # guaranteed by is_learning
-        await self.workflow.stop()
+        if self.state.is_learning:
+            await self.communication_protocol.broadcast_gossip(self.communication_protocol.build_msg(StopLearningCommand.get_name()))
+        await self._stop_workflow()
+
+    async def _stop_workflow(self) -> None:
+        """Stop the current workflow and clean up commands. Safe to call multiple times."""
+        if self.workflow is not None:
+            await self.workflow.stop()
+            self._unregister_workflow_commands()
+            self.workflow = None
+
+    def _register_workflow_commands(self) -> None:
+        """Register workflow message handlers as communication commands."""
+        assert self.workflow is not None
+        cmds = [WorkflowCommand(self, name) for name in self.workflow.get_messages()]
+        if cmds:
+            self.communication_protocol.add_command(cmds)
+
+    def _unregister_workflow_commands(self) -> None:
+        """Remove workflow message commands from the communication protocol."""
+        if self.workflow is None:
+            return
+        for cmd_name in self.workflow.get_messages():
+            self.communication_protocol.remove_command(cmd_name)

@@ -1,5 +1,5 @@
 #
-# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# This file is part of the p2pfl (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,10 +14,4 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Basic DFL workflow implementation."""
-
-from .workflow import BasicDFL
-
-__all__ = [
-    "BasicDFL",
-]
+"""BasicDFL synchronous federated learning workflow."""

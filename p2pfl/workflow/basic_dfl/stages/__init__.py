@@ -1,5 +1,5 @@
 #
-# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# This file is part of the p2pfl (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,20 +14,19 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Basic DFL workflow stages."""
+"""BasicDFL workflow stages."""
 
-from .aggregating_vote_train_set_stage import AggregatingVoteTrainSetStage
-from .evaluate_stage import EvaluateStage
-from .gossip_full_model_stage import GossipFullModelStage
-from .gossip_partial_model_stage import GossipPartialModelStage
-from .train_stage import TrainStage
-from .vote_train_set_stage import VoteTrainSetStage
+from p2pfl.workflow.shared.finish import FinishStage
+
+from .learning import LearningStage
+from .round_init import RoundInitStage
+from .setup import SetupStage
+from .voting import VotingStage
 
 __all__ = [
-    "AggregatingVoteTrainSetStage",
-    "EvaluateStage",
-    "GossipFullModelStage",
-    "GossipPartialModelStage",
-    "TrainStage",
-    "VoteTrainSetStage",
+    "FinishStage",
+    "LearningStage",
+    "RoundInitStage",
+    "SetupStage",
+    "VotingStage",
 ]
