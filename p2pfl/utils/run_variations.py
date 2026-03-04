@@ -23,6 +23,7 @@
 #   --seeds 42 --rounds 10 --epochs 1 --nodes 10 --param settings.training.ray_actor_pool_size=8
 
 import argparse
+import asyncio
 import copy
 import hashlib
 import itertools
@@ -164,7 +165,7 @@ def run_single_experiment(config: dict[str, Any], results_dir: Path) -> None:
         with open(temp_yaml_path, "w") as f:
             yaml.dump(config, f, default_flow_style=False)
 
-        run_from_yaml(str(temp_yaml_path), debug=False)
+        asyncio.run(run_from_yaml(str(temp_yaml_path), debug=False))
 
         # Clean up temp file
         temp_yaml_path.unlink()

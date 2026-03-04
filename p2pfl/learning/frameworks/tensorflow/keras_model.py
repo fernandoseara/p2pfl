@@ -110,3 +110,38 @@ class KerasModel(WeightBasedModel):
 
         """
         return Framework.TENSORFLOW.value
+
+    def get_model(self) -> tf.keras.Model:
+        """
+        Retrieve the model.
+
+        Returns:
+            The model.
+
+        """
+        return self.model
+
+    def clone_model(self) -> tf.keras.Model:
+        """
+        Clone the model.
+
+        Returns:
+            The cloned model.
+
+        """
+        return self.model.__class__.from_config(self.model.get_config())
+
+    def build_copy(self, **kwargs) -> "KerasModel":
+        """
+        Create a copy of the model with the same configuration.
+
+        Args:
+            **kwargs: Additional keyword arguments for the model.
+
+        Returns:
+            A new instance of the same class with the cloned model.
+
+        """
+        model_config = tf.keras.utils.serialize_keras_object(self.model)
+        model_copy = tf.keras.utils.deserialize_keras_object(model_config)
+        return self.__class__(model_copy, **kwargs)

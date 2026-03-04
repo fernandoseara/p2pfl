@@ -58,7 +58,7 @@ class Krum(WeightAggregator):
         """
         # Check if there are models to aggregate
         if len(models) == 0:
-            raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there are no models")
+            raise NoModelsToAggregateError(f"({self.address}) Trying to aggregate models when there are no models")
 
         # If only one model, return it
         if len(models) == 1:

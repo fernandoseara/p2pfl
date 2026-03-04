@@ -1,6 +1,6 @@
 #
 # This file is part of the federated_learning_p2p (p2pfl) distribution (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,8 +17,10 @@
 
 """Protobuff server."""
 
+import asyncio
 import traceback
 from abc import ABC, abstractmethod
+from typing import Any
 
 import google.protobuf.empty_pb2
 import grpc
@@ -64,12 +66,15 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         # Neighbors
         self._neighbors = neighbors
 
+        # Background tasks
+        self._background_tasks: set[asyncio.Task[Any]] = set()
+
     ####
     # Management
     ####
 
     @abstractmethod
-    def start(self, wait: bool = False) -> None:
+    async def start(self, wait: bool = False) -> None:
         """
         Start the server.
 
@@ -80,12 +85,12 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         pass
 
     @abstractmethod
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the server."""
         pass
 
     @abstractmethod
-    def wait_for_termination(self) -> None:
+    async def wait_for_termination(self) -> None:
         """Wait for termination."""
         pass
 
@@ -104,7 +109,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
     # Service Implementation (server logic on protobuff)
     ####
 
-    def handshake(self, request: node_pb2.HandShakeRequest, _: grpc.ServicerContext) -> node_pb2.ResponseMessage:
+    async def handshake(self, request: node_pb2.HandShakeRequest, _: grpc.aio.ServicerContext) -> node_pb2.ResponseMessage:
         """
         Service. It is called when a node connects to another.
 
@@ -113,12 +118,12 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             _: Context.
 
         """
-        if self._neighbors.add(request.addr, non_direct=False, handshake=False):
+        if await self._neighbors.add(request.addr, non_direct=False, handshake=False):
             return node_pb2.ResponseMessage()
         else:
             return node_pb2.ResponseMessage(error="Cannot add the node (duplicated or wrong direction)")
 
-    def disconnect(self, request: node_pb2.HandShakeRequest, _: grpc.ServicerContext) -> google.protobuf.empty_pb2.Empty:
+    async def disconnect(self, request: node_pb2.HandShakeRequest, _: grpc.aio.ServicerContext) -> google.protobuf.empty_pb2.Empty:
         """
         Service. It is called when a node disconnects from another.
 
@@ -127,10 +132,10 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             _: Context.
 
         """
-        self._neighbors.remove(request.addr, disconnect_msg=False)
+        await self._neighbors.remove(request.addr, disconnect_msg=False)
         return google.protobuf.empty_pb2.Empty()
 
-    def send(self, request: node_pb2.RootMessage, _: grpc.ServicerContext) -> node_pb2.ResponseMessage:
+    async def send(self, request: node_pb2.RootMessage, _: grpc.aio.ServicerContext) -> node_pb2.ResponseMessage:
         """
         Service. Handles both regular messages and model weights.
 
@@ -140,7 +145,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
         """
         # If message already processed, return
-        if request.HasField("gossip_message") and not self._gossiper.check_and_set_processed(request):
+        if request.HasField("gossip_message") and not await self._gossiper.check_and_set_processed(request):
             return node_pb2.ResponseMessage()
 
         # Log
@@ -149,7 +154,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         # Pass None for negative rounds, the logger will handle it
         round_num = request.round if request.round >= 0 else None
         logger.log_communication(
-            self.addr,
+            self.address,
             "received",
             request.cmd,
             request.source,
@@ -163,37 +168,59 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         if request.cmd in self.__commands:
             try:
                 if request.HasField("gossip_message"):
-                    cmd_out = self.__commands[request.cmd].execute(request.source, request.round, *request.gossip_message.args)
-                elif request.HasField("direct_message"):
-                    cmd_out = self.__commands[request.cmd].execute(request.source, request.round, *request.direct_message.args)
-                elif request.HasField("weights"):
-                    cmd_out = self.__commands[request.cmd].execute(
-                        request.source,
-                        request.round,
-                        weights=request.weights.weights,
-                        contributors=request.weights.contributors,
-                        num_samples=request.weights.num_samples,
+                    # Gossip messages are fire-and-forget (no response needed)
+                    task = asyncio.create_task(
+                        self.__commands[request.cmd].execute(request.source, request.round, *request.gossip_message.args)
                     )
+                    self._track_background_task(task, request.cmd)
+                elif request.HasField("direct_message"):
+                    # Direct messages may expect responses - await them
+                    result = await self.__commands[request.cmd].execute(request.source, request.round, *request.direct_message.args)
+                    if result is not None:
+                        cmd_out = str(result)
+                elif request.HasField("weights"):
+                    # Weights are fire-and-forget (no response needed)
+                    task = asyncio.create_task(
+                        self.__commands[request.cmd].execute(
+                            request.source,
+                            request.round,
+                            weights=request.weights.weights,
+                            contributors=request.weights.contributors,
+                            num_samples=request.weights.num_samples,
+                        )
+                    )
+                    self._track_background_task(task, request.cmd)
                 else:
                     error_text = f"Error while processing command: {request.cmd}: No message or weights."
-                    logger.error(self.addr, error_text)
+                    logger.error(self.address, error_text)
                     return node_pb2.ResponseMessage(error=error_text)
             except Exception as e:
                 error_text = f"Error while processing command: {request.cmd}. {type(e).__name__}: {e}"
-                logger.error(self.addr, error_text + f"\n{traceback.format_exc()}")
+                logger.error(self.address, error_text + f"\n{traceback.format_exc()}")
                 return node_pb2.ResponseMessage(error=error_text)
         else:
             # disconnect node
-            logger.error(self.addr, f"Unknown command: {request.cmd} from {request.source}")
+            logger.error(self.address, f"Unknown command: {request.cmd} from {request.source}")
             return node_pb2.ResponseMessage(error=f"Unknown command: {request.cmd}")
 
         # If message gossip
         if request.HasField("gossip_message") and request.gossip_message.ttl > 0:
             # Update ttl and gossip
             request.gossip_message.ttl -= 1
-            self._gossiper.add_message(request)
+            await self._gossiper.add_message(request)
 
         return node_pb2.ResponseMessage(response=cmd_out)
+
+    def _track_background_task(self, task: asyncio.Task[Any], cmd_name: str) -> None:
+        """Track a background task and log any exceptions it raises."""
+        self._background_tasks.add(task)
+
+        def _on_task_done(t: asyncio.Task[Any]) -> None:
+            self._background_tasks.discard(t)
+            if not t.cancelled() and t.exception() is not None:
+                logger.error(self.address, f"Background command '{cmd_name}' failed: {t.exception()}")
+
+        task.add_done_callback(_on_task_done)
 
     ####
     # Commands
@@ -213,5 +240,25 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                 self.__commands[cmd.get_name()] = cmd
         elif isinstance(cmds, Command):
             self.__commands[cmds.get_name()] = cmds
+        else:
+            raise Exception("Command not valid")
+
+    @allow_no_addr_check
+    def remove_command(self, cmds: str | Command | list[str | Command]) -> None:
+        """
+        Remove a command.
+
+        Args:
+            cmds: Command name, Command instance, or list of either.
+
+        """
+        if isinstance(cmds, list):
+            for cmd in cmds:
+                name = cmd if isinstance(cmd, str) else cmd.get_name()
+                self.__commands.pop(name, None)
+        elif isinstance(cmds, str):
+            self.__commands.pop(cmds, None)
+        elif isinstance(cmds, Command):
+            self.__commands.pop(cmds.get_name(), None)
         else:
             raise Exception("Command not valid")

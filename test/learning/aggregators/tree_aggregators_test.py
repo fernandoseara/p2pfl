@@ -46,7 +46,7 @@ def test_fedxgbbagging_merges_trees(base_xgboost_model):
     model3 = base_xgboost_model.build_copy(params=params, num_samples=30, contributors=["node2"])
 
     aggregator = FedXgbBagging()
-    aggregator.set_addr("test")
+    aggregator.set_address("test")
     result = aggregator.aggregate([model1, model2, model3])
 
     # Bagging combines all

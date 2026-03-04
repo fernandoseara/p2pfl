@@ -10,7 +10,13 @@ import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import sys
 import typing
+
+if sys.version_info >= (3, 10):
+    import typing as typing_extensions
+else:
+    import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
@@ -28,20 +34,20 @@ class RootMessage(google.protobuf.message.Message):
     round: builtins.int
     cmd: builtins.str
     @property
-    def gossip_message(self) -> global___GossipMessage: ...
+    def gossip_message(self) -> Global___GossipMessage: ...
     @property
-    def direct_message(self) -> global___DirectMessage: ...
+    def direct_message(self) -> Global___DirectMessage: ...
     @property
-    def weights(self) -> global___Weights: ...
+    def weights(self) -> Global___Weights: ...
     def __init__(
         self,
         *,
         source: builtins.str = ...,
         round: builtins.int | None = ...,
         cmd: builtins.str = ...,
-        gossip_message: global___GossipMessage | None = ...,
-        direct_message: global___DirectMessage | None = ...,
-        weights: global___Weights | None = ...,
+        gossip_message: Global___GossipMessage | None = ...,
+        direct_message: Global___DirectMessage | None = ...,
+        weights: Global___Weights | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["_round", b"_round", "direct_message", b"direct_message", "gossip_message", b"gossip_message", "payload_type", b"payload_type", "round", b"round", "weights", b"weights"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["_round", b"_round", "cmd", b"cmd", "direct_message", b"direct_message", "gossip_message", b"gossip_message", "payload_type", b"payload_type", "round", b"round", "source", b"source", "weights", b"weights"]) -> None: ...
@@ -50,7 +56,7 @@ class RootMessage(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["payload_type", b"payload_type"]) -> typing.Literal["gossip_message", "direct_message", "weights"] | None: ...
 
-global___RootMessage = RootMessage
+Global___RootMessage: typing_extensions.TypeAlias = RootMessage
 
 @typing.final
 class GossipMessage(google.protobuf.message.Message):
@@ -72,7 +78,7 @@ class GossipMessage(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["args", b"args", "hash", b"hash", "ttl", b"ttl"]) -> None: ...
 
-global___GossipMessage = GossipMessage
+Global___GossipMessage: typing_extensions.TypeAlias = GossipMessage
 
 @typing.final
 class DirectMessage(google.protobuf.message.Message):
@@ -88,7 +94,7 @@ class DirectMessage(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["args", b"args"]) -> None: ...
 
-global___DirectMessage = DirectMessage
+Global___DirectMessage: typing_extensions.TypeAlias = DirectMessage
 
 @typing.final
 class Weights(google.protobuf.message.Message):
@@ -110,7 +116,7 @@ class Weights(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["contributors", b"contributors", "num_samples", b"num_samples", "weights", b"weights"]) -> None: ...
 
-global___Weights = Weights
+Global___Weights: typing_extensions.TypeAlias = Weights
 
 @typing.final
 class HandShakeRequest(google.protobuf.message.Message):
@@ -125,7 +131,7 @@ class HandShakeRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["addr", b"addr"]) -> None: ...
 
-global___HandShakeRequest = HandShakeRequest
+Global___HandShakeRequest: typing_extensions.TypeAlias = HandShakeRequest
 
 @typing.final
 class ResponseMessage(google.protobuf.message.Message):
@@ -148,4 +154,4 @@ class ResponseMessage(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_response", b"_response"]) -> typing.Literal["response"] | None: ...
 
-global___ResponseMessage = ResponseMessage
+Global___ResponseMessage: typing_extensions.TypeAlias = ResponseMessage

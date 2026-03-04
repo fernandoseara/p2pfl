@@ -261,6 +261,8 @@ class P2PFLDataset:
         self,
         strategy: type[DataExportStrategy],
         train: bool = True,
+        num_minibatches: int | None = None,
+        batch_size: int = 32,
         **kwargs,
     ) -> Any:
         """
@@ -269,6 +271,8 @@ class P2PFLDataset:
         Args:
             strategy: The export strategy to use.
             train: If True, export the training data. Otherwise, export the test data.
+            num_minibatches: The number of minibatches to export.
+            batch_size: The batch size for the exported data.
             **kwargs: Additional keyword arguments for the export strategy.
 
         Returns:

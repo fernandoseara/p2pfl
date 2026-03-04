@@ -17,8 +17,8 @@
 #
 """Node tests."""
 
-import contextlib  # noqa: E402, I001
-import time  # noqa: E402
+import asyncio  # noqa: E402, I001
+import contextlib  # noqa: E402
 import pytest  # noqa: E402
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset  # noqa: E402
 from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrategy  # noqa: E402
@@ -83,9 +83,10 @@ def log_test_start_and_end(request):
 #
 @pytest.mark.e2e_train
 @pytest.mark.uses_ray
+@pytest.mark.asyncio
 @pytest.mark.parametrize("x", [(2, 2), (6, 3)])
 @pytest.mark.parametrize("model_build_fn", [model_build_fn_pytorch, model_build_fn_tensorflow])
-def test_convergence(x, model_build_fn):
+async def test_convergence(x, model_build_fn):
     """Test convergence (on learning) of two nodes."""
     n, rounds = x
 
@@ -100,26 +101,26 @@ def test_convergence(x, model_build_fn):
     nodes = []
     for i in range(n):
         node = Node(model_build_fn(), partitions[i], protocol=MemoryCommunicationProtocol())
-        node.start()
+        await node.start()
         nodes.append(node)
 
     # Node Connection
     for i in range(len(nodes) - 1):
-        nodes[i + 1].connect(nodes[i].addr)
-        time.sleep(0.1)
-    wait_convergence(nodes, n - 1, only_direct=False)
+        await nodes[i + 1].connect(nodes[i].address)
+        await asyncio.sleep(0.1)
+    await wait_convergence(nodes, n - 1, only_direct=False)
 
     try:
         # Start Learning
-        exp_name = nodes[0].set_start_learning(rounds=rounds, epochs=1)
+        exp_name = await nodes[0].set_start_learning(rounds=rounds, epochs=1)
 
         # Wait
-        wait_to_finish(nodes, timeout=240)
+        await wait_to_finish(nodes, timeout=240)
 
         # Check if execution is correct
         for node in nodes:
             # History
-            history = node.learning_workflow.history
+            history = node.workflow.history
             assert history[0] == "StartLearningStage"
             history = history[1:]
             # Pattern
@@ -137,7 +138,7 @@ def test_convergence(x, model_build_fn):
         check_equal_models(nodes)
 
         # Get accuracies
-        framework = nodes[0].get_model().get_framework()
+        framework = nodes[0].model.get_framework()
         if framework == Framework.PYTORCH.value:
             accuracy_name = "test_metric"
         elif framework == Framework.TENSORFLOW.value:
@@ -174,27 +175,28 @@ def test_convergence(x, model_build_fn):
 
     finally:
         # Stop Nodes
-        [n.stop() for n in nodes]
+        for n in nodes:
+            await n.stop()
 
 
 # DISABLED! NOT IMPLEMENTED BY RAY/TF
-def _test_interrupt_train(two_nodes):
+async def _test_interrupt_train(two_nodes):
     """Test interrupting training of a node."""
     n1, n2 = two_nodes
-    n1.connect(n2.addr)
-    wait_convergence([n1, n2], 1, only_direct=True)
+    await n1.connect(n2.address)
+    await wait_convergence([n1, n2], 1, only_direct=True)
 
-    n1.set_start_learning(100, 100)
+    await n1.set_start_learning(100, 100)
 
-    time.sleep(1)  # Wait because of asincronity
+    await asyncio.sleep(1)
 
-    n1.set_stop_learning()
+    await n1.set_stop_learning()
 
-    wait_to_finish([n1, n2])
+    await wait_to_finish([n1, n2])
 
     # Check if execution is incorrect
-    assert "RoundFinishedStage" not in n1.learning_workflow.history
-    assert "RoundFinishedStage" not in n2.learning_workflow.history
+    assert "RoundFinishedStage" not in n1.workflow.history
+    assert "RoundFinishedStage" not in n2.workflow.history
 
 
 ##############################
@@ -207,35 +209,83 @@ def _test_interrupt_train(two_nodes):
 
 
 @pytest.mark.parametrize("n", [2, 4])
-def _test_node_down_on_learning(n):
+async def _test_node_down_on_learning(n):
     """Test node down on learning."""
     # Node Creation
     nodes = []
     data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
     for _ in range(n):
         node = Node(model_build_fn_pytorch(), data)
-        node.start()
+        await node.start()
         nodes.append(node)
 
     # Node Connection
     for i in range(len(nodes) - 1):
-        nodes[i + 1].connect(nodes[i].addr)
-        time.sleep(0.1)
-    wait_convergence(nodes, n - 1, only_direct=False)
+        await nodes[i + 1].connect(nodes[i].address)
+        await asyncio.sleep(0.1)
+    await wait_convergence(nodes, n - 1, only_direct=False)
 
     # Start Learning
-    nodes[0].set_start_learning(rounds=2, epochs=0)
+    await nodes[0].set_start_learning(rounds=2, epochs=0)
 
     # Stopping node
-    time.sleep(1)
-    nodes[-1].stop()
+    await asyncio.sleep(1)
+    await nodes[-1].stop()
 
-    wait_to_finish(nodes)
+    await wait_to_finish(nodes)
 
     # Check if execution is incorrect
-    assert "RoundFinishedStage" not in nodes[-1].learning_workflow.history
+    assert "RoundFinishedStage" not in nodes[-1].workflow.history
     for node in nodes[:-1]:
-        assert "RoundFinishedStage" in node.learning_workflow.history
+        assert "RoundFinishedStage" in node.workflow.history
 
     for node in nodes[:-1]:
-        node.stop()
+        await node.stop()
+
+
+#####
+# Training with other frameworks
+#####
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("build_model_fn", [model_build_fn_pytorch, model_build_fn_tensorflow])
+async def test_framework_node(build_model_fn):
+    """Test a TensorFlow node."""
+    # Data
+    data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
+    partitions = data.generate_partitions(400, RandomIIDPartitionStrategy)
+
+    # Create the model
+    p2pfl_model = build_model_fn()
+
+    # Nodes
+    n1 = Node(p2pfl_model, partitions[0])
+    n2 = Node(p2pfl_model.build_copy(), partitions[1])
+
+    # Start
+    await n1.start()
+    await n2.start()
+
+    # Connect
+    await n2.connect(n1.address)
+    await wait_convergence([n1, n2], 1, only_direct=True)
+
+    # Start Learning
+    await n1.set_start_learning(rounds=1, epochs=1)
+
+    # Wait
+    await wait_to_finish([n1, n2], timeout=120)
+
+    # Check if execution is correct
+    from p2pfl.node_state import NodeState
+
+    for node in [n1, n2]:
+        assert node.state == NodeState.FINISHED
+        assert node.state != NodeState.FAILED
+
+    check_equal_models([n1, n2])
+
+    # Stop
+    await n1.stop()
+    await n2.stop()

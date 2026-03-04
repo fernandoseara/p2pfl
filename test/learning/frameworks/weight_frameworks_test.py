@@ -1,7 +1,7 @@
 #
 # This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,12 +24,12 @@ import numpy as np
 import pytest
 from datasets import DatasetDict, load_dataset  # type: ignore
 
-from p2pfl.experiment import Experiment
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
+from p2pfl.workflow.engine.experiment import Experiment
 
 with contextlib.suppress(ImportError):
     import tensorflow as tf
@@ -338,8 +338,9 @@ def __test_flax_export_strategy():
 ################################
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("build_model_fn", [model_build_fn_torch, model_build_fn_tensorflow])  # TODO: Flax
-def test_learner_train(build_model_fn):
+async def test_learner_train(build_model_fn):
     """Test the training and testing of the learner."""
     # Dataset
     dataset = P2PFLDataset(
@@ -364,13 +365,13 @@ def test_learner_train(build_model_fn):
     logger.experiment_started(node_name, experiment)
     # Learner
     learner = LearnerFactory.create_learner(p2pfl_model)()
-    learner.set_addr(node_name)
+    learner.set_address(node_name)
     learner.set_model(p2pfl_model)
     learner.set_data(dataset)
 
     # Train
     learner.set_epochs(1)
-    learner.fit()
+    await learner.fit()
 
     # Test
-    learner.evaluate()
+    await learner.evaluate()

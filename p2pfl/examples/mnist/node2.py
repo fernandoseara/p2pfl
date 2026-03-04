@@ -23,7 +23,7 @@ This node will be connected to node1 and then, the federated learning process wi
 """
 
 import argparse
-import time
+import asyncio
 
 from p2pfl.examples.mnist.model.mlp_pytorch import model_build_fn
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
@@ -39,7 +39,7 @@ def __get_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def node2(port: int) -> None:
+async def node2(port: int) -> None:
     """
     Start a node2, connects to another node, start and waits the federated learning process to finish.
 
@@ -47,23 +47,23 @@ def node2(port: int) -> None:
         port: The port to connect.
 
     """
-    node = Node(model_build_fn(), P2PFLDataset.from_huggingface("p2pfl/MNIST"), addr="127.0.0.1")
-    node.start()
-    node.connect(f"127.0.0.1:{port}")
-    time.sleep(4)
+    node = Node(model_build_fn(), P2PFLDataset.from_huggingface("p2pfl/MNIST"), address="127.0.0.1")
+    await node.start()
+    await node.connect(f"127.0.0.1:{port}")
+    await asyncio.sleep(4)
 
     print("Start learning")
-    node.set_start_learning(rounds=2, epochs=1)
+    await node.set_start_learning(rounds=2, epochs=1)
 
     # Wait 4 results
 
     while True:
-        time.sleep(1)
+        await asyncio.sleep(1)
 
-        if node.state.round is None:
+        if node.state.is_terminal:
             break
 
-    node.stop()
+    await node.stop()
 
 
 if __name__ == "__main__":
@@ -71,4 +71,4 @@ if __name__ == "__main__":
     args = __get_args()
 
     # Run node2
-    node2(args.port)
+    asyncio.run(node2(args.port))

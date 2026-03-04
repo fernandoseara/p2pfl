@@ -69,7 +69,7 @@ class Gossip:
 
     PERIOD: float = 0.1
     """Period (seconds) for the gossip protocol."""
-    TTL: int = 10
+    TTL: int = 101
     """Time to live (TTL) for a message in the gossip protocol."""
     MESSAGES_PER_PERIOD: int = 100
     """Number of messages to send in each gossip period."""
@@ -112,6 +112,8 @@ class Training:
     """Timeout (seconds) for a node to wait for a vote."""
     AGGREGATION_TIMEOUT: int = 300
     """Timeout (seconds) for a node to wait for other models. Timeout starts when the first model is added."""
+    SYNCHRONIZATION_TIMEOUT: int = 120
+    """Timeout (seconds) for synchronization waits (node setup, round-init, model readiness)."""
     DEFAULT_BATCH_SIZE: int = 128
     """Default batch size for training."""
     RAY_ACTOR_POOL_SIZE: int = 4

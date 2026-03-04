@@ -1,7 +1,7 @@
 #
 # This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,7 +26,6 @@ import torch
 from lightning import Trainer
 from torch.utils.data import DataLoader
 
-from p2pfl.experiment import Experiment
 from p2pfl.learning.aggregators.aggregator import Aggregator
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks import Framework
@@ -38,6 +37,7 @@ from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
 from p2pfl.utils.check_ray import ray_installed
 from p2pfl.utils.seed import set_seed
+from p2pfl.workflow.engine.experiment import Experiment
 
 torch.set_num_threads(1)
 
@@ -63,10 +63,10 @@ class LightningLearner(Learner):
         # To avoid GPU/TPU printings
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
-    def set_addr(self, addr: str) -> str:
-        """Set the addr of the node."""
-        self.logger = FederatedLogger(addr)
-        return super().set_addr(addr)
+    def set_address(self, address: str) -> str:
+        """Set the address of the node."""
+        self.logger = FederatedLogger(address)
+        return super().set_address(address)
 
     def __get_pt_model_data(self, train: bool = True) -> tuple[L.LightningModule, DataLoader]:
         # Get Model
@@ -79,7 +79,7 @@ class LightningLearner(Learner):
             raise ValueError("The data must be a PyTorch DataLoader")
         return pt_model, pt_data
 
-    def fit(self) -> P2PFLModel:
+    async def fit(self) -> P2PFLModel:
         """Fit the model."""
         try:
             if self.epochs > 0:
@@ -101,7 +101,7 @@ class LightningLearner(Learner):
                 self.__trainer = None
 
             # Set model contribution
-            self.get_model().set_contribution([self.addr], self.get_data().get_num_samples())
+            self.get_model().set_contribution([self.address], self.get_data().get_num_samples())
 
             # Set callback info
             self.add_callback_info_to_model()
@@ -111,18 +111,28 @@ class LightningLearner(Learner):
         except Exception as e:
             print(traceback.format_exc())
             logger.error(
-                self.addr,
+                self.address,
                 f"Fit error. Something went wrong with pytorch lightning. {e}",
             )
             raise e
 
-    def interrupt_fit(self) -> None:
+    async def train_on_batch(self) -> P2PFLModel:
+        """
+        Train the model on the next batch manually.
+
+        Raises:
+            NotImplementedError: PyTorch Lightning does not support batch training yet.
+
+        """
+        raise NotImplementedError("PyTorch Lightning does not support batch training yet")
+
+    async def interrupt_fit(self) -> None:
         """Interrupt the fit."""
         if self.__trainer is not None:
             self.__trainer.should_stop = True
             self.__trainer = None
 
-    def evaluate(self) -> dict[str, float]:
+    async def evaluate(self) -> dict[str, float]:
         """
         Evaluate the model with actual parameters.
 
@@ -138,14 +148,14 @@ class LightningLearner(Learner):
                 self.__trainer = None
                 # Log metrics
                 for k, v in results.items():
-                    logger.log_metric(self.addr, k, v)
+                    logger.log_metric(self.address, k, v)
                 return dict(results)
 
             else:
                 return {}
         except Exception as e:
             logger.error(
-                self.addr,
+                self.address,
                 f"Evaluation error. Something went wrong with pytorch lightning. {e}",
             )
             raise e

@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/federated_learning_p2p).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution
+# (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,16 +23,20 @@ P2PFL Logger.
 
 """
 
+from __future__ import annotations
+
 import copy
 import datetime
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from p2pfl.experiment import Experiment
 from p2pfl.management.message_storage import MessageEntryType, MessageStorage
 from p2pfl.management.metric_storage import GlobalLogsType, GlobalMetricStorage, LocalLogsType, LocalMetricStorage
 from p2pfl.management.node_monitor import NodeMonitor
 from p2pfl.settings import Settings
+
+if TYPE_CHECKING:
+    from p2pfl.workflow.engine.experiment import Experiment
 
 ###################
 #    Exception    #
@@ -305,7 +309,7 @@ class P2PFLogger:
 
         # Get Round
         if round is None:
-            round = experiment.round
+            round = self._nodes[addr].get("round")
             if round is None:
                 raise Exception("No round provided. Needed for training metrics.")
 
@@ -354,75 +358,86 @@ class P2PFLogger:
     # Node registration
     ######
 
-    def register_node(self, node: str) -> None:
+    def register_node(self, address: str) -> None:
         """
         Register a node.
 
         Args:
-            node: The node address.
+            address: The node address.
 
         """
         # Node State
-        if self._nodes.get(node) is None:
-            self._nodes[node] = {}
+        if self._nodes.get(address) is None:
+            self._nodes[address] = {}
         else:
-            raise Exception(f"Node {node} already registered.")
+            raise Exception(f"Node {address} already registered.")
 
-    def unregister_node(self, node: str) -> None:
+    def unregister_node(self, address: str) -> None:
         """
         Unregister a node.
 
         Args:
-            node: The node address.
+            address: The node address.
 
         """
         # Node state
-        if node in self._nodes:
-            # Unregister the node
-            self._nodes.pop(node)
+        if address in self._nodes:
+            self._nodes.pop(address)
         else:
-            self.warning("SYSTEM", f"Attempted to unregister node {node} that was not registered.")
+            self.warning("SYSTEM", f"Attempted to unregister node {address} that was not registered.")
 
     ######
     # Node Status
     ######
 
-    def experiment_started(self, node: str, experiment: Experiment) -> None:
+    def experiment_started(self, address: str, experiment: Experiment) -> None:
         """
         Notify the experiment start.
 
         Args:
-            node: The node address.
+            address: The node address.
             experiment: The experiment.
 
         """
-        self._nodes[node]["Experiment"] = experiment
+        self._nodes[address]["Experiment"] = experiment
+        self._nodes[address]["round"] = 0
 
-    def experiment_updated(self, node: str, experiment: Experiment) -> None:
+    def round_updated(self, address: str, round: int) -> None:
+        """
+        Notify a round update.
+
+        Args:
+            address: The node address.
+            round: The new round number.
+
+        """
+        self._nodes[address]["round"] = round
+
+    def experiment_updated(self, address: str, experiment: Experiment) -> None:
         """
         Notify the round end.
 
         Args:
-            node: The node address.
+            address: The node address.
             experiment: The experiment to update.
 
         """
-        self.warning(node, "Uncatched Round Finished on Logger")
-        if self._nodes[node]["Experiment"] is not None:
-            self._nodes[node]["Experiment"] = experiment
+        self.warning(address, "Uncatched Round Finished on Logger")
+        if self._nodes[address]["Experiment"] is not None:
+            self._nodes[address]["Experiment"] = experiment
         else:
-            raise Exception(f"Node {node} has no experiment.")
+            raise Exception(f"Node {address} has no experiment.")
 
-    def experiment_finished(self, node: str) -> None:
+    def experiment_finished(self, address: str) -> None:
         """
         Notify the experiment end.
 
         Args:
-            node: The node address.
+            address: The node address.
 
         """
-        self.warning(node, "Uncatched Experiment Ended on Logger")
-        del self._nodes[node]["Experiment"]
+        self.warning(address, "Uncatched Experiment Ended on Logger")
+        del self._nodes[address]["Experiment"]
 
     def get_nodes(self) -> dict[str, dict[Any, Any]]:
         """
@@ -479,11 +494,10 @@ class P2PFLogger:
         # If round_num is not specified but we're in an experiment, get the current round
         if round_num is None or round_num < 0:
             try:
-                # Look for the node in registered nodes
-                if node in self._nodes and "Experiment" in self._nodes[node]:
-                    experiment = self._nodes[node]["Experiment"]
-                    if experiment is not None and hasattr(experiment, "round") and experiment.round is not None:
-                        round_num = experiment.round
+                if node in self._nodes and "round" in self._nodes[node]:
+                    stored_round = self._nodes[node]["round"]
+                    if stored_round is not None:
+                        round_num = stored_round
             except Exception:
                 # If we can't get the round, just continue with default round_num (None)
                 pass
@@ -501,8 +515,7 @@ class P2PFLogger:
 
         # Log the message at debug level
         if cmd != "beat" or (not Settings.heartbeat.EXCLUDE_BEAT_LOGS and cmd == "beat"):
-            pass
-            # self.debug(node, message)
+            self.debug(node, message)
 
         # Get actual round number for storage (default to 0 if None)
         storage_round = 0 if round_num is None or round_num < 0 else round_num

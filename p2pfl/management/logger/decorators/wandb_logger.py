@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/federated_learning_p2p).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution
+# (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,20 +18,30 @@
 
 """WandB Logger Decorator."""
 
+from __future__ import annotations
+
 import os
-from typing import Any
+import types
+from typing import TYPE_CHECKING, Any
 
-try:
-    import wandb
-    from wandb.sdk.wandb_run import Run  # type: ignore
-
-except ImportError:
-    wandb = None  # type: ignore
-    Run = None  # type: ignore
-
-from p2pfl.experiment import Experiment
 from p2pfl.management.logger.decorators.logger_decorator import LoggerDecorator
 from p2pfl.management.logger.logger import P2PFLogger
+
+if TYPE_CHECKING:
+    from wandb.sdk.wandb_run import Run
+
+    from p2pfl.workflow.engine.experiment import Experiment
+
+# Optional wandb import
+wandb_module: types.ModuleType | None
+RunClass: type[Run] | None
+
+try:
+    import wandb as wandb_module
+    from wandb.sdk.wandb_run import Run as RunClass
+except ImportError:
+    wandb_module = None
+    RunClass = None
 
 
 class WandbLogger(LoggerDecorator):
@@ -40,7 +50,7 @@ class WandbLogger(LoggerDecorator):
     def __init__(self, p2pflogger: P2PFLogger):
         """Initialize the WandbLogger decorator."""
         super().__init__(p2pflogger)
-        self._wandb_enabled: bool = wandb is not None
+        self._wandb_enabled: bool = wandb_module is not None
         self._run: Run | None = None
         self._connected: bool = False
 
@@ -163,7 +173,8 @@ class WandbLogger(LoggerDecorator):
             if self._group:
                 init_params["group"] = self._group
 
-            self._run = wandb.init(**init_params)  # type: ignore
+            if wandb_module is not None:
+                self._run = wandb_module.init(**init_params)
             super().debug("WandbLogger", f"WandB run initialized successfully for experiment '{experiment.exp_name}'")
 
         except Exception as e:
@@ -182,10 +193,11 @@ class WandbLogger(LoggerDecorator):
         try:
             log_dict = {f"{addr}/{metric}": value}
 
-            if step is not None:
-                wandb.log(log_dict, step=round)  # type: ignore
-            else:
-                wandb.log(log_dict)  # type: ignore
+            if wandb_module is not None:
+                if step is not None:
+                    wandb_module.log(log_dict, step=round)
+                else:
+                    wandb_module.log(log_dict)
         except Exception as e:
             super().warning(addr, f"Failed to log to W&B: {e}")
 
@@ -193,9 +205,9 @@ class WandbLogger(LoggerDecorator):
 
     def finish(self) -> None:
         """Finish the wandb run."""
-        if self._run is not None:
+        if self._run is not None and wandb_module is not None:
             try:
-                wandb.finish()  # type: ignore
+                wandb_module.finish()
                 super().debug("WandbLogger", "WandB run finished successfully")
             except Exception as e:
                 super().warning("WandbLogger", f"Failed to finish WandB run: {e}")

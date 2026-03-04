@@ -18,7 +18,6 @@
 
 """Protocol agnostic client."""
 
-import threading
 from abc import ABC, abstractmethod
 
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
@@ -38,7 +37,6 @@ class ProtobuffClient(ABC):
         self.self_addr = self_addr
         self.nei_addr = nei_addr
         self._temporal_connection_uses = 0
-        self._temporal_connection_lock = threading.Lock()
 
     ####
     # Connection
@@ -56,12 +54,12 @@ class ProtobuffClient(ABC):
         pass
 
     @abstractmethod
-    def connect(self, handshake_msg: bool = True) -> None:
+    async def connect(self, handshake_msg: bool = True) -> None:
         """Connect to a neighbor."""
         pass
 
     @abstractmethod
-    def disconnect(self, disconnect_msg: bool = True) -> None:
+    async def disconnect(self, disconnect_msg: bool = True) -> None:
         """Disconnect from a neighbor."""
         pass
 
@@ -103,7 +101,7 @@ class ProtobuffClient(ABC):
         )
 
     @abstractmethod
-    def send(
+    async def send(
         self,
         msg: node_pb2.RootMessage,
         temporal_connection: bool = False,

@@ -86,15 +86,15 @@ class MemoryServer(ProtobuffServer):
         self.__singleton_dict = SingletonDict()
         self.__terminated = threading.Event()
 
-    def set_addr(self, addr: str) -> str:
-        """Set the addr of the node."""
-        return super().set_addr(AddressCounter().get(addr))
+    def set_address(self, address: str) -> str:
+        """Set the address of the node."""
+        return super().set_address(AddressCounter().get(address))
 
     ####
     # Management
     ####
 
-    def start(self, wait: bool = False) -> None:
+    async def start(self, wait: bool = False) -> None:
         """
         Start the in-memory server.
 
@@ -104,17 +104,17 @@ class MemoryServer(ProtobuffServer):
         """
         if self.__singleton_dict is None:
             raise Exception("ServerSingleton instance not created")
-        self.__singleton_dict[self.addr] = self
+        self.__singleton_dict[self.address] = self
         self.__terminated.set()
-        logger.info(self.addr, f"InMemoryServer started at {self.addr}")
+        logger.info(self.address, f"🚀 InMemoryServer started at {self.address}")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the in-memory server."""
-        del self.__singleton_dict[self.addr]
+        del self.__singleton_dict[self.address]
         self.__terminated.clear()
-        logger.info(self.addr, f"InMemoryServer stopped at {self.addr}")
+        logger.info(self.address, f"🛑 InMemoryServer stopped at {self.address}")
 
-    def wait_for_termination(self) -> None:
+    async def wait_for_termination(self) -> None:
         """Wait for termination."""
         self.__terminated.wait()
 

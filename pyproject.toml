@@ -29,6 +29,7 @@ dependencies = [
     "protobuf>=5.29.1",
     "pyyaml>=6.0.2,<7",
     "click==8.1.8",
+    "transitions>=0.9.3",
 ]
 
 [project.optional-dependencies]
@@ -46,7 +47,6 @@ tensorflow = [
 flax = ["flax>=0.10.0,<0.11"]
 dp = ["opendp>=0.13.0"]
 wandb = ["wandb>=0.20.1,<0.21"]
-
 xgboost = ["xgboost>=3.0.5", "scikit-learn>=1.7.2"]
 ray = ["ray>=2.10.0,<3"]
 
@@ -62,6 +62,7 @@ p2pfl = "p2pfl.management.cli:app"
 dev = [
     "pytest>=8.0.0,<9",
     "pytest-cov>=5.0.0,<6",
+    "pytest-asyncio>=0.26.0,<0.27",
     "ruff>=0.5.1,<0.6",
     "mypy>=1.15.0,<2",
     "mypy-protobuf>=3.5.0,<4",
@@ -128,21 +129,17 @@ addopts = "-v --cov=p2pfl"
 relative_files = true
 
 [tool.mypy]
-exclude = "p2pfl/proto"
 disallow_untyped_calls = true
 
 [[tool.mypy.overrides]]
-module = "grpc.*"
+module = [
+    "grpc.*",
+    "torchvision.*",
+    "datasets.*",
+    "sklearn.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "torchvision.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "datasets.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "sklearn.*"
-ignore_missing_imports = true
+module = "p2pfl.communication.protocols.protobuff.proto.*"
+ignore_errors = true

@@ -43,7 +43,7 @@ class GrpcClient(ProtobuffClient):
         super().__init__(self_addr, nei_addr)
 
         # GRPC
-        self.channel: grpc.Channel | None = None
+        self.channel: grpc.aio.Channel | None = None
         self.stub: node_pb2_grpc.NodeServicesStub | None = None
 
     ####
@@ -60,7 +60,7 @@ class GrpcClient(ProtobuffClient):
         """
         return (self.stub is not None) and (self.channel is not None)
 
-    def connect(self, handshake_msg: bool = True) -> None:
+    async def connect(self, handshake_msg: bool = True) -> None:
         """Connect to a neighbor."""
         # Check if connected
         if self.is_connected():
@@ -81,9 +81,9 @@ class GrpcClient(ProtobuffClient):
                 creds = grpc.ssl_channel_credentials(
                     root_certificates=root_certificates, private_key=private_key, certificate_chain=certificate_chain
                 )
-                self.channel = grpc.secure_channel(self.nei_addr, creds)
+                self.channel = grpc.aio.secure_channel(self.nei_addr, creds)
             else:
-                self.channel = grpc.insecure_channel(self.nei_addr)
+                self.channel = grpc.aio.insecure_channel(self.nei_addr)
 
             # Create stub
             self.stub = node_pb2_grpc.NodeServicesStub(self.channel)
@@ -92,13 +92,13 @@ class GrpcClient(ProtobuffClient):
 
             # Handshake
             if handshake_msg:
-                res = self.stub.handshake(
+                res = await self.stub.handshake(
                     node_pb2.HandShakeRequest(addr=self.self_addr),
                     timeout=Settings.general.GRPC_TIMEOUT,
                 )
                 if res.error:
                     logger.info(self.self_addr, f"Cannot add a neighbor: {res.error}")
-                    self.channel.close()
+                    await self.channel.close()
                     raise Exception(f"Cannot add a neighbor: {res.error}")
 
         except Exception as e:
@@ -108,7 +108,7 @@ class GrpcClient(ProtobuffClient):
             # Re-raise exception
             raise e
 
-    def disconnect(self, disconnect_msg: bool = True) -> None:
+    async def disconnect(self, disconnect_msg: bool = True) -> None:
         """Disconnect from a neighbor."""
         # Check if connected
         if not self.is_connected():
@@ -119,9 +119,9 @@ class GrpcClient(ProtobuffClient):
         try:
             # If the other node still connected, disconnect
             if disconnect_msg:
-                self.stub.disconnect(node_pb2.HandShakeRequest(addr=self.self_addr))  # type: ignore
+                await self.stub.disconnect(node_pb2.HandShakeRequest(addr=self.self_addr))  # type: ignore
                 # Close channel
-                self.channel.close()  # type: ignore
+                await self.channel.close()  # type: ignore
         except Exception:
             pass
         self.channel = None
@@ -131,7 +131,7 @@ class GrpcClient(ProtobuffClient):
     # Message Sending
     ####
 
-    def send(
+    async def send(
         self,
         msg: node_pb2.RootMessage,
         temporal_connection: bool = False,
@@ -151,19 +151,20 @@ class GrpcClient(ProtobuffClient):
         # Check if connected
         if not self.is_connected():
             if temporal_connection:
-                with self._temporal_connection_lock:
-                    self._temporal_connection_uses += 1
-                    if self._temporal_connection_uses == 1:
-                        logger.debug(
-                            self.self_addr, f"💔 Neighbor {self.nei_addr} not connected. Trying to send message with temporal connection"
-                        )
-                        self.connect(handshake_msg=False)
+                self._temporal_connection_uses += 1
+                if self._temporal_connection_uses == 1:
+                    logger.debug(
+                        self.self_addr, f"💔 Neighbor {self.nei_addr} not connected. Trying to send message with temporal connection"
+                    )
+                    await self.connect(handshake_msg=False)
+            elif raise_error:
+                raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
             else:
                 raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
 
         # Send
         try:
-            res = self.stub.send(msg, timeout=Settings.general.GRPC_TIMEOUT)  # type: ignore
+            res = await self.stub.send(msg, timeout=Settings.general.GRPC_TIMEOUT)  # type: ignore
 
             # Log successful message sending
             if not res.error:
@@ -178,10 +179,9 @@ class GrpcClient(ProtobuffClient):
                 f"Cannot send message {msg.cmd} to {self.nei_addr}. Error: {e}",
             )
             if temporal_connection:
-                with self._temporal_connection_lock:
-                    self._temporal_connection_uses -= 1
-                    if self._temporal_connection_uses == 0:
-                        self.disconnect(disconnect_msg=False)
+                self._temporal_connection_uses -= 1
+                if self._temporal_connection_uses == 0:
+                    await self.disconnect(disconnect_msg=False)
             if raise_error:
                 raise e
             else:
@@ -195,12 +195,11 @@ class GrpcClient(ProtobuffClient):
 
         # Disconnect
         if temporal_connection:
-            with self._temporal_connection_lock:
-                self._temporal_connection_uses -= 1
-                if self._temporal_connection_uses == 0:
-                    self.disconnect(disconnect_msg=False)
+            self._temporal_connection_uses -= 1
+            if self._temporal_connection_uses == 0:
+                await self.disconnect(disconnect_msg=False)
         elif disconnect_on_error and res.error:
-            self.disconnect(disconnect_msg=True)
+            await self.disconnect(disconnect_msg=True)
 
         # Raise
         if res.error and raise_error:

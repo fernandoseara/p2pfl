@@ -1,7 +1,7 @@
 #
 # This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@ Tests verify expected aggregation behavior for each algorithm.
 
 import contextlib
 import copy
-import time
 
 import numpy as np
 import pytest
@@ -31,7 +30,6 @@ from datasets import DatasetDict, load_dataset
 from mocks import WeightBasedModelMock
 
 from p2pfl.examples.mnist.model.mlp_pytorch import MLP
-from p2pfl.experiment import Experiment
 from p2pfl.learning.aggregators.fedavg import FedAvg
 from p2pfl.learning.aggregators.fedmedian import FedMedian
 from p2pfl.learning.aggregators.fedopt import FedAdagrad, FedAdam, FedYogi
@@ -43,6 +41,7 @@ from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.learning.frameworks.pytorch.lightning_model import LightningModel
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
+from p2pfl.workflow.engine.experiment import Experiment
 
 ###############################################
 # FedAvg Tests
@@ -52,7 +51,7 @@ from p2pfl.settings import Settings
 def test_fedavg_aggregation():
     """FedAvg: weighted average by sample count."""
     aggregator = FedAvg()
-    aggregator.set_addr("test")
+    aggregator.set_address("test")
 
     # Weighted: [1,1]*10 + [2,2]*20 + [3,3]*30 = [140,140]/60 = [2.33, 2.33]
     models = [
@@ -82,7 +81,7 @@ def test_fedavg_aggregation():
 def test_fedmedian_aggregation():
     """FedMedian: computes median, ignores outliers, handles even count."""
     aggregator = FedMedian()
-    aggregator.set_addr("test")
+    aggregator.set_address("test")
 
     # Odd count: [1,1], [2,2], [3,3] → median = [2,2]
     models_odd = [
@@ -134,7 +133,7 @@ def test_krum_selects_closest_to_majority():
     ]
 
     aggregator = Krum()
-    aggregator.set_addr("test")
+    aggregator.set_address("test")
     result = aggregator.aggregate(models)
 
     # Should select [0.1, 0.1] or [0.0, 0.0] (both close to majority)
@@ -158,7 +157,7 @@ def test_fedprox_aggregation():
     ]
 
     aggregator = FedProx(proximal_mu=0.1)
-    aggregator.set_addr("test")
+    aggregator.set_address("test")
     result = aggregator.aggregate(models)
 
     # Weighted average
@@ -176,8 +175,9 @@ def test_fedprox_aggregation():
     assert set(result.get_contributors()) == {"n1", "n2"}
 
 
+@pytest.mark.asyncio
 @pytest.mark.e2e_train
-def test_fedprox_e2e_two_rounds():
+async def test_fedprox_e2e_two_rounds():
     """Test FedProx aggregator + callback integration over two rounds."""
     # Dataset
     dataset = P2PFLDataset(
@@ -194,7 +194,7 @@ def test_fedprox_e2e_two_rounds():
 
     # Create FedProx aggregator
     aggregator = FedProx(proximal_mu=0.1)
-    aggregator.set_addr("test_fedprox")
+    aggregator.set_address("test_fedprox")
 
     # Dont care about the seed
     Settings.general.SEED = None
@@ -207,14 +207,14 @@ def test_fedprox_e2e_two_rounds():
 
     # Learner with aggregator
     learner = LearnerFactory.create_learner(p2pfl_model)()
-    learner.set_addr(node_name)
+    learner.set_address(node_name)
     learner.set_model(p2pfl_model)
     learner.set_data(dataset)
     learner.indicate_aggregator(aggregator)  # This adds the FedProx callback
 
     # Round 1: First round - no proximal term (callback skips first round)
     learner.set_epochs(1)
-    trained_model = learner.fit()
+    trained_model = await learner.fit()
     assert trained_model is not None
     assert trained_model.get_num_samples() == 100
 
@@ -223,11 +223,11 @@ def test_fedprox_e2e_two_rounds():
     learner.set_model(aggregated_model)
 
     # Round 2: Proximal term applied (callback reads proximal_mu, snapshots params)
-    trained_model_r2 = learner.fit()
+    trained_model_r2 = await learner.fit()
     assert trained_model_r2 is not None
 
     # Evaluate
-    learner.evaluate()
+    await learner.evaluate()
 
 
 ###############################################
@@ -239,7 +239,7 @@ def test_fedprox_e2e_two_rounds():
 def test_fedopt_aggregation(aggregator_cls):
     """FedOpt: first round = FedAvg, state initialized, multi-round stable."""
     aggregator = aggregator_cls(eta=0.1)
-    aggregator.set_addr("test")
+    aggregator.set_address("test")
 
     # Round 1: [1,1]*10 + [3,3]*10 = [2,2]
     models_r1 = [
@@ -283,7 +283,7 @@ def test_scaffold_aggregator_requires_delta_info():
     # Model without scaffold info should fail aggregation
     model = LightningModel(MLP(), num_samples=24, contributors=["node1"])
     aggregator = Scaffold()
-    aggregator.set_addr("test")
+    aggregator.set_address("test")
 
     with pytest.raises(KeyError):
         aggregator.aggregate([model])
@@ -292,7 +292,7 @@ def test_scaffold_aggregator_requires_delta_info():
 def test_scaffold_correct_aggregation():
     """Scaffold: verify correct mathematical aggregation of delta_y_i and delta_c_i."""
     aggr = Scaffold(global_lr=0.1)
-    aggr.set_addr("test")
+    aggr.set_address("test")
 
     # Initial params
     initial_global_model_params = [np.array([0.0, 0.0]), np.array([0.0, 0.0])]

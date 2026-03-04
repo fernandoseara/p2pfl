@@ -18,13 +18,13 @@
 
 """Protocol agnostic gossiper."""
 
+import asyncio
+import contextlib
 import random
-import threading
-import time
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
-from p2pfl.communication.commands.message.pre_send_model_command import PreSendModelCommand
 from p2pfl.communication.protocols.protobuff.client import ProtobuffClient
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
@@ -33,8 +33,8 @@ from p2pfl.settings import Settings
 from p2pfl.utils.node_component import NodeComponent
 
 
-class Gossiper(threading.Thread, NodeComponent):
-    """Gossiper for agnostic communication protocol."""
+class Gossiper(NodeComponent):
+    """Async-compatible Gossiper that spreads messages and models to neighbors."""
 
     def __init__(
         self,
@@ -44,130 +44,104 @@ class Gossiper(threading.Thread, NodeComponent):
         messages_per_period: int | None = None,
     ) -> None:
         """Initialize the gossiper."""
-        if period is None:
-            period = Settings.gossip.PERIOD
-        if messages_per_period is None:
-            messages_per_period = Settings.gossip.MESSAGES_PER_PERIOD
-        # Thread
         super().__init__()
-        self.name = "gossiper-thread-unknown"
+        self._neighbors = neighbors
+        self.period = period or Settings.gossip.PERIOD
+        self.messages_per_period = messages_per_period or Settings.gossip.MESSAGES_PER_PERIOD
 
-        # Lists, locks and flag
-        self.__processed_messages: list[int] = []
-        self.__processed_messages_lock = threading.Lock()
-        self.__pending_msgs: list[tuple[node_pb2.RootMessage, list[ProtobuffClient]]] = []
-        self.__pending_msgs_lock = threading.Lock()
-        self.__gossip_terminate_flag = threading.Event()
+        # State — OrderedDict for O(1) lookup and FIFO eviction
+        self._processed_messages: OrderedDict[int, None] = OrderedDict()
+        self._pending_msgs: list[tuple[node_pb2.RootMessage, list[ProtobuffClient]]] = []
 
-        # Props
-        self.__neighbors = neighbors
-        self.period = period
-        self.messages_per_period = messages_per_period
+        # Concurrency
+        self._processed_messages_lock = asyncio.Lock()
+        self._pending_msgs_lock = asyncio.Lock()
+        self._terminate_event = asyncio.Event()
+
+        self._task: asyncio.Task | None = None
+        self.name = "gossiper-async"
 
         # Build msgs
         self.build_msg_fn = build_msg
 
-    def set_addr(self, addr: str) -> str:
-        """Set the address."""
-        addr = super().set_addr(addr)
-        self.name = f"gossiper-thread-{addr}"
-        return addr
+    def set_address(self, address: str) -> str:
+        """Assign address and update gossiper thread name."""
+        address = super().set_address(address)
+        self.name = f"gossiper-async-{address}"
+        return address
 
-    ###
-    # Thread control
-    ###
+    async def start(self) -> None:
+        """Launch the gossiping task."""
+        logger.info(self.address, "🏁 Starting gossiper...")
+        self._terminate_event.clear()
+        self._task = asyncio.create_task(self._run())
 
-    def start(self) -> None:
-        """Start the gossiper thread."""
-        logger.info(self.addr, "🏁 Starting gossiper...")
-        return super().start()
+    async def stop(self) -> None:
+        """Signal the gossiper to stop and wait for completion."""
+        logger.info(self.address, "🛑 Stopping gossiper...")
+        self._terminate_event.set()
+        if self._task:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
 
-    def stop(self) -> None:
-        """Stop the gossiper thread."""
-        logger.info(self.addr, "🛑 Stopping gossiper...")
-        self.__gossip_terminate_flag.set()
+    async def add_message(self, msg: node_pb2.RootMessage) -> None:
+        """Queue a message to be gossiped to all direct neighbors."""
+        async with self._pending_msgs_lock:
+            neighbors = [
+                v[0] for addr, v in self._neighbors.get_all(only_direct=True).items() if addr != self.address and addr != msg.source
+            ]
+            self._pending_msgs.append((msg, neighbors))
 
-    ###
-    # Gossip
-    ###
-
-    def add_message(self, msg: node_pb2.RootMessage) -> None:
-        """
-        Add message to pending.
-
-        Args:
-            msg: Message to send.
-            pending_neis: Neighbors to send the message.
-
-        """
-        self.__pending_msgs_lock.acquire()
-        pending_neis = [v[0] for addr, v in self.__neighbors.get_all(only_direct=True).items() if addr != self.addr and addr != msg.source]
-        self.__pending_msgs.append((msg, pending_neis))
-        self.__pending_msgs_lock.release()
-
-    def check_and_set_processed(self, msg: node_pb2.RootMessage) -> bool:
-        """
-        Check if message was already processed and set it as processed.
-
-        Args:
-            msg: Message to check.
-
-        """
-        # If self address, return False
-        if msg.source == self.addr:
+    async def check_and_set_processed(self, msg: node_pb2.RootMessage) -> bool:
+        """Mark a message as processed if new. Return True if new, False otherwise."""
+        if msg.source == self.address:
             return False
 
         # Check if message was already processed
-        with self.__processed_messages_lock:
-            if msg.gossip_message.hash in self.__processed_messages:
+        async with self._processed_messages_lock:
+            if msg.gossip_message.hash in self._processed_messages:
                 return False
-            # If there are more than X messages, remove the oldest one
-            if len(self.__processed_messages) > Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED:
-                self.__processed_messages.pop(0)
+
+            # Evict oldest if at capacity
+            if len(self._processed_messages) >= Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED:
+                self._processed_messages.popitem(last=False)
+
             # Add message
-            self.__processed_messages.append(msg.gossip_message.hash)
+            self._processed_messages[msg.gossip_message.hash] = None
             return True
 
-    def run(self) -> None:
-        """Run the gossiper thread."""
-        while not self.__gossip_terminate_flag.is_set():
-            t = time.time()
+    async def _run(self) -> None:
+        """Run main loop that periodically sends pending messages to neighbors."""
+        while not self._terminate_event.is_set():
+            start_time = asyncio.get_event_loop().time()
             messages_to_send = []
-            messages_left = self.messages_per_period
+            remaining = self.messages_per_period
 
-            # Lock
-            with self.__pending_msgs_lock:
-                # Select the max amount of messages to send
-                while messages_left > 0 and len(self.__pending_msgs) > 0:
-                    head_msg = self.__pending_msgs[0]
-                    # Select msgs
-                    if len(head_msg[1]) < messages_left:
-                        # Select all
-                        messages_to_send.append(head_msg)
-                        # Remove from pending
-                        self.__pending_msgs.pop(0)
+            async with self._pending_msgs_lock:
+                while remaining > 0 and self._pending_msgs:
+                    msg, targets = self._pending_msgs[0]
+                    if len(targets) <= remaining:
+                        messages_to_send.append((msg, targets))
+                        self._pending_msgs.pop(0)
+                        remaining -= len(targets)
                     else:
-                        # Select only the first neis
-                        messages_to_send.append((head_msg[0], head_msg[1][:messages_left]))
-                        # Remove from pending
-                        self.__pending_msgs[0] = (
-                            self.__pending_msgs[0][0],
-                            self.__pending_msgs[0][1][messages_left:],
-                        )
+                        messages_to_send.append((msg, targets[:remaining]))
+                        self._pending_msgs[0] = (msg, targets[remaining:])
+                        remaining = 0
 
             # Send messages
-            for msg, neis in messages_to_send:
-                for nei in neis:
-                    nei.send(msg)
-            # Sleep to allow periodicity
-            sleep_time = max(0, self.period - (t - time.time()))
-            time.sleep(sleep_time)
+            for msg, clients in messages_to_send:
+                for client in clients:
+                    try:
+                        await client.send(msg)
+                    except Exception as e:
+                        logger.warning(self.address, f"Failed to gossip to {client.nei_addr}: {e}")
 
-    ###
-    # Gossip Model (syncronous gossip not as a thread)
-    ###
+            elapsed = asyncio.get_event_loop().time() - start_time
+            await asyncio.sleep(max(0, self.period - elapsed))
 
-    def gossip_weights(
+    async def gossip_weights(
         self,
         early_stopping_fn: Callable[[], bool],
         get_candidates_fn: Callable[[], list[str]],
@@ -177,85 +151,68 @@ class Gossiper(threading.Thread, NodeComponent):
         temporal_connection: bool,
     ) -> None:
         """
-        Gossip model weights. This is a synchronous gossip. End when there are no more neighbors to gossip.
+        Gossips model weights synchronously to a random subset of candidate nodes.
+
+        Continues until early stopping is triggered or neighbor states stabilize.
 
         Args:
-            early_stopping_fn: Function to check if the gossip should stop.
-            get_candidates_fn: Function to get the neighbors to gossip.
-            status_fn: Function to get the status of the node.
-            model_fn: Function to get the model of a neighbor.
-            period: Period of gossip.
-            temporal_connection: Flag to create a connection if neis not connected directly.
+            early_stopping_fn: Whether to stop early.
+            get_candidates_fn: Returns addresses of neighbor nodes.
+            status_fn: Returns the current node state.
+            model_fn: Generates the model to send to each node.
+            period: Delay between gossip rounds.
+            temporal_connection: Whether to use temporary connections.
 
         """
-        # Initialize list with status of nodes in the last X iterations
-        last_x_status: list[Any] = []
+        last_status: list[Any] = []
         j = 0
 
         while True:
-            # Get time to calculate frequency
-            t = time.time()
+            start_time = asyncio.get_event_loop().time()
 
-            # If the trainning has been interrupted, stop waiting
             if early_stopping_fn():
-                logger.info(self.addr, "Stopping model gossip process.")
+                logger.info(self.address, "Stopping model gossip process.")
                 return
 
-            # Get nodes wich need models
-            neis = get_candidates_fn()
+            # Get nodes which need models
+            candidates = get_candidates_fn()
 
             # Determine end of gossip
-            if neis == []:
-                logger.info(self.addr, "🤫 Gossip finished.")
+            if not candidates:
+                logger.info(self.address, "🤫 Gossip finished.")
                 return
 
-            # Save state of neighbors. If nodes are not responding gossip will stop
-            logger.debug(self.addr, f"👥 Gossip remaining nodes: {neis}")
-            if len(last_x_status) != Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS:
-                last_x_status.append(status_fn())
+            logger.debug(self.address, f"👥 Remaining gossip targets: {candidates}")
+
+            current_status = status_fn()
+            if len(last_status) < Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS:
+                last_status.append(current_status)
             else:
-                last_x_status[j] = str(status_fn())
+                last_status[j] = str(current_status)
                 j = (j + 1) % Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS
 
-                # Check if las messages are the same
-                for i in range(len(last_x_status) - 1):
-                    if last_x_status[i] != last_x_status[i + 1]:
-                        break
-                    logger.info(
-                        self.addr,
-                        f"⏹️  Gossiping exited for {Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS} equal rounds.",
-                    )
-                    logger.debug(self.addr, f"Gossip last status: {last_x_status[-1]}")
+                if all(status == last_status[0] for status in last_status):
+                    logger.info(self.address, f"⏹️  Gossip stopped: {Settings.gossip.EXIT_ON_X_EQUAL_ROUNDS} identical rounds.")
+                    logger.debug(self.address, f"Final status: {last_status[-1]}")
                     return
 
-            # Select a random subset of neighbors
-            samples = min(Settings.gossip.MODELS_PER_ROUND, len(neis))
-            neis = random.sample(neis, samples)
-            # Getting all nodes and forcing tmp direct message
-            neis_clients = [v[0] for k, v in self.__neighbors.get_all(only_direct=False).items() if k in neis]
+            # Randomly select a subset of candidate nodes
+            sample_size = min(Settings.gossip.MODELS_PER_ROUND, len(candidates))
+            sampled = random.sample(candidates, sample_size)
 
-            # Generate and Send Model Partial Aggregations (model, node_contributors)
-            for client in neis_clients:
+            # Get clients for sampled nodes
+            clients = [v[0] for k, v in self._neighbors.get_all(only_direct=False).items() if k in sampled]
+
+            # Generate and send model partial aggregations
+            for client in clients:
                 # Get Model
-                model, command_name, round, model_hashes = model_fn(client.nei_addr)
+                model, command_name, round_num, model_hashes = model_fn(client.nei_addr)
                 if model is None:
                     continue
 
-                # Pre send weights
-                presend_msg = self.build_msg_fn(PreSendModelCommand.get_name(), [command_name] + model_hashes, round, direct=True)
-                presend_response = client.send(presend_msg, temporal_connection=temporal_connection)
+                # Send model weights
+                logger.debug(self.address, f"🗣️ Gossiping model to {client.nei_addr}.")
+                await client.send(model, temporal_connection=temporal_connection)
 
-                # Send model
-                if presend_response != "true":
-                    logger.debug(
-                        self.addr, f"Avoiding concurrent model sending to {client.nei_addr}. Msg: {command_name} | Hash: {model_hashes}"
-                    )
-                    continue
-
-                # Send
-                logger.debug(self.addr, f"🗣️ Gossiping model to {client.nei_addr}.")
-                client.send(model, temporal_connection=temporal_connection)
-
-            # Sleep to allow periodicity
-            sleep_time = max(0, period - (t - time.time()))
-            time.sleep(sleep_time)
+            elapsed = asyncio.get_event_loop().time() - start_time
+            await asyncio.sleep(max(0, period - elapsed))

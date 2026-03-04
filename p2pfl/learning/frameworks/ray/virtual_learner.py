@@ -1,0 +1,154 @@
+#
+# This file is part of the federated_learning_p2p (p2pfl) distribution
+# (see https://github.com/pguijas/federated_learning_p2p).
+# Copyright (c) 2022 Pedro Guijas Bravo.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+"""Virtual Node Learner."""
+
+import traceback
+
+import ray
+
+from p2pfl.learning.frameworks.learner import Learner, LearnerDecorator
+from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
+from p2pfl.learning.frameworks.ray.placement_group_manager import PlacementGroupManager
+from p2pfl.management.logger import logger
+
+
+@ray.remote
+class VirtualLearnerActor(LearnerDecorator):
+    """Ray actor wrapper for learners."""
+
+    def terminate(self) -> None:
+        """Manually terminate Actor object."""
+        logger.debug(self.__class__.__name__, f"Manually terminating {self.__class__.__name__}")
+        ray.actor.exit_actor()
+
+
+class VirtualNodeLearner(Learner):
+    """Wrapper that runs a Learner as a Ray actor for distributed execution."""
+
+    def __init__(self, learner: Learner) -> None:
+        """Initialize the learner."""
+        pg_manager = PlacementGroupManager()
+        pg = pg_manager.get_placement_group()
+
+        self.actor = VirtualLearnerActor.options(  # type: ignore[attr-defined]
+            placement_group=pg,
+            placement_group_capture_child_tasks=True,
+        ).remote(learner)
+        self.address = learner.address
+
+    async def fit(self) -> P2PFLModel:
+        """Fit the model."""
+        try:
+            await self.actor.fit.remote()
+            return self.get_model()
+        except Exception as ex:
+            logger.error(self.address, traceback.format_exc())
+            logger.error(self.address, f"An error occurred during remote fit: {ex}")
+            raise ex
+
+    async def train_on_batch(self) -> P2PFLModel:
+        """
+        Train the model on the next batch manually.
+
+        Returns:
+            The model after training on the batch.
+
+        """
+        try:
+            await self.actor.train_on_batch.remote()
+            return self.get_model()
+        except Exception as ex:
+            logger.error(self.address, traceback.format_exc())
+            logger.error(self.address, f"An error occurred during remote train_on_batch: {ex}")
+            raise ex
+
+    async def interrupt_fit(self) -> None:
+        """Interrupt the fit process."""
+        # TODO: Need to implement this!
+        raise NotImplementedError
+
+    async def evaluate(self) -> dict[str, float]:
+        """
+        Evaluate the model with actual parameters.
+
+        Returns:
+            The evaluation results.
+
+        """
+        try:
+            return await self.actor.evaluate.remote()
+        except Exception as ex:
+            logger.error(self.address, traceback.format_exc())
+            logger.error(self.address, f"An error occurred during remote evaluation: {ex}")
+            raise ex
+
+    # Proxy configuration & lifecycle methods
+    def set_address(self, address: str) -> str:
+        """Set the address on both local and remote actor."""
+        ray.get(self.actor.set_address.remote(address))
+        # Cache because is expensive and highly used on logs
+        self.address = address
+        return super().set_address(address)
+
+    def set_model(self, model) -> None:
+        """Set the P2PFL model on the remote actor."""
+        ray.get(self.actor.set_model.remote(model))
+
+    def get_model(self) -> P2PFLModel:
+        """Get the P2PFL model from the remote actor."""
+        return ray.get(self.actor.get_model.remote())
+
+    def set_data(self, data) -> None:
+        """Set the data on the remote actor."""
+        ray.get(self.actor.set_data.remote(data))
+
+    def get_data(self):
+        """Get the data from the remote actor."""
+        return ray.get(self.actor.get_data.remote())
+
+    def indicate_aggregator(self, aggregator) -> None:
+        """Indicate the aggregator on the remote actor."""
+        ray.get(self.actor.indicate_aggregator.remote(aggregator))
+
+    def get_epochs(self) -> int:
+        """Get the number of epochs from the remote actor."""
+        return ray.get(self.actor.get_epochs.remote())
+
+    def set_epochs(self, epochs: int) -> None:
+        """Set the number of epochs on the remote actor."""
+        ray.get(self.actor.set_epochs.remote(epochs))
+
+    def get_steps_per_epoch(self) -> int | None:
+        """Get the steps per epoch from the remote actor."""
+        return ray.get(self.actor.get_steps_per_epoch.remote())
+
+    def set_steps_per_epoch(self, steps: int) -> None:
+        """Set the steps per epoch on the remote actor."""
+        ray.get(self.actor.set_steps_per_epoch.remote(steps))
+
+    def update_callbacks_with_model_info(self) -> None:
+        """Update callbacks with model info on the remote actor."""
+        ray.get(self.actor.update_callbacks_with_model_info.remote())
+
+    def add_callback_info_to_model(self) -> None:
+        """Add callback info to model on the remote actor."""
+        ray.get(self.actor.add_callback_info_to_model.remote())
+
+    def get_framework(self) -> str:
+        """Get the framework from the remote actor."""
+        return ray.get(self.actor.get_framework.remote())

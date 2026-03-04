@@ -18,12 +18,10 @@
 
 """Network topologies for the p2pfl package."""
 
-import time
 from enum import Enum
 
 import numpy as np
 
-from p2pfl.management.logger import logger
 from p2pfl.node import Node
 
 
@@ -111,7 +109,7 @@ class TopologyFactory:
         return matrix
 
     @staticmethod
-    def connect_nodes(adjacency_matrix: np.ndarray, nodes: list[Node]):
+    async def connect_nodes(adjacency_matrix: np.ndarray, nodes: list[Node]) -> None:
         """
         Connect nodes based on the adjacency matrix.
 
@@ -121,12 +119,12 @@ class TopologyFactory:
 
         """
         num_nodes = len(nodes)
+
         for i in range(num_nodes):
             for j in range(i + 1, num_nodes):
                 if adjacency_matrix[i, j] == 1:
                     try:
-                        nodes[i].connect(nodes[j].addr)
-                        logger.info("", f"Connected nodes {nodes[i].addr} and {nodes[j].addr}")
-                        time.sleep(0.1)
+                        await nodes[i].connect(nodes[j].address)
+                        print(f"Connected nodes {nodes[i].address} and {nodes[j].address}")
                     except Exception as e:
-                        logger.error("", f"Error connecting nodes {nodes[i].addr} and {nodes[j].addr}: {e}")
+                        print(f"Error connecting nodes {nodes[i].address} and {nodes[j].address}: {e}")

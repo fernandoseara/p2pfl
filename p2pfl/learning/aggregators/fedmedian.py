@@ -53,7 +53,7 @@ class FedMedian(WeightAggregator):
         """
         # Check if there are models to aggregate
         if len(models) == 0:
-            raise NoModelsToAggregateError(f"({self.addr}) Trying to aggregate models when there are no models")
+            raise NoModelsToAggregateError(f"({self.address}) Trying to aggregate models when there are no models")
 
         # Total Samples
         total_samples = sum([m.get_num_samples() for m in models])

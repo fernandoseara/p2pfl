@@ -20,7 +20,7 @@
 from concurrent import futures
 from os.path import isfile
 
-import grpc
+from grpc import aio, ssl_server_credentials
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.communication.protocols.protobuff.gossiper import Gossiper
@@ -55,8 +55,8 @@ class GrpcServer(ProtobuffServer):
 
         # Server
         maxMsgLength = 1024 * 1024 * 1024
-        self.__server = grpc.server(
-            futures.ThreadPoolExecutor(max_workers=2),
+        self.__server = aio.server(
+            futures.ThreadPoolExecutor(max_workers=10),
             options=[
                 ("grpc.max_send_message_length", maxMsgLength),
                 ("grpc.max_receive_message_length", maxMsgLength),
@@ -64,15 +64,15 @@ class GrpcServer(ProtobuffServer):
         )
         self.__server_started = False
 
-    def set_addr(self, addr: str) -> str:
-        """Parse and set the addr of the node."""
-        return super().set_addr(AddressParser(addr).get_parsed_address())
+    def set_address(self, address: str) -> str:
+        """Parse and set the address of the node."""
+        return super().set_address(AddressParser(address).get_parsed_address())
 
     ####
     # Management
     ####
 
-    def start(self, wait: bool = False) -> None:
+    async def start(self, wait: bool = False) -> None:
         """
         Start the GRPC server.
 
@@ -92,25 +92,25 @@ class GrpcServer(ProtobuffServer):
                     private_key = key_file.read().encode()
                     certificate_chain = crt_file.read().encode()
                     root_certificates = ca_file.read().encode()
-                server_credentials = grpc.ssl_server_credentials(
+                server_credentials = ssl_server_credentials(
                     [(private_key, certificate_chain)], root_certificates=root_certificates, require_client_auth=True
                 )
-                self.__server.add_secure_port(self.addr, server_credentials)
+                self.__server.add_secure_port(self.address, server_credentials)
             else:
-                self.__server.add_insecure_port(self.addr)
+                self.__server.add_insecure_port(self.address)
         except Exception as e:
-            raise Exception(f"Cannot bind the address ({self.addr}): {e}") from e
-        self.__server.start()
+            raise Exception(f"Cannot bind the address ({self.address}): {e}") from e
+        await self.__server.start()
         self.__server_started = True
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the GRPC server."""
-        self.__server.stop(0)
+        await self.__server.stop(0)
         self.__server_started = False
 
-    def wait_for_termination(self) -> None:
+    async def wait_for_termination(self) -> None:
         """Wait for termination."""
-        self.__server.wait_for_termination()
+        await self.__server.wait_for_termination()
 
     def is_running(self) -> bool:
         """

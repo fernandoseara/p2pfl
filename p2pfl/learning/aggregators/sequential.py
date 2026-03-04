@@ -45,7 +45,7 @@ class SequentialLearning(Aggregator):
 
     Example:
         >>> aggregator = SequentialLearning()
-        >>> aggregator.set_addr("node1")
+        >>> aggregator.set_address("node1")
         >>> result = aggregator.aggregate([single_model])
 
     """
@@ -82,10 +82,10 @@ class SequentialLearning(Aggregator):
 
         """
         if len(models) == 0:
-            raise NoModelsToAggregateError(f"({self.addr}) No models to aggregate")
+            raise NoModelsToAggregateError(f"({self.address}) No models to aggregate")
 
         if len(models) > 1:
-            raise ValueError(f"({self.addr}) SequentialLearning expects exactly one model, got {len(models)}")
+            raise ValueError(f"({self.address}) SequentialLearning expects exactly one model, got {len(models)}")
 
         model = models[0]
         return model.build_copy(params=model.get_parameters(), num_samples=model.get_num_samples(), contributors=model.get_contributors())

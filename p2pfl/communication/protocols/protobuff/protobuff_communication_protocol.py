@@ -1,6 +1,6 @@
 #
 # This file is part of the federated_learning_p2p (p2pfl) distribution (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 
 """GRPC communication protocol."""
 
+import asyncio
 import random
 from abc import abstractmethod
 from collections.abc import Callable
@@ -25,7 +26,7 @@ from functools import wraps
 from typing import Any
 
 from p2pfl.communication.commands.command import Command
-from p2pfl.communication.commands.message.heartbeat_command import HeartbeatCommand
+from p2pfl.communication.commands.infrastructure import HeartbeatCommand
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.communication.protocols.exceptions import CommunicationError, ProtocolNotStartedError
 from p2pfl.communication.protocols.protobuff.client import ProtobuffClient
@@ -71,13 +72,13 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         # (addr) Super
         CommunicationProtocol.__init__(self)
         # Neighbors
-        self._neighbors = Neighbors(self.bluid_client)
+        self._neighbors: Neighbors = Neighbors(self.build_client)
         # Gossip
         self._gossiper = Gossiper(self._neighbors, self.build_msg)
         # GRPC
-        self._server = self.build_server(self._gossiper, self._neighbors, commands)
+        self._server: ProtobuffServer = self.build_server(self._gossiper, self._neighbors, commands)
         # Hearbeat
-        self._heartbeater = Heartbeater(self._neighbors, self.build_msg)
+        self._heartbeater: Heartbeater = Heartbeater(self._neighbors, self.build_msg)
         # Commands
         self.add_command(HeartbeatCommand(self._heartbeater))
         if commands is None:
@@ -86,7 +87,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
 
     @allow_no_addr_check
     @abstractmethod
-    def bluid_client(self, *args, **kwargs) -> ProtobuffClient:
+    def build_client(self, *args, **kwargs) -> ProtobuffClient:
         """Build client function."""
         pass
 
@@ -96,30 +97,33 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         """Build server function."""
         pass
 
-    def set_addr(self, addr: str) -> str:
-        """Set the addr of the node."""
+    def set_address(self, address: str) -> str:
+        """Set the address of the node."""
         # Delegate on server
-        addr = self._server.set_addr(addr)
+        address = self._server.set_address(address)
         # Update components
-        self._neighbors.set_addr(addr)
-        self._gossiper.set_addr(addr)
-        self._heartbeater.set_addr(addr)
+        self._neighbors.set_address(address)
+        self._heartbeater.set_address(address)
+        self._gossiper.set_address(address)
         # Set on super
-        return super().set_addr(addr)
+        return super().set_address(address)
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the GRPC communication protocol."""
-        self._server.start()
-        self._heartbeater.start()
-        self._gossiper.start()
+        await self._server.start()
+        await self._heartbeater.start()
+        await self._gossiper.start()
 
     @running
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the GRPC communication protocol."""
-        self._heartbeater.stop()
-        self._gossiper.stop()
-        self._neighbors.clear_neighbors()
-        self._server.stop()
+        # Run the stop methods of async tasks, awaiting their completion
+        await self._heartbeater.stop()
+        await self._gossiper.stop()
+
+        # Clear neighbors and stop the server
+        await self._neighbors.clear_neighbors()
+        await self._server.stop()
 
     @allow_no_addr_check
     def add_command(self, cmds: Command | list[Command]) -> None:
@@ -132,8 +136,19 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         """
         self._server.add_command(cmds)
 
+    @allow_no_addr_check
+    def remove_command(self, cmd: str | Command) -> None:
+        """
+        Remove a command from the communication protocol.
+
+        Args:
+            cmd: The command to remove.
+
+        """
+        self._server.remove_command(cmd)
+
     @running
-    def connect(self, addr: str, non_direct: bool = False) -> bool:
+    async def connect(self, addr: str, non_direct: bool = False) -> bool:
         """
         Connect to a neighbor.
 
@@ -142,10 +157,10 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
             non_direct: The non direct flag.
 
         """
-        return self._neighbors.add(addr, non_direct=non_direct)
+        return await self._neighbors.add(addr, non_direct=non_direct)
 
     @running
-    def disconnect(self, nei: str, disconnect_msg: bool = True) -> None:
+    async def disconnect(self, nei: str, disconnect_msg: bool = True) -> None:
         """
         Disconnect from a neighbor.
 
@@ -154,20 +169,21 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
             disconnect_msg: The disconnect message flag.
 
         """
-        self._neighbors.remove(nei, disconnect_msg=disconnect_msg)
+        await self._neighbors.remove(nei, disconnect_msg=disconnect_msg)
 
     def build_msg(self, cmd: str, args: list[str] | None = None, round: int | None = None, direct: bool = False) -> node_pb2.RootMessage:
         """
-        Build a RootMessage to send to the neighbors.
+        Build a Message to send to the neighbors.
 
         Args:
             cmd: Command of the message.
             args: Arguments of the message.
             round: Round of the message.
-            direct: If direct message.
+            direct: If True, builds a point-to-point message (no propagation, can return response).
+                If False (default), builds a gossip message (propagates with TTL, fire-and-forget).
 
         Returns:
-            RootMessage to send.
+            Message to send.
 
         """
         if round is None:
@@ -178,7 +194,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
 
         if direct:
             return node_pb2.RootMessage(
-                source=self.addr,
+                source=self.address,
                 round=round,
                 cmd=cmd,
                 direct_message=node_pb2.DirectMessage(
@@ -188,7 +204,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         else:
             hs = hash(str(cmd) + str(args) + str(datetime.now()) + str(random.randint(0, 100000)))
             return node_pb2.RootMessage(
-                source=self.addr,
+                source=self.address,
                 round=round,
                 cmd=cmd,
                 gossip_message=node_pb2.GossipMessage(
@@ -223,7 +239,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         if contributors is None:
             contributors = []
         return node_pb2.RootMessage(
-            source=self.addr,
+            source=self.address,
             round=round,
             cmd=cmd,
             weights=node_pb2.Weights(
@@ -234,13 +250,14 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         )
 
     @running
-    def send(
+    async def send(
         self,
         nei: str,
         msg: node_pb2.RootMessage,
         raise_error: bool = False,
         remove_on_error: bool = True,
-    ) -> None:
+        temporal_connection: bool = False,
+    ) -> str:
         """
         Send a message to a neighbor.
 
@@ -249,18 +266,25 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
             msg: The message to send.
             raise_error: If raise error.
             remove_on_error: If remove on error.
+            temporal_connection: If temporal connection.
+
+        Returns:
+            The response from the neighbor (for direct messages).
 
         """
         try:
-            self._neighbors.get(nei).send(msg, raise_error=raise_error, disconnect_on_error=remove_on_error)
+            return await self._neighbors.get(nei).send(
+                msg, temporal_connection=temporal_connection, raise_error=raise_error, disconnect_on_error=remove_on_error
+            )
         except CommunicationError as e:
             if remove_on_error:
-                self._neighbors.remove(nei)
+                await self._neighbors.remove(nei)
             if raise_error:
                 raise e
+            return ""
 
     @running
-    def broadcast(self, msg: node_pb2.RootMessage, node_list: list[str] | None = None) -> None:
+    async def broadcast(self, msg: node_pb2.RootMessage, node_list: list[str] | None = None) -> None:
         """
         Broadcast a message to all neighbors.
 
@@ -271,8 +295,49 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         """
         neis = self._neighbors.get_all(only_direct=True)
         neis_clients = [nei[0] for nei in neis.values()]
-        for nei in neis_clients:
-            nei.send(msg)
+
+        await asyncio.gather(*(nei.send(msg) for nei in neis_clients))
+
+    @running
+    async def gossip(
+        self,
+        nei: str,
+        msg: node_pb2.RootMessage,
+        raise_error: bool = False,
+        remove_on_error: bool = True,
+        temporal_connection: bool = False,
+    ) -> None:
+        """
+        Gossip a message to a neighbor.
+
+        Args:
+            nei: The neighbor to gossip the message.
+            msg: The message to gossip.
+            raise_error: If raise error.
+            remove_on_error: If remove on error.
+            temporal_connection: If temporal connection.
+
+        """
+        msg.gossip_message.ttl = Settings.gossip.TTL
+
+        await self.send(nei, msg, raise_error=raise_error, remove_on_error=remove_on_error, temporal_connection=temporal_connection)
+
+    @running
+    async def broadcast_gossip(self, msg: node_pb2.RootMessage, node_list: list[str] | None = None) -> None:
+        """
+        Gossip a message to all neighbors.
+
+        Args:
+            msg: The message to gossip.
+            node_list: Optional node list.
+
+        """
+        msg.gossip_message.ttl = Settings.gossip.TTL
+
+        neis = self._neighbors.get_all(only_direct=True)
+        neis_clients = [nei[0] for nei in neis.values()]
+
+        await asyncio.gather(*(nei.send(msg) for nei in neis_clients))
 
     @running
     def get_neighbors(self, only_direct: bool = False) -> dict[str, Any]:
@@ -286,18 +351,12 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         return self._neighbors.get_all(only_direct)
 
     @running
-    def wait_for_termination(self) -> None:
-        """
-        Get the neighbors.
-
-        Args:
-            only_direct: The only direct flag.
-
-        """
-        self._server.wait_for_termination()
+    async def wait_for_termination(self) -> None:
+        """Wait for the server to terminate."""
+        await self._server.wait_for_termination()
 
     @running
-    def gossip_weights(
+    async def gossip_weights(
         self,
         early_stopping_fn: Callable[[], bool],
         get_candidates_fn: Callable[[], list[str]],
@@ -320,7 +379,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         """
         if period is None:
             period = Settings.gossip.MODELS_PERIOD
-        self._gossiper.gossip_weights(
+        await self._gossiper.gossip_weights(
             early_stopping_fn,
             get_candidates_fn,
             status_fn,

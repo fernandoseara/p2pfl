@@ -1,6 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/p2pfl).
+# This file is part of the p2pfl (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2022 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,7 +16,7 @@
 #
 """Utils tests."""
 
-from unittest.mock import MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call
 
 import numpy as np
 import pytest
@@ -30,9 +29,9 @@ from p2pfl.utils.topologies import TopologyFactory, TopologyType
 class MockNode:
     """Mock Node class for testing."""
 
-    def __init__(self, addr):
+    def __init__(self, address):
         """Initialize the mock node."""
-        self.addr = addr
+        self.address = address
         self.connect = MagicMock()
 
 
@@ -52,6 +51,7 @@ def test_generate_matrix(topology_type, expected_matrix):
     assert np.array_equal(matrix, expected_matrix)
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "adjacency_matrix, expected_calls",
     [
@@ -75,11 +75,15 @@ def test_generate_matrix(topology_type, expected_matrix):
         ),
     ],
 )
-def test_connect_nodes(adjacency_matrix, expected_calls):
+async def test_connect_nodes(adjacency_matrix, expected_calls):
     """Test that nodes are connected according to the provided adjacency matrix."""
     num_nodes = adjacency_matrix.shape[0]  # Get num_nodes from matrix shape
     nodes = [MockNode(f"address_{i}") for i in range(num_nodes)]
-    TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+    # Replace connect with AsyncMock
+    for node in nodes:
+        node.connect = AsyncMock()
+
+    await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
 
     for i, calls in enumerate(expected_calls):
         nodes[i].connect.assert_has_calls(calls, any_order=True)
@@ -152,7 +156,7 @@ class MockNodeComponent(NodeComponent):
 
     def example_method(self) -> str:
         """Return the address. Example method that requires addr to be set."""
-        return self.addr
+        return self.address
 
     @allow_no_addr_check
     def get_default_name(self) -> str:
@@ -163,12 +167,12 @@ class MockNodeComponent(NodeComponent):
 def test_node_component_initialization():
     """Test initial state and setting of addr."""
     component = MockNodeComponent()
-    assert component.addr == ""
+    assert component.address == ""
 
-    addr = "test_address"
-    returned_addr = component.set_addr(addr)
-    assert component.addr == addr
-    assert returned_addr == addr
+    address = "test_address"
+    returned_addr = component.set_address(address)
+    assert component.address == address
+    assert returned_addr == address
 
 
 def test_node_component_methods():
@@ -182,5 +186,5 @@ def test_node_component_methods():
 
     # Method call with addr set should succeed
     addr = "test_address"
-    component.set_addr(addr)
+    component.set_address(addr)
     assert component.example_method() == addr

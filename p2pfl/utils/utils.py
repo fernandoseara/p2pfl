@@ -17,6 +17,7 @@
 #
 """Utils."""
 
+import asyncio
 import time
 
 import numpy as np
@@ -24,6 +25,7 @@ import numpy as np
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.management.logger import logger
 from p2pfl.node import Node
+from p2pfl.node_state import NodeState
 from p2pfl.settings import Settings
 
 """
@@ -51,7 +53,7 @@ def set_standalone_settings() -> None:
     Settings.heartbeat.WAIT_CONVERGENCE = 2
     Settings.heartbeat.EXCLUDE_BEAT_LOGS = True
     Settings.gossip.PERIOD = 0
-    Settings.gossip.TTL = 10
+    Settings.gossip.TTL = 51
     Settings.gossip.MESSAGES_PER_PERIOD = 9999999999
     Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED = 10000
     Settings.gossip.MODELS_PERIOD = 2
@@ -64,7 +66,7 @@ def set_standalone_settings() -> None:
     logger.set_level(Settings.general.LOG_LEVEL)  # Refresh (maybe already initialized)
 
 
-def wait_convergence(
+async def wait_convergence(
     nodes: list[Node | CommunicationProtocol],
     n_neis: int,
     wait: int | float = 5,
@@ -94,7 +96,7 @@ def wait_convergence(
             break
         if debug:
             _print_connectivity_matrix(nodes, only_direct, final=False)
-        time.sleep(1)
+        await asyncio.sleep(0.1)
         acum += time.time() - begin
         if acum > wait:
             raise AssertionError()
@@ -122,7 +124,7 @@ def _print_connectivity_matrix(
     for i, node in enumerate(nodes):
         neighbors = node.get_neighbors(only_direct=only_direct)
         for j, other_node in enumerate(nodes):
-            if i != j and other_node.addr in neighbors:
+            if i != j and other_node.address in neighbors:
                 matrix[i][j] = 1
 
     # Build complete visualization as a single string
@@ -141,7 +143,7 @@ def _print_connectivity_matrix(
     # Print node addresses for reference
     output_lines.append("Node Addresses:")
     for i, node in enumerate(nodes):
-        addr_display = node.addr if len(str(node.addr)) < 20 else f"...{str(node.addr)[-17:]}"
+        addr_display = node.address if len(str(node.address)) < 20 else f"...{str(node.address)[-17:]}"
         output_lines.append(f"  Node {i}: {addr_display}")
 
     # Print connectivity matrix with visual formatting
@@ -188,7 +190,7 @@ def _print_connectivity_matrix(
         logger.info("Waiting for convergence", matrix_display)
 
 
-def full_connection(node: Node, nodes: list[Node]) -> None:
+async def full_connection(node: Node, nodes: list[Node]) -> None:
     """
     Connect node to all nodes.
 
@@ -198,7 +200,7 @@ def full_connection(node: Node, nodes: list[Node]) -> None:
 
     """
     for n in nodes:
-        node.connect(n.addr)
+        await node.connect(n.address)
 
 
 class NodeLearningError(Exception):
@@ -217,7 +219,7 @@ class NodeLearningError(Exception):
         super().__init__(f"Learning failed on {len(failed_nodes)} node(s): {node_errors}")
 
 
-def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_error=True) -> None:
+async def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_error=True) -> None:
     """
     Wait until all nodes have finished the workflow.
 
@@ -232,24 +234,28 @@ def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_error=
         NodeLearningError: If any node failed during learning (when raise_on_error=True).
 
     """
-    # Wait until all nodes finish the workflow
+    # Wait until all nodes finish the workflow (either success or failure)
     start = time.time()
     while True:
         if debug:
             logger.info(
                 "Waiting for nodes to finish",
-                str([n.learning_workflow.finished for n in nodes]),
+                str([(n.state.value,) for n in nodes]),
             )
-        if all(n.learning_workflow.finished for n in nodes):
+        # Exit loop when all nodes have completed (success or failure)
+        if all(n.state.is_terminal for n in nodes):
             break
-        time.sleep(1)
+        await asyncio.sleep(1)
         elapsed = time.time() - start
         if elapsed > timeout:
             raise TimeoutError(f"Timeout waiting for nodes to finish (elapsed: {int(elapsed // 60)} minutes {int(elapsed % 60)} seconds)")
 
     # Check for failures
     if raise_on_error:
-        failed = [(n.addr, n.learning_workflow.error) for n in nodes if n.learning_workflow.failed and n.learning_workflow.error]
+        failed: list[tuple[str, Exception]] = []
+        for n in nodes:
+            if n.state == NodeState.FAILED and n.workflow is not None and n.workflow.error is not None:
+                failed.append((n.address, n.workflow.error))
         if failed:
             raise NodeLearningError(failed)
 
@@ -269,7 +275,7 @@ def check_equal_models(nodes: list[Node]) -> None:
     first = True
     for node in nodes:
         if first:
-            model_params = node.learner.get_model().get_parameters()
+            model_params = node.model.get_parameters()
             first = False
         else:
             # compare layers with a tolerance
@@ -278,6 +284,6 @@ def check_equal_models(nodes: list[Node]) -> None:
             for i, layer in enumerate(model_params):
                 assert np.allclose(
                     layer,
-                    node.learner.get_model().get_parameters()[i],
+                    node.model.get_parameters()[i],
                     atol=1e-1,
                 )

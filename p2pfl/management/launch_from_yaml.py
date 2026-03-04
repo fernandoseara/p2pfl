@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 """Launch from YAMLs."""
 
 import importlib
+import logging
 import os
 import time
 import uuid
@@ -48,7 +49,7 @@ def load_by_package_and_name(package_name, class_name) -> Any:
     return getattr(module, class_name)
 
 
-def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
+async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     """
     Run a simulation from a YAML file.
 
@@ -57,6 +58,8 @@ def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
         debug: If True, enable debug mode.
 
     """
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+
     # Parse YAML configuration
     with open(yaml_path) as file:
         config = yaml.safe_load(file)
@@ -220,6 +223,14 @@ def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     def aggregator_fn() -> Aggregator:
         return aggregator_class(**aggregator.get("params", {}))
 
+    ############
+    # Workflow #
+    ############
+    workflow = experiment_config.get("workflow")
+    if not workflow:
+        raise ValueError("Missing 'workflow' configuration in YAML file.")
+    workflow_name: str = workflow
+
     ###########
     # Network #
     ###########
@@ -241,7 +252,7 @@ def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
             protocol=protocol(),
             aggregator=aggregator_fn(),
         )
-        node.start()
+        await node.start()
         nodes.append(node)
 
     try:
@@ -255,14 +266,14 @@ def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
                 Some messages will not be delivered depending on the topology."""
             )
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
-        TopologyFactory.connect_nodes(adjacency_matrix, nodes)
-        wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=False)  # type: ignore
+        await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+        await wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=False)  # type: ignore
 
         # Additional connections
         additional_connections = network_config.get("additional_connections")
         if additional_connections:
             for source, connect_to in additional_connections:
-                nodes[source].connect(nodes[connect_to].addr)
+                await nodes[source].connect(nodes[connect_to].address)
 
         # Start Learning
         r = experiment_config.get("rounds")
@@ -272,19 +283,19 @@ def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size)
+        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size, workflow=workflow_name)
 
         # Wait and check
         # Get wait_timeout from experiment config (in minutes), default to 60 minutes (1 hour)
         wait_timeout = experiment_config.get("wait_timeout", 60)
-        wait_to_finish(nodes, timeout=wait_timeout * 60, debug=debug)  # Convert minutes to seconds
+        await wait_to_finish(nodes, timeout=wait_timeout * 60, debug=debug)
 
     except Exception as e:
         raise e
     finally:
         # Stop Nodes
         for node in nodes:
-            node.stop()
+            await node.stop()
         # Profiling
         if start_time:
             print(f"Execution time: {time.time() - start_time} seconds")

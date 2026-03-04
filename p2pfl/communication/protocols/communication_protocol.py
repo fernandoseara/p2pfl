@@ -1,7 +1,7 @@
 #
 # This file is part of the federated_learning_p2p (p2pfl) distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2024 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,7 +16,14 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Communication protocol."""
+"""
+Communication protocol.
+
+Message Types:
+    - **Gossip**: Fire-and-forget, propagates through network with TTL. No response.
+    - **Direct**: Point-to-point, awaited for response. Use for request-response patterns.
+    - **Weights**: Binary model data, fire-and-forget. No response.
+"""
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -31,7 +38,6 @@ class CommunicationProtocol(ABC, NodeComponent):
     Communication protocol interface.
 
     Args:
-        addr: The address.
         commands: The commands.
 
     """
@@ -42,12 +48,12 @@ class CommunicationProtocol(ABC, NodeComponent):
         NodeComponent.__init__(self)
 
     @abstractmethod
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the communication protocol."""
         pass
 
     @abstractmethod
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the communication protocol."""
         pass
 
@@ -63,21 +69,45 @@ class CommunicationProtocol(ABC, NodeComponent):
         """
         pass
 
+    @allow_no_addr_check
     @abstractmethod
-    def build_msg(self, cmd: str, args: list[str] | None = None, round: int | None = None) -> Any:
+    def remove_command(self, cmd: str | Command) -> None:
         """
-        Build a message.
+        Remove a command from the communication protocol.
 
         Args:
-            cmd: The message.
-            args: The arguments.
-            round: The round.
+            cmd: The command to remove.
 
         """
         pass
 
     @abstractmethod
-    def build_weights(self, cmd: str, round: int, serialized_model: bytes, contributors: list[str] | None = None, weight: int = 1) -> Any:
+    def build_msg(self, cmd: str, args: list[Any] | None = None, round: int | None = None, direct: bool = False) -> Any:
+        """
+        Build a message to send to the neighbors.
+
+        Args:
+            cmd: Command of the message.
+            args: Arguments of the message.
+            round: Round of the message.
+            direct: If True, builds a point-to-point message (no propagation, can return response).
+                If False (default), builds a gossip message (propagates with TTL, fire-and-forget).
+
+        Returns:
+            Message to send.
+
+        """
+        pass
+
+    @abstractmethod
+    def build_weights(
+        self,
+        cmd: str,
+        round: int,
+        serialized_model: bytes,
+        contributors: list[str] | None = None,
+        weight: int = 1,
+    ) -> Any:
         """
         Build weights.
 
@@ -92,13 +122,14 @@ class CommunicationProtocol(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    def send(
+    async def send(
         self,
         nei: str,
         msg: Any,
         raise_error: bool = False,
         remove_on_error: bool = True,
-    ) -> None:
+        temporal_connection: bool = False,
+    ) -> str:
         """
         Send a message to a neighbor.
 
@@ -107,12 +138,16 @@ class CommunicationProtocol(ABC, NodeComponent):
             msg: The message to send.
             raise_error: If raise error.
             remove_on_error: If remove on error.
+            temporal_connection: If temporal connection.
+
+        Returns:
+            The response from the neighbor (for direct messages).
 
         """
         pass
 
     @abstractmethod
-    def broadcast(self, msg: Any, node_list: list[str] | None = None) -> None:
+    async def broadcast(self, msg: Any, node_list: list[str] | None = None) -> None:
         """
         Broadcast a message to all neighbors.
 
@@ -124,19 +159,53 @@ class CommunicationProtocol(ABC, NodeComponent):
         pass
 
     @abstractmethod
-    def connect(self, addr: str, non_direct: bool = False) -> bool:
+    async def gossip(
+        self,
+        nei: str,
+        msg: Any,
+        raise_error: bool = False,
+        remove_on_error: bool = True,
+        temporal_connection: bool = False,
+    ) -> None:
+        """
+        Gossip a message to a neighbor.
+
+        Args:
+            nei: The neighbor to gossip the message.
+            msg: The message to gossip.
+            raise_error: If raise error.
+            remove_on_error: If remove on error.
+            temporal_connection: If temporal connection.
+
+        """
+        pass
+
+    @abstractmethod
+    async def broadcast_gossip(self, msg: Any, node_list: list[str] | None = None) -> None:
+        """
+        Gossip a message to all neighbors.
+
+        Args:
+            msg: The message to gossip.
+            node_list: Optional node list.
+
+        """
+        pass
+
+    @abstractmethod
+    async def connect(self, address: str, non_direct: bool = False) -> bool:
         """
         Connect to a neighbor.
 
         Args:
-            addr: The address to connect to.
+            address: The address to connect to.
             non_direct: The non direct flag.
 
         """
         pass
 
     @abstractmethod
-    def disconnect(self, nei: str, disconnect_msg: bool = True) -> None:
+    async def disconnect(self, nei: str, disconnect_msg: bool = True) -> None:
         """
         Disconnect from a neighbor.
 
@@ -166,15 +235,15 @@ class CommunicationProtocol(ABC, NodeComponent):
             The address.
 
         """
-        return self.addr
+        return self.address
 
     @abstractmethod
-    def wait_for_termination(self) -> None:
+    async def wait_for_termination(self) -> None:
         """Wait for termination."""
         pass
 
     @abstractmethod
-    def gossip_weights(
+    async def gossip_weights(
         self,
         early_stopping_fn: Callable[[], bool],
         get_candidates_fn: Callable[[], list[str]],

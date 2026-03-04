@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@
 # gprof2dot -f pstats Gossiper-10.pstat | dot -Tpng -o output.png && open output.png
 
 import argparse
+import asyncio
+import logging
 import time
 import uuid
 
@@ -38,6 +40,7 @@ from p2pfl.node import Node
 from p2pfl.settings import Settings
 from p2pfl.utils.topologies import TopologyFactory, TopologyType
 from p2pfl.utils.utils import set_standalone_settings, wait_convergence, wait_to_finish
+from p2pfl.workflow.factory import list_workflows
 
 
 def __parse_args() -> argparse.Namespace:
@@ -51,6 +54,7 @@ def __parse_args() -> argparse.Namespace:
     parser.add_argument("--protocol", type=str, help="The protocol to use.", default="grpc", choices=["grpc", "unix", "memory"])
     parser.add_argument("--framework", type=str, help="The framework to use.", default="pytorch", choices=["pytorch", "tensorflow", "flax"])
     parser.add_argument("--aggregator", type=str, help="The aggregator to use.", default="fedavg", choices=["fedavg", "scaffold"])
+    parser.add_argument("--workflow", type=str, help="The workflow to use", default="basic", choices=list_workflows())
     parser.add_argument("--profiling", action="store_true", help="Enable profiling.", default=False)
     parser.add_argument("--reduced_dataset", action="store_true", help="Use a reduced dataset just for testing.", default=False)
     parser.add_argument("--use_scaffold", action="store_true", help="Use the Scaffold aggregator.", default=False)
@@ -70,7 +74,7 @@ def __parse_args() -> argparse.Namespace:
     return args
 
 
-def mnist(
+async def mnist(
     n: int,
     r: int,
     e: int,
@@ -79,6 +83,7 @@ def mnist(
     protocol: str = "grpc",
     framework: str = "pytorch",
     aggregator: str = "fedavg",
+    workflow: str = "basic",
     reduced_dataset: bool = False,
     topology: TopologyType = TopologyType.LINE,
     batch_size: int = 128,
@@ -95,11 +100,14 @@ def mnist(
         protocol: The protocol to use.
         framework: The framework to use.
         aggregator: The aggregator to use.
+        workflow: The workflow type to use.
         reduced_dataset: Use a reduced dataset just for testing.
         topology: The network topology (star, full, line, ring).
         batch_size: The batch size for training.
 
     """
+    logger.set_level(level=logging.INFO)
+
     if measure_time:
         start_time = time.time()
 
@@ -119,7 +127,7 @@ def mnist(
 
         model_fn = model_build_fn  # type: ignore
     else:
-        raise ValueError(f"Framework {args.framework} not added on this example.")
+        raise ValueError(f"Framework {framework} not added on this example.")
 
     # Data
     data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
@@ -139,29 +147,35 @@ def mnist(
             model_fn(),
             partitions[i],
             protocol=MemoryCommunicationProtocol() if protocol == "memory" else GrpcCommunicationProtocol(),
-            addr=address,
+            address=address,
             aggregator=Scaffold() if aggregator == "scaffold" else None,
         )
-        node.start()
+        await node.start()
         nodes.append(node)
 
     try:
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
-        TopologyFactory.connect_nodes(adjacency_matrix, nodes)
+        await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
 
-        wait_convergence(nodes, n - 1, only_direct=False, wait=60)  # type: ignore
+        await wait_convergence(nodes, n - 1, only_direct=False, wait=60)  # type: ignore
 
         if r < 1:
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        nodes[0].set_start_learning(rounds=r, epochs=e)
+        await nodes[0].set_start_learning(rounds=r, epochs=e, workflow=workflow)
 
         # Wait and check
-        wait_to_finish(nodes, timeout=60 * 60)  # 1 hour
+        await wait_to_finish(nodes, timeout=60 * 60)  # 1 hour
 
         # Local Logs
         if show_metrics:
+            import os  # noqa: I001
+
+            # Create directories to avoid clutter and overwrite
+            os.makedirs("plots/local", exist_ok=True)
+            os.makedirs("plots/global", exist_ok=True)
+
             local_logs = logger.get_local_logs()
             if local_logs != {}:
                 logs_l = list(local_logs.items())[0][1]
@@ -177,10 +191,12 @@ def mnist(
                             plt.xlabel("Epoch")
                             plt.ylabel(metric)
                             plt.legend()
-                            plt.show()
+                            plt.savefig(f"plots/local/round{round_num}_{node_name}_{metric}.png")
+                            plt.close()
 
             # Global Logs
             global_logs = logger.get_global_logs()
+            print(f"Global logs: {global_logs}")
             if global_logs != {}:
                 logs_g = list(global_logs.items())[0][1]  # Accessing the nested dictionary directly
                 # Plot experiment metrics
@@ -194,19 +210,22 @@ def mnist(
                         plt.xlabel("Epoch")
                         plt.ylabel(metric)
                         plt.legend()
-                        plt.show()
+                        plt.savefig(f"plots/global/{node_name}_{metric}.png")
+                        plt.close()
     except Exception as e:
         raise e
     finally:
         # Stop Nodes
         for node in nodes:
-            node.stop()
+            await node.stop()
 
         if measure_time:
             print("--- %s seconds ---" % (time.time() - start_time))
 
 
 if __name__ == "__main__":
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+
     # Parse args
     args = __parse_args()
 
@@ -229,18 +248,21 @@ if __name__ == "__main__":
 
     # Launch experiment
     try:
-        mnist(
-            args.nodes,
-            args.rounds,
-            args.epochs,
-            show_metrics=args.show_metrics,
-            measure_time=args.measure_time,
-            protocol=args.protocol,
-            framework=args.framework,
-            aggregator=args.aggregator,
-            reduced_dataset=args.reduced_dataset,
-            topology=args.topology,
-            batch_size=args.batch_size,
+        asyncio.run(
+            mnist(
+                args.nodes,
+                args.rounds,
+                args.epochs,
+                show_metrics=args.show_metrics,
+                measure_time=args.measure_time,
+                protocol=args.protocol,
+                framework=args.framework,
+                aggregator=args.aggregator,
+                workflow=args.workflow,
+                reduced_dataset=args.reduced_dataset,
+                topology=args.topology,
+                batch_size=args.batch_size,
+            )
         )
     finally:
         if args.profiling:

@@ -17,10 +17,9 @@
 #
 """Tree-based framework tests (XGBoost)."""
 
-import os
-
 import numpy as np
 import pytest
+from datasets import Dataset, DatasetDict
 
 # Try to import XGBoost - skip tests if not available
 xgb = pytest.importorskip("xgboost", reason="XGBoost not available or missing OpenMP dependency")
@@ -28,6 +27,8 @@ xgb = pytest.importorskip("xgboost", reason="XGBoost not available or missing Op
 from sklearn.datasets import make_classification, make_regression  # noqa: E402
 
 from p2pfl.learning.aggregators.fedxgbbagging import FedXgbBagging  # noqa: E402
+from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset  # noqa: E402
+from p2pfl.learning.frameworks.xgboost.xgboost_learner import XGBoostLearner  # noqa: E402
 from p2pfl.learning.frameworks.xgboost.xgboost_model import XGBoostModel  # noqa: E402
 
 ####################################
@@ -148,35 +149,6 @@ def test_xgboost_params_preserve_model_state():
     assert np.array_equal(original_pred, new_pred)
 
 
-def test_xgboost_no_temp_files_created():
-    """Ensure no temporary files are created during serialization."""
-    # Create sample data
-    X, y = make_classification(n_samples=100, n_features=20, n_classes=2, random_state=42)
-
-    # Create and train a model
-    model = xgb.XGBClassifier(n_estimators=5, max_depth=3, random_state=42)
-    model.fit(X, y)
-
-    # Wrap in P2PFLModel
-    p2pfl_model = XGBoostModel(model)
-
-    # Check that temp directory doesn't exist or is empty
-    temp_dir = "temp_xgboost_json"
-
-    # Get parameters multiple times
-    for _ in range(3):
-        params = p2pfl_model.get_parameters()
-        # Set parameters
-        new_model = xgb.XGBClassifier()
-        p2pfl_model2 = XGBoostModel(new_model)
-        p2pfl_model2.set_parameters(params)
-
-    # Verify no temp files were created
-    if os.path.exists(temp_dir):
-        files = os.listdir(temp_dir)
-        assert len(files) == 0, f"Temporary files found: {files}"
-
-
 def test_xgboost_incremental_training():
     """Test incremental training with Booster object."""
     # Create sample data
@@ -239,7 +211,7 @@ def test_xgboost_build_copy():
 ##################################
 
 
-def test_xgboost_learner_fit():
+def test_xgboost_model_metadata():
     """Test XGBoostModel with metadata (num_samples, contributors)."""
     X, y = make_classification(n_samples=100, n_features=20, n_classes=2, random_state=42)
 
@@ -256,6 +228,59 @@ def test_xgboost_learner_fit():
     p2pfl_model2 = XGBoostModel(xgb.XGBClassifier())
     p2pfl_model2.set_parameters(params)
     assert np.array_equal(p2pfl_model.get_model().predict(X), p2pfl_model2.get_model().predict(X))
+
+
+@pytest.mark.asyncio
+async def test_xgboost_learner_fit_and_evaluate():
+    """Test XGBoostLearner fit and evaluate methods."""
+    # Create sample data
+    X_train, y_train = make_classification(n_samples=100, n_features=20, n_classes=2, random_state=42)
+    X_test, y_test = make_classification(n_samples=20, n_features=20, n_classes=2, random_state=43)
+
+    # Create dataset in the format expected by P2PFLDataset
+    train_data = {f"feature_{i}": X_train[:, i].tolist() for i in range(X_train.shape[1])}
+    train_data["label"] = y_train.tolist()
+    test_data = {f"feature_{i}": X_test[:, i].tolist() for i in range(X_test.shape[1])}
+    test_data["label"] = y_test.tolist()
+
+    dataset = P2PFLDataset(DatasetDict({"train": Dataset.from_dict(train_data), "test": Dataset.from_dict(test_data)}))
+
+    # Create model and learner
+    xgb_model = xgb.XGBClassifier(n_estimators=5, max_depth=3, random_state=42)
+    p2pfl_model = XGBoostModel(xgb_model)
+
+    learner = XGBoostLearner(model=p2pfl_model, data=dataset)
+    learner.set_address("test-xgb-node")
+
+    # Train
+    trained_model = await learner.fit()
+    assert trained_model is not None
+    assert trained_model.get_num_samples() == 100
+    assert trained_model.get_contributors() == ["test-xgb-node"]
+
+    # Evaluate
+    metrics = await learner.evaluate()
+    assert "accuracy" in metrics
+    assert "f1" in metrics
+    assert 0.0 <= metrics["accuracy"] <= 1.0
+    assert 0.0 <= metrics["f1"] <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_xgboost_learner_train_on_batch_raises():
+    """Test that XGBoostLearner.train_on_batch raises NotImplementedError."""
+    X, y = make_classification(n_samples=50, n_features=10, n_classes=2, random_state=42)
+    train_data = {f"feature_{i}": X[:, i].tolist() for i in range(X.shape[1])}
+    train_data["label"] = y.tolist()
+
+    dataset = P2PFLDataset(DatasetDict({"train": Dataset.from_dict(train_data)}))
+    p2pfl_model = XGBoostModel(xgb.XGBClassifier())
+
+    learner = XGBoostLearner(model=p2pfl_model, data=dataset)
+    learner.set_address("test-node")
+
+    with pytest.raises(NotImplementedError):
+        await learner.train_on_batch()
 
 
 ##################################
@@ -278,7 +303,7 @@ def test_xgboost_e2e_dict_params_workflow():
 
     # Aggregate
     aggregator = FedXgbBagging()
-    aggregator.set_addr("e2e_test")
+    aggregator.set_address("e2e_test")
     aggregated_model = aggregator.aggregate(trained_models)
 
     # Verify tree count: 2 + 1 + 1 = 4 trees

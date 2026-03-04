@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
-# (see https://github.com/pguijas/federated_learning_p2p).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution
+# (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,18 +17,22 @@
 #
 """Ray logger decorator."""
 
+from __future__ import annotations
+
 import datetime
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import ray
 
-from p2pfl.experiment import Experiment
 from p2pfl.management.logger.decorators.logger_decorator import LoggerDecorator
 from p2pfl.management.logger.logger import P2PFLogger
 from p2pfl.management.message_storage import MessageEntryType
 from p2pfl.management.metric_storage import GlobalLogsType, LocalLogsType
+
+if TYPE_CHECKING:
+    from p2pfl.workflow.engine.experiment import Experiment
 
 
 @ray.remote
@@ -64,7 +68,7 @@ class RayP2PFLogger(P2PFLogger):
         ).remote(logger)
 
     @staticmethod
-    def from_actor(actor: RayP2PFLoggerActor) -> "RayP2PFLogger":
+    def from_actor(actor: RayP2PFLoggerActor) -> RayP2PFLogger:
         """
         Initialize the wrapper with an existing Ray actor instance.
 
@@ -262,6 +266,17 @@ class RayP2PFLogger(P2PFLogger):
 
         """
         ray.get(self.ray_actor.unregister_node.remote(node))
+
+    def round_updated(self, node: str, round: int) -> None:
+        """
+        Notify a round update.
+
+        Args:
+            node: The node address.
+            round: The new round number.
+
+        """
+        ray.get(self.ray_actor.round_updated.remote(node, round))
 
     def experiment_started(self, node: str, experiment: Experiment | None) -> None:
         """
