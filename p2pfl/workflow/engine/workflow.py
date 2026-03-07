@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import enum
+import inspect
 import random
 from abc import abstractmethod
 from collections.abc import Callable
@@ -60,9 +61,11 @@ class Workflow(Generic[TContext]):
     Base class for learning workflows.
 
     Subclasses must implement:
-    - ``initial_stage``: class attribute or property with the first stage name
     - ``get_stages()``: returns ``list[Stage[TContext]]``
-    - ``create_context(**kwargs)``: builds the typed context from run kwargs
+    - ``create_context()``: builds the typed context from run parameters
+
+    ``initial_stage`` is derived from the first element of ``get_stages()``.
+    Override as a class attribute to use a different entry point.
 
     Stage names are derived automatically from each stage class (see
     ``Stage.__init_subclass__``).  Override ``Stage.name`` as a class
@@ -71,17 +74,21 @@ class Workflow(Generic[TContext]):
     Example::
 
         class BasicDFL(Workflow[BasicDFLContext]):
-            initial_stage = "setup"
             context_class = BasicDFLContext
 
             def get_stages(self) -> list[Stage[BasicDFLContext]]:
                 return [SetupStage(), VotingStage(), LearningStage(), FinishStage()]
     """
 
-    _message_registry: dict[str, MessageEntry]
-
-    initial_stage: str
     context_class: type[TContext]
+
+    @property
+    def initial_stage(self) -> str:
+        """Return the name of the first stage from ``get_stages()``."""
+        stages = self.get_stages()
+        if not stages:
+            raise ValueError("get_stages() returned an empty list")
+        return stages[0].name
 
     def __init__(self) -> None:
         """Initialize the workflow."""
@@ -109,13 +116,12 @@ class Workflow(Generic[TContext]):
         cp: CommunicationProtocol,
         generator: random.Random,
         experiment: Experiment,
-        **kwargs: Any,
     ) -> TContext:
         """
         Build the typed context from run parameters.
 
-        Uses ``context_class`` to construct the context with the base fields
-        plus any workflow-specific kwargs. Override for custom initialization.
+        Uses ``context_class`` to construct the context with the base fields.
+        Override for custom initialization.
         """
         return self.context_class(
             address=address,
@@ -124,7 +130,6 @@ class Workflow(Generic[TContext]):
             cp=cp,
             generator=generator,
             experiment=experiment,
-            **kwargs,
         )
 
     #####################
@@ -155,7 +160,7 @@ class Workflow(Generic[TContext]):
             raise ValueError(f"Invalid workflow graph:\n{errors_str}")
 
     def _collect_handlers(self) -> None:
-        """Collect @on_message handlers from stages and workflow, storing bound callables."""
+        """Collect @on_message handlers from stages, storing bound callables."""
         for stage in self._stage_map.values():
             for cls in type(stage).__mro__:
                 if cls is Stage or cls is object:
@@ -164,14 +169,13 @@ class Workflow(Generic[TContext]):
                     # Default stage handlers to their own stage if `during` not specified
                     if entry.during is None:
                         entry = MessageEntry(entry.method_name, entry.is_weights, frozenset({stage.name}))
-                    self._register_handler(getattr(stage, entry.method_name), msg_name, entry)
-
-        for cls in type(self).__mro__:
-            if cls is Workflow or cls is object:
-                break
-            for msg_name, entry in cls.__dict__.get("_message_registry", {}).items():
-                if msg_name not in self._handlers:
-                    self._handlers[msg_name] = [(getattr(self, entry.method_name), entry)]
+                    bound = getattr(stage, entry.method_name)
+                    if entry.is_weights and "weights" not in inspect.signature(bound).parameters:
+                        raise ValueError(
+                            f"Handler '{msg_name}' on {type(stage).__name__} is declared with weights=True "
+                            f"but its signature lacks a 'weights' parameter."
+                        )
+                    self._register_handler(bound, msg_name, entry)
 
     def _register_handler(self, callback: Callable[..., Any], msg_name: str, entry: MessageEntry) -> None:
         """Register a handler, checking for collisions with overlapping ``during`` sets."""
@@ -184,8 +188,7 @@ class Workflow(Generic[TContext]):
                         f"Handler collision: message '{msg_name}' is registered on both "
                         f"{existing_owner} and {new_owner} "
                         f"with overlapping or unscoped `during` sets. "
-                        f"Use non-overlapping `during` to scope handlers to specific stages, "
-                        f"or move the handler to the Workflow class."
+                        f"Use non-overlapping `during` to scope handlers to specific stages."
                     )
             self._handlers[msg_name].append((callback, entry))
         else:
@@ -220,14 +223,11 @@ class Workflow(Generic[TContext]):
         aggregator: Aggregator,
         cp: CommunicationProtocol,
         generator: random.Random,
-        **kwargs: Any,
     ) -> Experiment:
         """
-        Run the workflow with an explicit Experiment and context kwargs.
+        Run the workflow with an explicit Experiment and context parameters.
 
         The caller is responsible for constructing the ``Experiment`` instance.
-        Base context fields are passed as typed parameters; any workflow-specific
-        kwargs are forwarded to ``create_context()``.
 
         Args:
             experiment: A fully constructed Experiment describing this run.
@@ -236,7 +236,6 @@ class Workflow(Generic[TContext]):
             aggregator: The aggregator instance for model aggregation.
             cp: The communication protocol for network operations.
             generator: Random number generator for reproducibility.
-            **kwargs: Workflow-specific parameters forwarded to ``create_context()``.
 
         Returns:
             The Experiment with tracked data after completion.
@@ -244,57 +243,62 @@ class Workflow(Generic[TContext]):
         """
         self.error = None
 
-        # 1. Build typed context
-        ctx = self.create_context(
-            address=address,
-            learner=learner,
-            aggregator=aggregator,
-            cp=cp,
-            generator=generator,
-            experiment=experiment,
-            **kwargs,
-        )
-
-        # 2. Compose stages, wire context, build handler map
-        self._compose(ctx)
-
-        # 3. Set epochs on learner
-        ctx.learner.set_epochs(experiment.epochs_per_round)
-
-        # 4. Execute stage loop
-        self.status = WorkflowStatus.RUNNING
-        logger.experiment_started(ctx.address, experiment)
         try:
+            # 1. Build typed context
+            logger.debug(address, "Workflow: creating context...")
+            ctx = self.create_context(
+                address=address,
+                learner=learner,
+                aggregator=aggregator,
+                cp=cp,
+                generator=generator,
+                experiment=experiment,
+            )
+
+            # 2. Compose stages, wire context, build handler map
+            logger.debug(address, "Workflow: composing stages...")
+            self._compose(ctx)
+
+            # 3. Execute stage loop
+            logger.debug(address, "Workflow: starting stage loop...")
+            self.status = WorkflowStatus.RUNNING
+            logger.experiment_started(ctx.address, experiment)
             await self._run(ctx)
             self.status = WorkflowStatus.FINISHED
             logger.info(ctx.address, "🏁 Learning finished.")
         except asyncio.CancelledError:
             if self.status != WorkflowStatus.FINISHED:
                 self.status = WorkflowStatus.CANCELLED
-            logger.info(ctx.address, "🛑 Learning cancelled.")
+            logger.info(address, "🛑 Learning cancelled.")
             raise
         except Exception as e:
             self.status = WorkflowStatus.FAILED
             self.error = e
-            logger.error(ctx.address, f"Learning failed: {e}")
+            logger.error(address, f"Learning failed: {e}")
             raise
 
         return ctx.experiment
 
     async def _run(self, ctx: TContext) -> None:
         """Run the workflow as a sequential stage loop."""
-        stage_name: str | None = self.initial_stage
+        # Setup stage
+        stage = self._stage_map[self.initial_stage]
+        self._current_stage = stage
+        logger.info(ctx.address, f"Entering stage: {self.initial_stage}")
+        stage_name: str | None = await stage.run()
+
+        self.validate_experiment(ctx)
+
+        # Remaining stages
         while stage_name is not None:
-            stage = self._stage_map.get(stage_name)
-            if stage is None:
-                available = ", ".join(sorted(self._stage_map.keys()))
-                suggestions = get_close_matches(stage_name, self._stage_map.keys(), n=1)
-                hint = f" Did you mean '{suggestions[0]}'?" if suggestions else ""
-                raise ValueError(f"Unknown stage: '{stage_name}'. Available: {available}.{hint}")
+            stage = self._stage_map[stage_name]
             self._current_stage = stage
             logger.info(ctx.address, f"Entering stage: {stage_name}")
             stage_name = await stage.run()
         self._current_stage = None
+
+    def validate_experiment(self, ctx: TContext) -> None:
+        """Override to resolve dynamic defaults and validate experiment params after setup."""
 
     #########################
     #    Task Management    #
@@ -378,17 +382,14 @@ class Workflow(Generic[TContext]):
         if self._handlers:
             return {name: items[0][1] for name, items in self._handlers.items()}
 
-        # Pre-compose fallback: scan class registries
+        # Pre-compose fallback: extract types to read class-level _message_registry
+        stage_classes = [type(s) for s in self._stage_map.values()] if self._stage_map else [type(s) for s in self.get_stages()]
+
         result: dict[str, MessageEntry] = {}
-        for stage in (self._stage_map or {s.name: s for s in self.get_stages()}).values():
-            for cls in type(stage).__mro__:
+        for stage_cls in stage_classes:
+            for cls in stage_cls.__mro__:
                 if cls is Stage or cls is object:
                     break
                 for msg_name, entry in cls.__dict__.get("_message_registry", {}).items():
                     result.setdefault(msg_name, entry)
-        for cls in type(self).__mro__:
-            if cls is Workflow or cls is object:
-                break
-            for msg_name, entry in cls.__dict__.get("_message_registry", {}).items():
-                result.setdefault(msg_name, entry)
         return result

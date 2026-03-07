@@ -56,7 +56,6 @@ class VirtualLearnerActor:
         self._learner = learner
 
 
-
 class VirtualNodeLearner(Learner):
     """Wrapper that runs a Learner as a Ray actor for distributed execution."""
 

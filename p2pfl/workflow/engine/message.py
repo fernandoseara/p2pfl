@@ -33,7 +33,7 @@ class MessageEntry(NamedTuple):
 
 class OnMessage:
     """
-    Register a stage or workflow method as a message handler.
+    Register a stage method as a message handler.
 
     A class-level ``_message_registry`` dict is built automatically
     at class definition time via ``__set_name__``.
@@ -43,9 +43,8 @@ class OnMessage:
         weights: If True, the handler receives weight-specific kwargs
             (weights, contributors, num_samples) via WorkflowCommand.
         during: Optional set of stage names during which this handler is
-            active. For stage handlers, defaults to the stage's own name.
-            For workflow-level handlers, ``None`` means always active.
-            Set explicitly to override (e.g. listen during multiple stages).
+            active. Defaults to the stage's own name.
+            Set explicitly to listen during multiple stages.
 
     Example::
 
