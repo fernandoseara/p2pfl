@@ -17,7 +17,9 @@
 #
 """Virtual Node Learner."""
 
+import asyncio
 import traceback
+from typing import Any, TypeVar
 
 import ray
 
@@ -26,15 +28,33 @@ from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.ray.placement_group_manager import PlacementGroupManager
 from p2pfl.management.logger import logger
 
+_T = TypeVar("_T")
+
+
+def _with_learner_delegates(cls: type[_T]) -> type[_T]:
+    """Add async delegate methods for all public LearnerDecorator methods."""
+    for name in vars(LearnerDecorator):
+        if name.startswith("_") or not callable(getattr(LearnerDecorator, name)):
+            continue
+
+        async def method(self: Any, *args: Any, _n: str = name, **kwargs: Any) -> Any:
+            result = getattr(self._learner, _n)(*args, **kwargs)
+            return await result if asyncio.iscoroutine(result) else result
+
+        method.__name__ = name
+        setattr(cls, name, method)
+    return cls
+
 
 @ray.remote
-class VirtualLearnerActor(LearnerDecorator):
-    """Ray actor wrapper for learners."""
+@_with_learner_delegates
+class VirtualLearnerActor:
+    """Ray actor wrapper for learners. Plain class to avoid ABC serialization issues with Ray."""
 
-    def terminate(self) -> None:
-        """Manually terminate Actor object."""
-        logger.debug(self.__class__.__name__, f"Manually terminating {self.__class__.__name__}")
-        ray.actor.exit_actor()
+    def __init__(self, learner: Learner) -> None:
+        """Initialize the actor with a learner instance."""
+        self._learner = learner
+
 
 
 class VirtualNodeLearner(Learner):

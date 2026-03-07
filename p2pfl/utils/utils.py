@@ -236,19 +236,28 @@ async def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_
     """
     # Wait until all nodes finish the workflow (either success or failure)
     start = time.time()
+    last_debug_log = 0.0
     while True:
-        if debug:
-            logger.info(
-                "Waiting for nodes to finish",
-                str([(n.state.value,) for n in nodes]),
-            )
+        elapsed = time.time() - start
+
+        if debug and elapsed - last_debug_log >= 10:
+            last_debug_log = elapsed
+            states = []
+            for n in nodes:
+                wf_status = n.workflow.status.value if n.workflow else "no_workflow"
+                stage = n.workflow.current_stage_name if n.workflow else None
+                states.append(f"{n.address}({n.state.value}, wf={wf_status}, stage={stage})")
+            logger.info("wait_to_finish", f"[{int(elapsed)}s] {', '.join(states)}")
+
         # Exit loop when all nodes have completed (success or failure)
         if all(n.state.is_terminal for n in nodes):
             break
         await asyncio.sleep(1)
-        elapsed = time.time() - start
         if elapsed > timeout:
-            raise TimeoutError(f"Timeout waiting for nodes to finish (elapsed: {int(elapsed // 60)} minutes {int(elapsed % 60)} seconds)")
+            states = [f"{n.address}={n.state.value}" for n in nodes]
+            raise TimeoutError(
+                f"Timeout waiting for nodes to finish after {int(elapsed // 60)}m{int(elapsed % 60)}s. " f"Node states: {', '.join(states)}"
+            )
 
     # Check for failures
     if raise_on_error:
