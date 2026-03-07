@@ -60,7 +60,7 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         await self._broadcast_loss(ctx)
 
         # Phase 4: Network update (every tau rounds)
-        if experiment.round > 0 and experiment.round % ctx.tau == 0:
+        if experiment.round > 0 and experiment.round % ctx.experiment.data["tau"] == 0:
             await self._network_update(ctx)
 
         # Phase 5: Round finish
@@ -117,7 +117,7 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         # Compute priorities and select neighbors
         neighbor_priorities = self._compute_priorities(ctx)
         logger.info(address, f"Neighbor priorities: {neighbor_priorities}")
-        ctx.candidates = self._select_neighbors(neighbor_priorities, top_k=ctx.top_k_neighbors)
+        ctx.candidates = self._select_neighbors(neighbor_priorities, top_k=ctx.experiment.data["top_k_neighbors"])
         logger.info(address, f"Selected neighbors: {ctx.candidates}")
 
         # Gossip model to selected neighbors
@@ -129,25 +129,26 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
     def _compute_priorities(self, ctx: AsyncDFLContext) -> list[tuple[str, float]]:
         """Compute priority for each neighbor based on loss divergence and staleness."""
         peers = ctx.peers
+        tau = ctx.experiment.data["tau"]
         neighbor_priorities: list[tuple[str, float]] = []
 
         local_peer = peers.get(ctx.address)
-        local_losses = local_peer.losses.values() if local_peer else []
-        avg_local_loss = sum(local_losses) / len(local_peer.losses) if local_peer and local_peer.losses else 0.0
 
         for neighbor in list(ctx.cp.get_neighbors(only_direct=True)):
             neighbor_peer = peers.get(neighbor)
             if neighbor_peer is None:
                 continue
-            avg_neighbor_loss = sum(neighbor_peer.losses.values()) / len(neighbor_peer.losses) if neighbor_peer.losses else 0.0
+            t_hat = min(ctx.experiment.round, neighbor_peer.round_number)
+            local_loss = _windowed_avg_loss(local_peer.losses, t_hat, tau) if local_peer else 0.0
+            neighbor_loss = _windowed_avg_loss(neighbor_peer.losses, t_hat, tau)
             priority = compute_priority(
                 ti=ctx.experiment.round,
                 tp_ij=neighbor_peer.push_time,
                 tj=neighbor_peer.round_number,
                 tl_ji=neighbor_peer.p2p_updating_idx,
-                f_ti=avg_local_loss,
-                f_tj=avg_neighbor_loss,
-                dmax=ctx.dmax,
+                f_ti=local_loss,
+                f_tj=neighbor_loss,
+                dmax=ctx.experiment.data["dmax"],
             )
             neighbor_priorities.append((neighbor, priority))
 
@@ -210,33 +211,37 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
             logger.warning(ctx.address, f"Failed to send push-sum weight to {neighbor}: {e}")
 
     async def _aggregate(self, ctx: AsyncDFLContext) -> None:
-        """Update push-sum weights and aggregate peer models."""
+        """Prepare models for aggregation and update protocol state."""
         address = ctx.address
-        self_peer = ctx.peers.get(address)
-        push_sum_weight = self_peer.push_sum_weight if self_peer else 1.0
 
+        # Attach mixing/push-sum info and notify in-neighbors
+        models = []
         for neighbor, peer in ctx.peers.items():
-            if neighbor == address:
+            if peer.model is None:
                 continue
-            push_sum_weight += peer.mixing_weight * peer.push_sum_weight
-            logger.debug(address, f"{neighbor} push-sum weight updated to {push_sum_weight}")
-            peer.p2p_updating_idx = ctx.experiment.round
+            peer.model.add_info("mixing_weight", peer.mixing_weight)
+            peer.model.add_info("push_sum_weight", peer.push_sum_weight)
+            models.append(peer.model)
 
-            try:
-                await ctx.cp.send(
-                    nei=neighbor,
-                    msg=ctx.cp.build_msg("index_information_updating", round=ctx.experiment.round),
-                )
-            except Exception as e:
-                logger.warning(address, f"Failed to send iteration index to {neighbor}: {e}")
+            if neighbor != address:
+                peer.p2p_updating_idx = ctx.experiment.round
+                try:
+                    await ctx.cp.send(
+                        nei=neighbor,
+                        msg=ctx.cp.build_msg("index_information_updating", round=ctx.experiment.round),
+                    )
+                except Exception as e:
+                    logger.warning(address, f"Failed to send iteration index to {neighbor}: {e}")
 
-        if self_peer is not None:
-            self_peer.push_sum_weight = push_sum_weight
-
-        models = [p.model for p in ctx.peers.values() if p.model is not None]
+        # Aggregate (Eq. 5 & 6 handled by PushSum aggregator)
         if models:
             agg_model = ctx.aggregator.aggregate(models)
             ctx.learner.set_model(agg_model)
+
+            # Update local push-sum weight from aggregator result
+            self_peer = ctx.peers.get(address)
+            if self_peer is not None:
+                self_peer.push_sum_weight = agg_model.get_info().get("push_sum_weight", self_peer.push_sum_weight)
 
         await evaluate_and_broadcast(ctx)
         logger.info(address, "Aggregation finished.")
@@ -346,6 +351,12 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
             existing_contributors=existing,
         )
         return "true" if accepted else "false"
+
+
+def _windowed_avg_loss(losses: dict[int, float], t_hat: int, tau: int) -> float:
+    """Average loss over rounds [t̂-τ, t̂] (Eq. 39 from AsyDFL paper)."""
+    values = [losses[r] for r in range(t_hat - tau, t_hat + 1) if r in losses]
+    return sum(values) / len(values) if values else 0.0
 
 
 def compute_priority(

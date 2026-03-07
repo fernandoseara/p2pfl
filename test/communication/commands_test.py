@@ -51,6 +51,7 @@ def mock_node_not_learning():
     node = MagicMock()
     node.state.is_learning = False
     node.address = "127.0.0.1:8000"
+    node.workflow = None
     return node
 
 
@@ -202,7 +203,7 @@ class TestStartLearningCommand:
         assert args[1].total_rounds == 10
         assert args[1].epochs_per_round == 5
         assert args[1].exp_name == "my_experiment"
-        assert kwargs["trainset_size"] == 100
+        assert args[1].data["trainset_size"] == 100
 
     @pytest.mark.asyncio
     async def test_execute_handles_node_running_exception(self):

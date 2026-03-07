@@ -32,15 +32,10 @@ from p2pfl.workflow.validation import validate
 class TestAsyncDFLCreation:
     """Tests for AsyncDFL workflow creation and initialization."""
 
-    def test_init_returns_workflow(self):
-        """Test that AsyncDFL can be instantiated."""
-        wf = AsyncDFL()
-        assert isinstance(wf, AsyncDFL)
-
     def test_initial_stage_is_setup(self):
-        """Test that initial_stage is 'setup'."""
+        """Test that initial_stage is derived from the first stage."""
         wf = AsyncDFL()
-        assert wf.initial_stage == "setup"
+        assert wf.initial_stage == wf.get_stages()[0].name
 
     def test_stages_map_has_all_stages(self):
         """Test that get_stages returns all expected stages."""
@@ -101,13 +96,21 @@ class TestAsyncDFLDeclaredMessages:
         assert msgs["push_sum_weight_information_updating"].is_weights is False
 
     def test_during_filters_set(self):
-        """Test that during filters are set on all handlers."""
+        """
+        Test that during filters are set on all handlers.
+
+        Pre-compose, handlers without explicit ``during`` have ``during=None``
+        (the owning-stage default is applied during ``_compose``).
+        """
         wf = AsyncDFL()
         msgs = wf.get_messages()
-        assert msgs["node_initialized"].during == frozenset({"setup"})
-        assert msgs["loss_information_updating"].during == frozenset({"training_round"})
-        assert msgs["model_information_updating"].during == frozenset({"training_round"})
-        assert msgs["pre_send_model"].during == frozenset({"training_round"})
+        # All AsyncDFL handlers use @on_message without during= → None pre-compose
+        assert msgs["node_initialized"].during is None
+        assert msgs["loss_information_updating"].during is None
+        assert msgs["index_information_updating"].during is None
+        assert msgs["model_information_updating"].during is None
+        assert msgs["push_sum_weight_information_updating"].during is None
+        assert msgs["pre_send_model"].during is None
 
 
 class TestAsyncPeerState:
@@ -145,15 +148,6 @@ class TestAsyncPeerState:
         peer.model = MagicMock()
         peer.reset_round()
         assert peer.model is None
-
-    def test_peers_add_and_clear(self):
-        """Test adding and clearing peers."""
-        peers: dict[str, AsyncPeerState] = {}
-        peers["node_1"] = AsyncPeerState()
-        peers["node_2"] = AsyncPeerState()
-        assert len(peers) == 2
-        peers.clear()
-        assert len(peers) == 0
 
 
 class TestComputePriority:
@@ -213,7 +207,7 @@ class TestTrainingRoundStageConditions:
         """Test _total_rounds_reached returns False when total_rounds is None."""
         stage = TrainingRoundStage()
         ctx = MagicMock(spec=AsyncDFLContext)
-        ctx.experiment = MagicMock()
+        ctx.experiment = Experiment("test", total_rounds=5)
         ctx.experiment.total_rounds = None
         assert stage._total_rounds_reached(ctx) is False
 
@@ -242,17 +236,16 @@ class TestAsyncDFLContext:
             aggregator=MagicMock(),
             cp=MagicMock(),
             generator=MagicMock(),
-            experiment=Experiment("test", total_rounds=5),
-            tau=3,
+            experiment=Experiment.create(exp_name="test", total_rounds=5, tau=3),
         )
         assert isinstance(ctx, AsyncDFLContext)
         assert ctx.address == "test"
-        assert ctx.tau == 3
+        assert ctx.experiment.data["tau"] == 3
         assert ctx.peers == {}
         assert ctx.candidates == []
 
     def test_create_context_default_tau(self):
-        """Test that create_context defaults tau to 2."""
+        """Test that validate_experiment defaults tau to 2."""
         wf = AsyncDFL()
         ctx = wf.create_context(
             address="test",
@@ -262,4 +255,5 @@ class TestAsyncDFLContext:
             generator=MagicMock(),
             experiment=Experiment("test", total_rounds=5),
         )
-        assert ctx.tau == 2
+        wf.validate_experiment(ctx)
+        assert ctx.experiment.data["tau"] == 2

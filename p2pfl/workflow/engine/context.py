@@ -35,7 +35,13 @@ class WorkflowContext:
     """
     Base typed context injected into all workflow stages.
 
-    Subclass this to add workflow-specific state (e.g. peers, train_set).
+    This is **not** meant to pass arguments from the node to the workflow.
+    For hyperparameters or initial arguments, use ``Experiment`` (via
+    ``experiment.data``).  The context only holds shared components that
+    stages need at runtime (learner, aggregator, communication, etc.).
+
+    Subclass this to add workflow-specific **mutable state** that stages
+    share during execution (e.g. peers, train_set).
 
     Example::
 

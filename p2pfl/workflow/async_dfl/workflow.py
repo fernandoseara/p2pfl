@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from p2pfl.management.logger import logger
 from p2pfl.workflow.async_dfl.context import AsyncDFLContext
@@ -48,7 +48,6 @@ class AsyncDFL(Workflow[AsyncDFLContext]):
     Flow: setup -> training_round -> (loop) -> finish
     """
 
-    initial_stage = "setup"
     context_class = AsyncDFLContext
 
     def get_stages(self) -> list[Stage[AsyncDFLContext]]:
@@ -63,14 +62,26 @@ class AsyncDFL(Workflow[AsyncDFLContext]):
         cp: CommunicationProtocol,
         generator: random.Random,
         experiment: Experiment,
-        **kwargs: Any,
     ) -> AsyncDFLContext:
         """Build the typed context for AsyncDFL with push-sum model wrapping."""
         ctx = super().create_context(
-            address=address, learner=learner, aggregator=aggregator, cp=cp, generator=generator, experiment=experiment, **kwargs
+            address=address, learner=learner, aggregator=aggregator, cp=cp, generator=generator, experiment=experiment
         )
         self._wrap_model_if_supported(ctx)
         return ctx
+
+    def validate_experiment(self, ctx: AsyncDFLContext) -> None:
+        """Resolve defaults and validate AsyncDFL-specific hyperparameters."""
+        exp = ctx.experiment
+        exp.data.setdefault("tau", 2)
+        exp.data.setdefault("dmax", 5)
+        exp.data.setdefault("top_k_neighbors", 3)
+        if exp.data["tau"] < 1:
+            raise ValueError("tau must be >= 1.")
+        if exp.data["dmax"] < 1:
+            raise ValueError("dmax must be >= 1.")
+        if exp.data["top_k_neighbors"] < 1:
+            raise ValueError("top_k_neighbors must be >= 1.")
 
     @staticmethod
     def _wrap_model_if_supported(ctx: AsyncDFLContext) -> None:

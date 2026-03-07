@@ -42,6 +42,9 @@ from p2pfl.learning.aggregators.fedprox import FedProx
 # Tree-based aggregators
 from p2pfl.learning.aggregators.fedxgbbagging import FedXgbBagging
 from p2pfl.learning.aggregators.krum import Krum
+
+# Push-sum aggregator
+from p2pfl.learning.aggregators.pushsum import PushSum
 from p2pfl.learning.aggregators.scaffold import Scaffold
 
 # Sequential learning
@@ -85,6 +88,8 @@ __all__ = [
     "FedAdam",
     "FedYogi",
     "SequentialLearning",
+    # Push-sum aggregator
+    "PushSum",
     # Tree-based aggregators
     "FedXgbBagging",
     # Utility functions

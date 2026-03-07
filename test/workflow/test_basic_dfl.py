@@ -44,7 +44,7 @@ def ctx():
         aggregator=MagicMock(),
         cp=cp,
         generator=MagicMock(),
-        experiment=Experiment("test_exp", 5, trainset_size=3),
+        experiment=Experiment.create(exp_name="test_exp", total_rounds=5, trainset_size=3),
     )
 
 
@@ -57,11 +57,6 @@ def composed_workflow(workflow, ctx):
 
 class TestBasicWorkflowCreation:
     """Tests for BasicDFL creation and initialization."""
-
-    def test_init_workflow_returns_workflow(self):
-        """Test that __init__ returns a properly initialized workflow."""
-        wf = BasicDFL()
-        assert isinstance(wf, BasicDFL)
 
     def test_init_workflow_initial_status(self):
         """Test that initialized workflow starts with IDLE status."""
@@ -128,9 +123,9 @@ class TestBasicStageMap:
             assert stage.ctx is ctx
 
     def test_initial_stage(self):
-        """Test that initial_stage is 'setup'."""
+        """Test that initial_stage is derived from the first stage."""
         wf = BasicDFL()
-        assert wf.initial_stage == "setup"
+        assert wf.initial_stage == wf.get_stages()[0].name
 
 
 class TestBasicDeclaredMessages:
@@ -161,16 +156,23 @@ class TestBasicDeclaredMessages:
         assert msgs["vote_train_set"].is_weights is False
 
     def test_during_filters_set(self):
-        """Test that during filters are set on all handlers."""
+        """
+        Test that during filters are set on all handlers.
+
+        Pre-compose, handlers without explicit ``during`` have ``during=None``
+        (the owning-stage default is applied during ``_compose``).
+        """
         wf = BasicDFL()
         msgs = wf.get_messages()
-        assert msgs["node_initialized"].during == frozenset({"setup"})
-        assert msgs["peer_round_updated"].during == frozenset({"round_init"})
-        assert msgs["add_model"].during == frozenset({"round_init"})
-        assert msgs["vote_train_set"].during == frozenset({"voting"})
-        assert msgs["models_aggregated"].during == frozenset({"learning"})
-        assert msgs["pre_send_model"].during == frozenset({"learning"})
-        assert msgs["partial_model"].during == frozenset({"learning"})
+        # Handlers without explicit during= → None pre-compose
+        assert msgs["node_initialized"].during is None
+        assert msgs["add_model"].during is None
+        assert msgs["models_aggregated"].during is None
+        assert msgs["pre_send_model"].during is None
+        assert msgs["partial_model"].during is None
+        # Handlers with explicit during=
+        assert msgs["peer_round_updated"].during == frozenset({"round_init", "learning", "voting"})
+        assert msgs["vote_train_set"].during == frozenset({"voting", "round_init"})
 
 
 class TestBasicMessageRegistry:
@@ -278,36 +280,6 @@ class TestBasicConditions:
 class TestBasicPeerState:
     """Tests for peer state operations."""
 
-    def test_peers_add_and_list(self):
-        """Test adding peers to workflow."""
-        peers: dict[str, BasicPeerState] = {}
-        peers["node_1"] = BasicPeerState()
-        peers["node_2"] = BasicPeerState()
-        assert "node_1" in peers
-        assert "node_2" in peers
-
-    def test_peer_votes(self):
-        """Test vote management on peer state."""
-        peers: dict[str, BasicPeerState] = {}
-        peers["node_1"] = BasicPeerState()
-        peers["node_2"] = BasicPeerState()
-
-        peers["node_1"].votes["node_2"] = 1
-        peers["node_2"].votes["node_1"] = 2
-
-        assert "node_2" in peers["node_1"].votes
-        assert "node_1" in peers["node_2"].votes
-
-    def test_peers_clear(self):
-        """Test clearing peers dict."""
-        peers: dict[str, BasicPeerState] = {}
-        peers["node_1"] = BasicPeerState()
-        peers["node_2"] = BasicPeerState()
-        assert len(peers) == 2
-
-        peers.clear()
-        assert len(peers) == 0
-
     def test_reset_round(self):
         """Test reset_round clears per-round state."""
         peer = BasicPeerState()
@@ -328,13 +300,13 @@ class TestBasicWorkflowStatus:
         assert workflow.status == WorkflowStatus.IDLE
 
     def test_current_stage_name_none_initially(self, workflow):
-        """Test that _current_stage_name is None initially."""
-        assert workflow._current_stage_name is None
+        """Test that current_stage_name is None initially."""
+        assert workflow.current_stage_name is None
 
     def test_current_stage_name_after_compose(self, composed_workflow):
-        """Test _current_stage_name can be set."""
-        composed_workflow._current_stage_name = "setup"
-        assert composed_workflow._current_stage_name == "setup"
+        """Test current_stage_name reflects _current_stage."""
+        composed_workflow._current_stage = composed_workflow._stage_map["setup"]
+        assert composed_workflow.current_stage_name == "setup"
 
 
 class TestBasicValidation:

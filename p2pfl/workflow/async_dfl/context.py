@@ -53,12 +53,8 @@ class AsyncDFLContext(WorkflowContext):
     """
     Typed context for AsyncDFL workflow.
 
-    Extends WorkflowContext with peer tracking, candidate list,
-    and the tau parameter for network update frequency.
+    Extends WorkflowContext with peer tracking and candidate list.
     """
 
     peers: dict[str, AsyncPeerState] = field(default_factory=dict)
     candidates: list[str] = field(default_factory=list)
-    tau: int = 2
-    dmax: int = 5
-    top_k_neighbors: int = 3

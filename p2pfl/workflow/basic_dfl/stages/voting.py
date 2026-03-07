@@ -74,15 +74,12 @@ class VotingStage(Stage[BasicDFLContext]):
 
         logger.info(address, "🗳️ Voting for the train set.")
 
-        candidates = list(ctx.cp.get_neighbors(only_direct=False))
-        if address not in candidates:
-            candidates.append(address)
+        candidates = list(ctx.peers.keys())
         logger.debug(address, f"{len(candidates)} candidates to train set")
         candidates.sort()
 
-        if experiment.trainset_size is None:
-            raise ValueError("Experiment trainset_size not initialized")
-        samples = min(experiment.trainset_size, len(candidates))
+        assert experiment.data["trainset_size"] is not None, "trainset_size must be set before voting"
+        samples = min(experiment.data["trainset_size"], len(candidates))
         nodes_voted = ctx.generator.sample(candidates, samples)
         weights = [math.floor(ctx.generator.randint(0, 1000) / (i + 1)) for i in range(samples)]
 
@@ -112,9 +109,8 @@ class VotingStage(Stage[BasicDFLContext]):
         ordered = sorted(results.items(), key=lambda x: x[0])
         ordered = sorted(ordered, key=lambda x: x[1], reverse=True)
 
-        if experiment.trainset_size is None:
-            raise ValueError("Experiment trainset_size not initialized")
-        top = min(len(ordered), experiment.trainset_size)
+        assert experiment.data["trainset_size"] is not None, "trainset_size must be set before voting"
+        top = min(len(ordered), experiment.data["trainset_size"])
         train_set = [i[0] for i in ordered[:top]]
 
         num_votes = sum(len(p.votes) for p in ctx.peers.values())
@@ -122,8 +118,7 @@ class VotingStage(Stage[BasicDFLContext]):
             p.votes.clear()
         logger.info(address, f"Computed {num_votes} votes.")
 
-        neighbors = list(ctx.cp.get_neighbors(only_direct=False))
-        ctx.train_set = [n for n in train_set if n in neighbors or n == address]
+        ctx.train_set = [n for n in train_set if n in ctx.peers]
         if not ctx.train_set:
             logger.warning(address, "Train set is empty after filtering disconnected peers, falling back to self.")
             ctx.train_set = [address]
@@ -162,7 +157,7 @@ class VotingStage(Stage[BasicDFLContext]):
 
     # -- Message handler --
 
-    @on_message("vote_train_set")
+    @on_message("vote_train_set", during={"voting", "round_init"})
     async def handle_vote_train_set(self, source: str, round: int, *args) -> None:
         """Handle a vote_train_set message by parsing vote pairs and forwarding."""
         if len(args) % 2 != 0:

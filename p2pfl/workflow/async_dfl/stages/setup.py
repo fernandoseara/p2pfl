@@ -42,6 +42,7 @@ class SetupStage(Stage[AsyncDFLContext]):
         ctx = self.ctx
         self._nodes_ready.clear()
 
+        ctx.learner.set_epochs(ctx.experiment.epochs_per_round)
         logger.info(ctx.address, "⏳ Starting async training.")
         logger.info(ctx.address, "⏳ Waiting initialization.")
 

@@ -42,8 +42,10 @@ class Experiment:
         is_initiator: Whether this node initiated the experiment.
         epochs_per_round: The number of epochs per round.
         round: The current round number.
-        data: Flexible tracking data for MLOps persistence.
-        trainset_size: The number of nodes in the training set.
+        data: Workflow-specific parameters and flexible tracking data.
+            Workflow hyperparams (e.g. ``trainset_size``, ``tau``, ``dmax``)
+            are stored here via ``Experiment.create(**kwargs)`` and validated
+            by each workflow's ``validate_experiment()``.
         dataset_name: The name of the dataset.
         model_name: The name of the model.
         aggregator_name: The name of the aggregator.
@@ -61,7 +63,6 @@ class Experiment:
     round: int = 0
 
     data: dict[str, Any] = field(default_factory=dict)
-    trainset_size: int | None = None
     dataset_name: str | None = None
     model_name: str | None = None
     aggregator_name: str | None = None
@@ -86,6 +87,8 @@ class Experiment:
 
     def is_complete(self) -> bool:
         """Check whether the experiment has reached its total round count."""
+        if self.total_rounds is None:
+            return False
         return self.round >= self.total_rounds
 
     def increase_round(self, address: str) -> None:
@@ -109,13 +112,13 @@ class Experiment:
             "total_rounds": self.total_rounds,
             "workflow": self.workflow,
             "epochs_per_round": self.epochs_per_round,
-            "trainset_size": self.trainset_size,
             "dataset_name": self.dataset_name,
             "model_name": self.model_name,
             "aggregator_name": self.aggregator_name,
             "framework_name": self.framework_name,
             "batch_size": self.batch_size,
             "learning_rate": self.learning_rate,
+            **self.data,
         }
 
         if exclude_none:
