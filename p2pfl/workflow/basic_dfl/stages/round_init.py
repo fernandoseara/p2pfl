@@ -172,7 +172,7 @@ class RoundInitStage(Stage[BasicDFLContext]):
         """Handle a peer_round_updated message."""
         await self._save_peer_round_updated(self.ctx, source, round)
 
-    @on_message("pre_send_model_init", during={"round_init"})
+    @on_message("pre_send_model_init", during={"round_init", "learning"})
     async def handle_pre_send_model_init(self, source: str, round: int, *args) -> str:
         """Handle a pre_send_model_init request for full model gossiping."""
         if not args:

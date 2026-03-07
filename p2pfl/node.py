@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import random
 import time
@@ -310,7 +311,8 @@ class Node:
             epochs: Number of epochs of the learning process.
             experiment_name: The name of the experiment.
             workflow: The workflow type to use.
-            **kwargs: Workflow-specific parameters (e.g. trainset_size for BasicDFL).
+            **kwargs: Workflow-specific parameters routed to ``Experiment.data``
+                (e.g. ``trainset_size`` for BasicDFL, ``tau`` for AsyncDFL).
 
         Raises:
             ZeroRoundsException: If rounds is less than 1.
@@ -334,11 +336,11 @@ class Node:
             await self.communication_protocol.broadcast_gossip(
                 self.communication_protocol.build_msg(
                     StartLearningCommand.get_name(),
-                    [rounds, epochs, experiment_name, workflow, kwargs],
+                    [rounds, epochs, experiment_name, workflow, json.dumps(kwargs)],
                 )
             )
 
-            await self._start_learning_workflow(workflow, experiment, **kwargs)
+            await self._start_learning_workflow(workflow, experiment)
 
             return experiment_name
 
@@ -350,7 +352,6 @@ class Node:
         self,
         workflow_name: str,
         experiment: Experiment,
-        **kwargs: Any,
     ) -> None:
         """
         Start the learning workflow internally.
@@ -358,7 +359,6 @@ class Node:
         Args:
             workflow_name: The registered workflow name (e.g. ``"basic"``, ``"async"``).
             experiment: A fully constructed Experiment describing this run.
-            **kwargs: Workflow-specific parameters forwarded to workflow.start().
 
         Raises:
             NodeRunningException: If learning is already in progress.
@@ -387,7 +387,6 @@ class Node:
                 aggregator=self.aggregator,
                 cp=self.communication_protocol,
                 generator=self.generator,
-                **kwargs,
             )
         except Exception:
             self._unregister_workflow_commands()

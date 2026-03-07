@@ -80,11 +80,7 @@ class StartLearningCommand(Command):
                 **parsed_kwargs,
             )
 
-            await self.node._start_learning_workflow(
-                workflow,
-                experiment,
-                **parsed_kwargs,
-            )
+            await self.node._start_learning_workflow(workflow, experiment)
 
         except NodeRunningException as e:
             logger.debug(self.node.address, str(e))

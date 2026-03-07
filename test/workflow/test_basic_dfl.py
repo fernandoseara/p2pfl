@@ -169,8 +169,8 @@ class TestBasicDeclaredMessages:
         assert msgs["node_initialized"].during is None
         assert msgs["add_model"].during is None
         assert msgs["models_aggregated"].during is None
-        assert msgs["pre_send_model_init"].during == frozenset({"round_init"})
-        assert msgs["pre_send_model_learning"].during is None
+        assert msgs["pre_send_model_init"].during == frozenset({"round_init", "learning"})
+        assert msgs["pre_send_model_learning"].during == frozenset({"learning", "voting"})
         assert msgs["partial_model"].during is None
         # Handlers with explicit during=
         assert msgs["peer_round_updated"].during == frozenset({"round_init", "learning", "voting"})
