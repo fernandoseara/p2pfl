@@ -167,7 +167,7 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         experiment = ctx.experiment
         model = learner.get_model()
 
-        gate = ModelGate(ctx.cp, address)
+        gate = ModelGate(ctx.cp, address, pre_send_command="pre_send_model_training")
 
         for neighbor in ctx.candidates:
             round_num = experiment.round
@@ -329,9 +329,9 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         except Exception as e:
             logger.error(self.ctx.address, f"Error saving push-sum weight from {source}: {e}")
 
-    @on_message("pre_send_model")
-    async def handle_pre_send_model(self, source: str, round: int, *args) -> str:
-        """Handle a pre_send_model request by checking if the model should be accepted."""
+    @on_message("pre_send_model_training")
+    async def handle_pre_send_model_training(self, source: str, round: int, *args) -> str:
+        """Handle a pre_send_model_training request by checking if the model should be accepted."""
         if not args:
             return "false"
         weight_command = args[0]

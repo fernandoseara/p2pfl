@@ -30,13 +30,17 @@ class ModelGate:
     """
     Gate that negotiates model transfers between peers.
 
-    Encapsulates the ``pre_send_model`` request/response protocol:
-    the sender asks the receiver whether it wants a model, and only
-    transmits the (expensive) weights payload if the answer is ``"true"``.
+    The sender asks the receiver whether it wants a model via a
+    stage-specific pre-send command, and only transmits the (expensive)
+    weights payload if the answer is ``"true"``.
+
+    Each stage should use its own command name (e.g.
+    ``"pre_send_model_init"``, ``"pre_send_model_learning"``) so
+    that the corresponding handler is active in the correct stage.
 
     Usage::
 
-        gate = ModelGate(ctx.cp, ctx.address)
+        gate = ModelGate(ctx.cp, ctx.address, pre_send_command="pre_send_model_learning")
         sent = await gate.send_if_accepted(
             neighbor="node-2:5000",
             weight_command="partial_model",
@@ -49,10 +53,11 @@ class ModelGate:
     since acceptance logic is workflow-specific.
     """
 
-    def __init__(self, cp: CommunicationProtocol, address: str) -> None:
-        """Initialize the gate with a communication protocol and local address."""
+    def __init__(self, cp: CommunicationProtocol, address: str, pre_send_command: str) -> None:
+        """Initialize the gate with a communication protocol, local address, and pre-send command name."""
         self._cp = cp
         self._address = address
+        self._pre_send_command = pre_send_command
 
     async def send_if_accepted(
         self,
@@ -78,7 +83,7 @@ class ModelGate:
         """
         try:
             pre_send_msg = self._cp.build_msg(
-                "pre_send_model",
+                self._pre_send_command,
                 [weight_command] + contributors,
                 round=round_num,
                 direct=True,

@@ -82,7 +82,7 @@ class TestAsyncDFLDeclaredMessages:
             "index_information_updating",
             "model_information_updating",
             "push_sum_weight_information_updating",
-            "pre_send_model",
+            "pre_send_model_training",
         }
         assert set(msgs.keys()) == expected
 
@@ -110,7 +110,7 @@ class TestAsyncDFLDeclaredMessages:
         assert msgs["index_information_updating"].during is None
         assert msgs["model_information_updating"].during is None
         assert msgs["push_sum_weight_information_updating"].during is None
-        assert msgs["pre_send_model"].during is None
+        assert msgs["pre_send_model_training"].during is None
 
 
 class TestAsyncPeerState:

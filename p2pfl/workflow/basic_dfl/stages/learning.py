@@ -119,7 +119,7 @@ class LearningStage(Stage[BasicDFLContext]):
                 model.get_contributors(),
                 model.get_num_samples(),
             )
-            gate = ModelGate(ctx.cp, address)
+            gate = ModelGate(ctx.cp, address, pre_send_command="pre_send_model_learning")
             await gate.send_if_accepted(
                 neighbor=neighbor,
                 weight_command="partial_model",
@@ -184,14 +184,14 @@ class LearningStage(Stage[BasicDFLContext]):
 
     # -- Message handlers --
 
-    @on_message("models_aggregated")
+    @on_message("models_aggregated", during={"learning", "voting"})
     async def handle_models_aggregated(self, source: str, round: int, *args) -> None:
         """Handle a models_aggregated message by forwarding contributors."""
         await self._save_aggregated_models(self.ctx, source, round, list(args))
 
-    @on_message("pre_send_model")
-    async def handle_pre_send_model(self, source: str, round: int, *args) -> str:
-        """Handle a pre_send_model request by checking if the model should be accepted."""
+    @on_message("pre_send_model_learning", during={"learning", "voting"})
+    async def handle_pre_send_model_learning(self, source: str, round: int, *args) -> str:
+        """Handle a pre_send_model_learning request by checking if the model should be accepted."""
         if not args:
             return "false"
         weight_command = args[0]

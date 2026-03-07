@@ -26,7 +26,7 @@ from p2pfl.settings import Settings
 from p2pfl.workflow.basic_dfl.context import BasicDFLContext
 from p2pfl.workflow.engine.message import on_message
 from p2pfl.workflow.engine.stage import Stage
-from p2pfl.workflow.shared.gossiping import ModelGate
+from p2pfl.workflow.shared.gossiping import ModelGate, should_accept_model
 from p2pfl.workflow.shared.utils import wait_with_timeout
 
 
@@ -75,7 +75,7 @@ class RoundInitStage(Stage[BasicDFLContext]):
             round_num = experiment.round
             payload = ctx.cp.build_weights("add_model", round_num, encoded_model)
 
-            gate = ModelGate(ctx.cp, address)
+            gate = ModelGate(ctx.cp, address, pre_send_command="pre_send_model_init")
             for neighbor in candidates:
                 await gate.send_if_accepted(
                     neighbor=neighbor,
@@ -167,12 +167,34 @@ class RoundInitStage(Stage[BasicDFLContext]):
 
     # -- Message handlers --
 
-    @on_message("peer_round_updated")
+    @on_message("peer_round_updated", during={"round_init", "learning", "voting"})
     async def handle_peer_round_updated(self, source: str, round: int, *args) -> None:
         """Handle a peer_round_updated message."""
         await self._save_peer_round_updated(self.ctx, source, round)
 
-    @on_message("add_model", weights=True)
+    @on_message("pre_send_model_init", during={"round_init"})
+    async def handle_pre_send_model_init(self, source: str, round: int, *args) -> str:
+        """Handle a pre_send_model_init request for full model gossiping."""
+        if not args:
+            return "false"
+        weight_command = args[0]
+        contributors = list(args[1:]) if len(args) > 1 else []
+
+        existing: set[str] = set()
+        for p in self.ctx.peers.values():
+            if p.model:
+                existing.update(p.model.get_contributors())
+
+        accepted = should_accept_model(
+            weight_command=weight_command,
+            contributors=contributors,
+            round=round,
+            local_round=self.ctx.experiment.round,
+            existing_contributors=existing,
+        )
+        return "true" if accepted else "false"
+
+    @on_message("add_model", weights=True, during={"round_init", "learning"})
     async def handle_add_model(
         self,
         source: str,

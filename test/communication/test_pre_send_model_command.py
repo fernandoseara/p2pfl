@@ -15,7 +15,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Tests for pre_send_model message handling in workflows."""
+"""Tests for pre_send_model_learning message handling in workflows."""
 
 from unittest.mock import MagicMock
 
@@ -127,12 +127,12 @@ class TestShouldAcceptModel:
 
 
 class TestPreSendModelHandler:
-    """Tests for handle_pre_send_model handler on LearningStage."""
+    """Tests for handle_pre_send_model_learning on LearningStage."""
 
     @pytest.mark.asyncio
     async def test_missing_args_returns_false(self, learning_stage):
         """Test that missing arguments returns false."""
-        result = await learning_stage.handle_pre_send_model("source", 1)
+        result = await learning_stage.handle_pre_send_model_learning("source", 1)
         assert result == "false"
 
     @pytest.mark.asyncio
@@ -147,20 +147,20 @@ class TestPreSendModelHandler:
     async def test_add_model_round_logic(self, learning_stage, local_round, incoming_round, expected):
         """Test that add_model accepts only newer rounds."""
         set_round(learning_stage, local_round)
-        result = await learning_stage.handle_pre_send_model("source", incoming_round, "add_model")
+        result = await learning_stage.handle_pre_send_model_learning("source", incoming_round, "add_model")
         assert result == expected
 
     @pytest.mark.asyncio
     async def test_add_model_accepts_when_round_is_zero(self, learning_stage):
         """Test that add_model accepts when round is 0 (no experiment set)."""
         # No round set, defaults to 0
-        result = await learning_stage.handle_pre_send_model("source", 1, "add_model")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "add_model")
         assert result == "true"
 
     @pytest.mark.asyncio
     async def test_partial_model_accepts_new_contributors(self, learning_stage):
         """Test that partial_model accepts new contributors."""
-        result = await learning_stage.handle_pre_send_model("source", 1, "partial_model", "new_contrib")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "partial_model", "new_contrib")
         assert result == "true"
 
     @pytest.mark.asyncio
@@ -171,7 +171,7 @@ class TestPreSendModelHandler:
         learning_stage.ctx.peers["contrib1"] = BasicPeerState()
         learning_stage.ctx.peers["contrib1"].model = mock_model
 
-        result = await learning_stage.handle_pre_send_model("source", 1, "partial_model", "contrib1")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "partial_model", "contrib1")
         assert result == "false"
 
     @pytest.mark.asyncio
@@ -182,30 +182,30 @@ class TestPreSendModelHandler:
         learning_stage.ctx.peers["contrib1"] = BasicPeerState()
         learning_stage.ctx.peers["contrib1"].model = mock_model
 
-        result = await learning_stage.handle_pre_send_model("source", 1, "partial_model", "contrib1", "new_contrib")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "partial_model", "contrib1", "new_contrib")
         assert result == "true"
 
     @pytest.mark.asyncio
     async def test_partial_model_empty_contributors_rejected(self, learning_stage):
         """Test that partial_model with no contributors is rejected."""
-        result = await learning_stage.handle_pre_send_model("source", 1, "partial_model")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "partial_model")
         assert result == "false"
 
     @pytest.mark.asyncio
     async def test_unknown_command_rejected(self, learning_stage):
         """Test that unknown commands are rejected by default."""
-        result = await learning_stage.handle_pre_send_model("source", 1, "unknown_command", "contrib1")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "unknown_command", "contrib1")
         assert result == "false"
 
 
 class TestPreSendModelIntegration:
-    """Integration tests for pre_send_model flow."""
+    """Integration tests for pre_send_model_learning flow."""
 
     @pytest.mark.asyncio
     async def test_workflow_state_changes_affect_decision(self, learning_stage):
         """Test that workflow state changes affect accept/reject decisions."""
         # First model from contrib1 - should be accepted
-        result = await learning_stage.handle_pre_send_model("source", 1, "partial_model", "contrib1")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "partial_model", "contrib1")
         assert result == "true"
 
         # Simulate receiving the model
@@ -215,9 +215,9 @@ class TestPreSendModelIntegration:
         learning_stage.ctx.peers["contrib1"].model = mock_model
 
         # Second model from same contributor - should be rejected
-        result = await learning_stage.handle_pre_send_model("source", 1, "partial_model", "contrib1")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "partial_model", "contrib1")
         assert result == "false"
 
         # Model from new contributor - should be accepted
-        result = await learning_stage.handle_pre_send_model("source", 1, "partial_model", "contrib2")
+        result = await learning_stage.handle_pre_send_model_learning("source", 1, "partial_model", "contrib2")
         assert result == "true"
