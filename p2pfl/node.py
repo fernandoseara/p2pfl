@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import random
@@ -376,18 +377,20 @@ class Node:
         # Create workflow using factory
         self.workflow = create_workflow(workflow_name)
 
-        # Register workflow message handlers as communication commands
-        self._register_workflow_commands()
-
         try:
+            # Start workflow and wait until it's ready before registering commands
+            ready = asyncio.Event()
             await self.workflow.start(
                 experiment,
+                on_ready=ready,
                 address=self.address,
                 learner=self.learner,
                 aggregator=self.aggregator,
                 cp=self.communication_protocol,
                 generator=self.generator,
             )
+            await ready.wait()
+            self._register_workflow_commands()
         except Exception:
             self._unregister_workflow_commands()
             self.workflow = None

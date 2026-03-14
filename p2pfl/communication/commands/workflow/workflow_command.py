@@ -85,6 +85,7 @@ class WorkflowCommand(Command):
             Optional response string (for direct messages).
 
         """
+        # Skip if no learning in progress
         if not self.node.state.is_learning:
             logger.debug(self.node.address, f"No active workflow for '{self._message_name}'")
             return None
@@ -92,15 +93,27 @@ class WorkflowCommand(Command):
         workflow = self.workflow
         if workflow is None:
             return None
-        handlers = [
-            cb
-            for cb, entry in workflow._handlers.get(self._message_name, [])
-            if entry.during is None or workflow.current_stage_name in entry.during
-        ]
+
+        # Filter handlers whose `during` scope matches the current stage
+        entries = workflow._handlers.get(self._message_name, [])
+        handlers = [cb for cb, entry in entries if entry.during is None or workflow.current_stage_name in entry.during]
+
+        # No handler active for the current stage — log and drop
         if not handlers:
-            logger.debug(self.node.address, f"No active handler for '{self._message_name}' in stage '{workflow.current_stage_name}'")
+            local_round = workflow.experiment.round if workflow.experiment else "?"
+            active_stages = sorted({s for _, e in entries for s in (e.during or set())})
+            msg = (
+                f"Dropped '{self._message_name}' from {source} (round {round}, local round {local_round}) "
+                f"— current stage '{workflow.current_stage_name}', handler active during {active_stages}"
+            )
+            is_nearby_round = round == local_round or (isinstance(local_round, int) and round == local_round + 1)
+            if is_nearby_round:
+                logger.warning(self.node.address, msg)
+            else:
+                logger.debug(self.node.address, msg)
             return None
 
+        # Execute matching handlers
         result = None
         if weights is not None:
             for handler in handlers:

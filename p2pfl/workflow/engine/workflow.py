@@ -29,6 +29,7 @@ from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any, Generic
 
 from p2pfl.management.logger import logger
+from p2pfl.management.logger.experiment_observer import ExperimentLoggerObserver
 from p2pfl.workflow.engine.context import TContext
 from p2pfl.workflow.engine.experiment import Experiment
 from p2pfl.workflow.engine.message import MessageEntry
@@ -223,6 +224,7 @@ class Workflow(Generic[TContext]):
         aggregator: Aggregator,
         cp: CommunicationProtocol,
         generator: random.Random,
+        on_ready: asyncio.Event | None = None,
     ) -> Experiment:
         """
         Run the workflow with an explicit Experiment and context parameters.
@@ -236,33 +238,39 @@ class Workflow(Generic[TContext]):
             aggregator: The aggregator instance for model aggregation.
             cp: The communication protocol for network operations.
             generator: Random number generator for reproducibility.
+            on_ready: Event set when the workflow transitions to RUNNING,
+                before the first stage executes.
 
         Returns:
             The Experiment with tracked data after completion.
 
         """
         self.error = None
+        observer = ExperimentLoggerObserver(address)
 
+        # 1. Build typed context
+        logger.debug(address, "Workflow: creating context...")
+        ctx = self.create_context(
+            address=address,
+            learner=learner,
+            aggregator=aggregator,
+            cp=cp,
+            generator=generator,
+            experiment=experiment,
+        )
+
+        # 2. Compose stages, wire context, build handler map
+        logger.debug(address, "Workflow: composing stages...")
+        self._compose(ctx)
+
+        # 3. Attach observer and execute stage loop
+        logger.debug(address, "Workflow: starting stage loop...")
+        experiment.add_observer(observer)
+        self.status = WorkflowStatus.RUNNING
+        if on_ready is not None:
+            on_ready.set()
+        logger.experiment_started(ctx.address, experiment)
         try:
-            # 1. Build typed context
-            logger.debug(address, "Workflow: creating context...")
-            ctx = self.create_context(
-                address=address,
-                learner=learner,
-                aggregator=aggregator,
-                cp=cp,
-                generator=generator,
-                experiment=experiment,
-            )
-
-            # 2. Compose stages, wire context, build handler map
-            logger.debug(address, "Workflow: composing stages...")
-            self._compose(ctx)
-
-            # 3. Execute stage loop
-            logger.debug(address, "Workflow: starting stage loop...")
-            self.status = WorkflowStatus.RUNNING
-            logger.experiment_started(ctx.address, experiment)
             await self._run(ctx)
             self.status = WorkflowStatus.FINISHED
             logger.info(ctx.address, "🏁 Learning finished.")
@@ -276,6 +284,9 @@ class Workflow(Generic[TContext]):
             self.error = e
             logger.error(address, f"Learning failed: {e}")
             raise
+        finally:
+            experiment.remove_observer(observer)
+            logger.experiment_ended(address, experiment, self.status.value)
 
         return ctx.experiment
 
@@ -284,7 +295,8 @@ class Workflow(Generic[TContext]):
         # Setup stage
         stage = self._stage_map[self.initial_stage]
         self._current_stage = stage
-        logger.info(ctx.address, f"Entering stage: {self.initial_stage}")
+        ctx.experiment.current_stage = self.initial_stage
+        logger.debug(ctx.address, f"Entering stage: {self.initial_stage}")
         stage_name: str | None = await stage.run()
 
         self.validate_experiment(ctx)
@@ -293,7 +305,8 @@ class Workflow(Generic[TContext]):
         while stage_name is not None:
             stage = self._stage_map[stage_name]
             self._current_stage = stage
-            logger.info(ctx.address, f"Entering stage: {stage_name}")
+            ctx.experiment.current_stage = stage_name
+            logger.debug(ctx.address, f"Entering stage: {stage_name}")
             stage_name = await stage.run()
         self._current_stage = None
 
@@ -304,11 +317,18 @@ class Workflow(Generic[TContext]):
     #    Task Management    #
     #########################
 
-    async def start(self, *args: Any, **kwargs: Any) -> None:
+    async def start(self, *args: Any, on_ready: asyncio.Event | None = None, **kwargs: Any) -> None:
         """
         Launch the workflow as a background ``asyncio.Task``.
 
-        Takes the same arguments as ``run()``.
+        Takes the same arguments as ``run()``, plus an optional ``on_ready``
+        event that is set once the workflow status transitions to RUNNING
+        (before the first stage executes).
+
+        Args:
+            *args: Positional arguments forwarded to ``run()``.
+            on_ready: Event set when the workflow becomes RUNNING.
+            **kwargs: Keyword arguments forwarded to ``run()``.
 
         Raises:
             RuntimeError: If a workflow task is already running.
@@ -316,6 +336,7 @@ class Workflow(Generic[TContext]):
         """
         if self._task is not None and not self._task.done():
             raise RuntimeError("Workflow is already running")
+        kwargs["on_ready"] = on_ready
         self._task = asyncio.create_task(self.run(*args, **kwargs))
 
     async def stop(self) -> None:
