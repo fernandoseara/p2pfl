@@ -42,6 +42,7 @@ class LearningStage(Stage[BasicDFLContext]):
         """Initialize the learning stage."""
         super().__init__()
         self._models_complete = asyncio.Event()
+        self._full_model_ready = asyncio.Event()
 
     async def run(self) -> str | None:
         """Evaluate, train, gossip, aggregate, and advance the round."""
@@ -52,30 +53,36 @@ class LearningStage(Stage[BasicDFLContext]):
         learner = ctx.learner
         experiment = ctx.experiment
 
-        # Evaluate
-        await evaluate_and_broadcast(ctx)
+        if ctx.needs_full_model:
+            # Non-training node: wait for full model from training nodes
+            await wait_with_timeout(
+                self._full_model_ready,
+                Settings.training.AGGREGATION_TIMEOUT,
+                address,
+                "Timeout waiting for full model. Proceeding anyway.",
+            )
+            ctx.needs_full_model = False
+        else:
+            # Training node: evaluate, train, gossip, aggregate
+            await evaluate_and_broadcast(ctx)
 
-        # Train
-        logger.info(address, "🏋️‍♀️ Training...")
-        await learner.fit()
-        logger.info(address, "🎓 Training done.")
-        await self._save_aggregation(ctx, model=learner.get_model(), source=address)
+            await learner.fit()
+            logger.info(address, "🎓 Training done.")
+            await self._save_aggregation(ctx, model=learner.get_model(), source=address)
 
-        # Gossip partial models
-        candidates = self._get_partial_gossiping_candidates(ctx)
-        if candidates:
-            # Gather all contributors
-            all_contributors: list[str] = []
-            for p in ctx.peers.values():
-                if p.model:
-                    all_contributors.extend(p.model.get_contributors())
-            all_contributors = list(set(all_contributors))
+            # Gossip partial models
+            candidates = self._get_partial_gossiping_candidates(ctx)
+            if candidates:
+                all_contributors: list[str] = []
+                for p in ctx.peers.values():
+                    if p.model:
+                        all_contributors.extend(p.model.get_contributors())
+                all_contributors = list(set(all_contributors))
 
-            await ctx.cp.broadcast_gossip(ctx.cp.build_msg("models_aggregated", all_contributors, round=experiment.round))
-            await self._gossip_partial_models(ctx, candidates)
+                await ctx.cp.broadcast_gossip(ctx.cp.build_msg("models_aggregated", all_contributors, round=experiment.round))
+                await self._gossip_partial_models(ctx, candidates)
 
-        # Wait for all models with timeout
-        if not self._all_models_received(ctx):
+            # Wait for all models with timeout
             await wait_with_timeout(
                 self._models_complete,
                 Settings.training.AGGREGATION_TIMEOUT,
@@ -83,19 +90,18 @@ class LearningStage(Stage[BasicDFLContext]):
                 "Aggregation timed out, proceeding with available models.",
             )
 
-        # Aggregate
-        aggregator = ctx.aggregator
-        agg_model = aggregator.aggregate([p.model for p in ctx.peers.values() if p.model is not None])
-        learner.set_model(agg_model)
-        experiment.increase_round(address)
+            # Aggregate
+            aggregator = ctx.aggregator
+            agg_model = aggregator.aggregate([p.model for p in ctx.peers.values() if p.model is not None])
+            learner.set_model(agg_model)
 
-        logger.info(address, "Aggregation finished.")
-        logger.info(address, f"Round {experiment.round} finished.")
-
-        ctx.needs_full_model = False
+        logger.info(address, f"✅ Round {experiment.round} finished.")
+        experiment.round += 1
         return "round_init"
 
-    # -- Gossiping --
+    ###
+    #    Gossiping
+    ###
 
     async def _gossip_partial_models(self, ctx: BasicDFLContext, candidates: list[str]) -> None:
         address = ctx.address
@@ -108,27 +114,34 @@ class LearningStage(Stage[BasicDFLContext]):
             eligible = [m for m in models if not set(m.get_contributors()).issubset(aggregation_sources)]
 
             if not eligible:
-                logger.info(address, f"No models to aggregate for {address}.")
+                logger.info(address, f"📭 No models to aggregate for {address}.")
                 continue
 
-            model = ctx.generator.choice(eligible)
-            payload = ctx.cp.build_weights(
-                "partial_model",
-                experiment.round,
-                model.encode_parameters(),
-                model.get_contributors(),
-                model.get_num_samples(),
-            )
-            gate = ModelGate(ctx.cp, address, pre_send_command="pre_send_model_learning")
-            await gate.send_if_accepted(
-                neighbor=neighbor,
-                weight_command="partial_model",
-                contributors=model.get_contributors(),
-                round_num=experiment.round,
-                payload=payload,
-            )
+            # Shuffle to avoid always trying the same order
+            ctx.generator.shuffle(eligible)
 
-    # -- Condition helpers --
+            gate = ModelGate(ctx.cp, address, pre_send_command="pre_send_model_learning")
+            for model in eligible:
+                payload = ctx.cp.build_weights(
+                    "partial_model",
+                    experiment.round,
+                    model.encode_parameters(),
+                    model.get_contributors(),
+                    model.get_num_samples(),
+                )
+                sent = await gate.send_if_accepted(
+                    neighbor=neighbor,
+                    weight_command="partial_model",
+                    contributors=model.get_contributors(),
+                    round_num=experiment.round,
+                    payload=payload,
+                )
+                if sent:
+                    break
+
+    ###
+    #    Condition helpers
+    ###
 
     def _get_partial_gossiping_candidates(self, ctx: BasicDFLContext) -> list[str]:
         address = ctx.address
@@ -139,10 +152,9 @@ class LearningStage(Stage[BasicDFLContext]):
         logger.debug(address, f"Candidates to gossip to: {candidates}")
         return candidates
 
-    def _all_models_received(self, ctx: BasicDFLContext) -> bool:
-        return len(ctx.train_set) == sum(1 for p in ctx.peers.values() if p.model is not None)
-
-    # -- State update callbacks --
+    ###
+    #    State update callbacks
+    ###
 
     async def _save_aggregated_models(
         self,
@@ -156,7 +168,7 @@ class LearningStage(Stage[BasicDFLContext]):
         if round == ctx.experiment.round:
             peer = ctx.peers.get(source)
             if peer is None:
-                logger.warning(ctx.address, f"Ignoring aggregated_models from unknown peer {source}")
+                logger.warning(ctx.address, f"⚠️ Ignoring aggregated_models from unknown peer {source}")
                 return
             peer.aggregated_from.extend(aggregated_models)
             logger.debug(
@@ -164,9 +176,9 @@ class LearningStage(Stage[BasicDFLContext]):
                 f"Aggregated models received from {source}: {aggregated_models}",
             )
         else:
-            logger.error(
+            logger.warning(
                 ctx.address,
-                f"Aggregated models not received from {source}: {aggregated_models} (expected {ctx.experiment.round})",
+                f"Ignoring stale models_aggregated from {source} (round {round}, local {ctx.experiment.round})",
             )
 
     async def _save_aggregation(self, ctx: BasicDFLContext, model: P2PFLModel | None = None, source: str = "") -> None:
@@ -174,22 +186,24 @@ class LearningStage(Stage[BasicDFLContext]):
             return
         peer = ctx.peers.get(source)
         if peer is None:
-            logger.warning(ctx.address, f"Ignoring model from unknown peer {source}")
+            logger.warning(ctx.address, f"⚠️ Ignoring model from unknown peer {source}")
             return
         peer.model = model
         logger.debug(ctx.address, f"Model received from {source}: {model}")
 
-        if self._all_models_received(ctx):
+        if len(ctx.train_set) == sum(1 for p in ctx.peers.values() if p.model is not None):
             self._models_complete.set()
 
-    # -- Message handlers --
+    ###
+    #    Message handlers
+    ###
 
-    @on_message("models_aggregated", during={"learning", "voting"})
+    @on_message("models_aggregated", during={"learning", "voting", "round_init"})
     async def handle_models_aggregated(self, source: str, round: int, *args) -> None:
         """Handle a models_aggregated message by forwarding contributors."""
         await self._save_aggregated_models(self.ctx, source, round, list(args))
 
-    @on_message("pre_send_model_learning", during={"learning", "voting"})
+    @on_message("pre_send_model_learning", during={"learning", "voting", "round_init"})
     async def handle_pre_send_model_learning(self, source: str, round: int, *args) -> str:
         """Handle a pre_send_model_learning request by checking if the model should be accepted."""
         if not args:
@@ -211,7 +225,7 @@ class LearningStage(Stage[BasicDFLContext]):
         )
         return "true" if accepted else "false"
 
-    @on_message("partial_model", weights=True)
+    @on_message("partial_model", weights=True, during={"learning", "voting", "round_init"})
     async def handle_partial_model(
         self,
         source: str,
@@ -222,6 +236,9 @@ class LearningStage(Stage[BasicDFLContext]):
     ) -> None:
         """Handle a partial_model message by decoding and aggregating the received model."""
         ctx = self.ctx
+        if round != ctx.experiment.round:
+            logger.warning(ctx.address, f"⚠️ Ignoring partial_model from {source} (round {round}, local {ctx.experiment.round})")
+            return
         if contributors is None or num_samples is None:
             raise ValueError("Contributors and num_samples are required")
         try:
@@ -232,8 +249,30 @@ class LearningStage(Stage[BasicDFLContext]):
             )
             await self._save_aggregation(ctx, model, source)
         except DecodingParamsError:
-            logger.error(ctx.address, "Error decoding parameters.")
+            logger.error(ctx.address, "❌ Error decoding parameters.")
         except ModelNotMatchingError:
-            logger.error(ctx.address, "Models not matching.")
+            logger.error(ctx.address, "❌ Models not matching.")
         except Exception as e:
-            logger.error(ctx.address, f"Unknown error adding model: {e}")
+            logger.error(ctx.address, f"❌ Unknown error adding model: {e}")
+
+    @on_message("add_model", weights=True, during={"learning"})
+    async def handle_add_model(
+        self,
+        source: str,
+        round: int,
+        weights: bytes,
+        contributors: list[str] | None,
+        num_samples: int | None,
+    ) -> None:
+        """Handle an add_model message containing a full model from a peer."""
+        ctx = self.ctx
+        try:
+            logger.info(ctx.address, "📥 Full model received.")
+            ctx.learner.set_model(weights)
+            self._full_model_ready.set()
+        except DecodingParamsError:
+            logger.error(ctx.address, "❌ Error decoding parameters.")
+        except ModelNotMatchingError:
+            logger.error(ctx.address, "❌ Models not matching.")
+        except Exception as e:
+            logger.error(ctx.address, f"❌ Unknown error adding model: {e}")

@@ -25,10 +25,12 @@ from p2pfl.workflow.engine.context import WorkflowContext
 
 async def evaluate_and_broadcast(ctx: WorkflowContext) -> None:
     """Evaluate the model and broadcast metrics to peers."""
-    logger.info(ctx.address, "📊 Evaluating...")
     try:
         results = await ctx.learner.evaluate()
-        logger.info(ctx.address, f"Evaluated. Results: {results}")
+        if results:
+            logger.info(ctx.address, f"📊 Evaluation: {results}")
+        else:
+            logger.debug(ctx.address, "📊 Evaluation: no metrics.")
 
         if len(results) > 0:
             logger.info(ctx.address, "📡 Broadcasting metrics.")

@@ -46,7 +46,7 @@ class BasicDFL(Workflow[BasicDFLContext]):
     def validate_experiment(self, ctx: BasicDFLContext) -> None:
         """Resolve dynamic defaults and validate BasicDFL experiment params."""
         exp = ctx.experiment
-        if "trainset_size" not in exp.data:
-            exp.data["trainset_size"] = len(ctx.peers)
-        if exp.data["trainset_size"] < 1:
+        if not hasattr(exp, "trainset_size"):
+            exp.trainset_size = len(ctx.peers)
+        if exp.trainset_size < 1:
             raise ValueError("trainset_size must be >= 1")

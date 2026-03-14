@@ -25,7 +25,7 @@ from p2pfl.management.logger import logger
 
 async def wait_with_timeout(event: asyncio.Event, timeout: float, address: str, msg: str) -> bool:
     """
-    Clear an event, wait for it with a timeout, and log a warning on timeout.
+    Wait for an event with a timeout, and log a warning on timeout.
 
     Args:
         event: The asyncio event to wait on.
@@ -37,7 +37,6 @@ async def wait_with_timeout(event: asyncio.Event, timeout: float, address: str, 
         True if the event was set before the timeout, False otherwise.
 
     """
-    event.clear()
     try:
         await asyncio.wait_for(event.wait(), timeout=timeout)
         return True

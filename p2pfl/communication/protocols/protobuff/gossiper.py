@@ -134,7 +134,7 @@ class Gossiper(NodeComponent):
             for msg, clients in messages_to_send:
                 for client in clients:
                     try:
-                        await client.send(msg)
+                        await client.send(msg, disconnect_on_error=False)
                     except Exception as e:
                         logger.warning(self.address, f"Failed to gossip to {client.nei_addr}: {e}")
 

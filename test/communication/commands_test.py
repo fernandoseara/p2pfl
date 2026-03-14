@@ -203,7 +203,7 @@ class TestStartLearningCommand:
         assert args[1].total_rounds == 10
         assert args[1].epochs_per_round == 5
         assert args[1].exp_name == "my_experiment"
-        assert args[1].data["trainset_size"] == 100
+        assert args[1].trainset_size == 100
 
     @pytest.mark.asyncio
     async def test_execute_handles_node_running_exception(self):

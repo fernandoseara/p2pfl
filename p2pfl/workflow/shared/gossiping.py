@@ -89,8 +89,11 @@ class ModelGate:
                 direct=True,
             )
             response = await self._cp.send(neighbor, pre_send_msg, temporal_connection=True)
-            if response != "true":
+            if response == "false":
                 logger.debug(self._address, f"⏭️ Skipping model send to {neighbor} - recipient declined")
+                return False
+            if response != "true":
+                logger.warning(self._address, f"⚠️ Unexpected gate response from {neighbor}: '{response}' (peer not ready?)")
                 return False
             logger.debug(self._address, f"🗣️ Sending model to {neighbor}")
             await self._cp.send(neighbor, payload, temporal_connection=True)

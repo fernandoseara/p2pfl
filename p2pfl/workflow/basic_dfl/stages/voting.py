@@ -42,44 +42,41 @@ class VotingStage(Stage[BasicDFLContext]):
         ctx = self.ctx
         address = ctx.address
 
+        self._votes_complete.clear()
+
         # Cast votes
         await self._cast_votes(ctx)
 
         # Wait for all votes with timeout
-        if not self._all_votes_received(ctx):
-            await wait_with_timeout(
-                self._votes_complete,
-                Settings.training.VOTE_TIMEOUT,
-                address,
-                "Voting timed out, proceeding with available votes.",
-            )
+        await wait_with_timeout(
+            self._votes_complete,
+            Settings.training.VOTE_TIMEOUT,
+            address,
+            "Voting timed out, proceeding with available votes.",
+        )
 
         # Aggregate votes
-        logger.info(address, "Voting finished.")
+        logger.info(address, "🗳️ Voting finished.")
         self._aggregate_votes(ctx)
 
-        # Decide next stage
-        if self._in_train_set(ctx):
-            ctx.needs_full_model = False
-            return "learning"
-        else:
-            ctx.needs_full_model = True
-            return "round_init"
+        ctx.needs_full_model = ctx.address not in ctx.train_set
+        return "learning"
 
-    # -- Voting logic --
+    ###
+    #    Voting logic
+    ###
 
     async def _cast_votes(self, ctx: BasicDFLContext) -> None:
         address = ctx.address
         experiment = ctx.experiment
 
-        logger.info(address, "🗳️ Voting for the train set.")
-
         candidates = list(ctx.peers.keys())
         logger.debug(address, f"{len(candidates)} candidates to train set")
         candidates.sort()
 
-        assert experiment.data["trainset_size"] is not None, "trainset_size must be set before voting"
-        samples = min(experiment.data["trainset_size"], len(candidates))
+        if experiment.trainset_size is None:
+            raise ValueError("trainset_size must be set before voting")
+        samples = min(experiment.trainset_size, len(candidates))
         nodes_voted = ctx.generator.sample(candidates, samples)
         weights = [math.floor(ctx.generator.randint(0, 1000) / (i + 1)) for i in range(samples)]
 
@@ -92,10 +89,12 @@ class VotingStage(Stage[BasicDFLContext]):
             votes_list.append(peer_voted)
             votes_list.append(weight)
 
-        logger.info(address, "🗳️ Sending train set vote.")
         await ctx.cp.broadcast_gossip(ctx.cp.build_msg("vote_train_set", votes_list, round=experiment.round))
+        logger.info(address, "🗳️ Vote broadcasted.")
 
-    # -- Vote aggregation --
+    ###
+    #    Vote aggregation
+    ###
 
     def _aggregate_votes(self, ctx: BasicDFLContext) -> None:
         address = ctx.address
@@ -109,25 +108,29 @@ class VotingStage(Stage[BasicDFLContext]):
         ordered = sorted(results.items(), key=lambda x: x[0])
         ordered = sorted(ordered, key=lambda x: x[1], reverse=True)
 
-        assert experiment.data["trainset_size"] is not None, "trainset_size must be set before voting"
-        top = min(len(ordered), experiment.data["trainset_size"])
+        if experiment.trainset_size is None:
+            raise ValueError("trainset_size must be set before voting")
+        top = min(len(ordered), experiment.trainset_size)
         train_set = [i[0] for i in ordered[:top]]
 
-        num_votes = sum(len(p.votes) for p in ctx.peers.values())
+        num_vote_entries = sum(len(p.votes) for p in ctx.peers.values())
+        num_peers_voted = sum(1 for p in ctx.peers.values() if p.votes)
         for p in ctx.peers.values():
             p.votes.clear()
-        logger.info(address, f"Computed {num_votes} votes.")
+        logger.info(address, f"🗳️ Received votes from {num_peers_voted} peers ({num_vote_entries} vote entries).")
 
         ctx.train_set = [n for n in train_set if n in ctx.peers]
         if not ctx.train_set:
-            logger.warning(address, "Train set is empty after filtering disconnected peers, falling back to self.")
+            logger.warning(address, "⚠️ Train set empty after filtering, falling back to self.")
             ctx.train_set = [address]
         logger.info(
             address,
             f"Train set of {len(ctx.train_set)} nodes: {ctx.train_set}",
         )
 
-    # -- Callbacks --
+    ###
+    #    Callbacks
+    ###
 
     async def _save_votes(self, ctx: BasicDFLContext, source: str = "", round: int = 0, tmp_votes: list | None = None) -> None:
         if tmp_votes is None:
@@ -135,29 +138,22 @@ class VotingStage(Stage[BasicDFLContext]):
         if round == ctx.experiment.round:
             peer = ctx.peers.get(source)
             if peer is None:
-                logger.warning(ctx.address, f"Received votes from unknown peer {source}, ignoring.")
+                logger.warning(ctx.address, f"⚠️ Received votes from unknown peer {source}, ignoring.")
                 return
             for train_set_id, vote in tmp_votes:
                 peer.votes[train_set_id] = peer.votes.get(train_set_id, 0) + vote
-            logger.debug(ctx.address, f"Votes received from {source}: {tmp_votes}")
         else:
-            logger.error(
-                ctx.address,
-                f"Votes not received from {source}: {tmp_votes} (expected {ctx.experiment.round})",
-            )
+            logger.debug(ctx.address, f"Rejected stale vote from {source} (msg round={round}, local round={ctx.experiment.round}).")
+            return
 
-        if self._all_votes_received(ctx):
+        if all(p.votes for p in ctx.peers.values()):
             self._votes_complete.set()
 
-    def _all_votes_received(self, ctx: BasicDFLContext) -> bool:
-        return all(p.votes for p in ctx.peers.values())
+    ###
+    #    Message handler
+    ###
 
-    def _in_train_set(self, ctx: BasicDFLContext) -> bool:
-        return ctx.address in ctx.train_set
-
-    # -- Message handler --
-
-    @on_message("vote_train_set", during={"voting", "round_init"})
+    @on_message("vote_train_set", during={"voting", "round_init", "learning"})
     async def handle_vote_train_set(self, source: str, round: int, *args) -> None:
         """Handle a vote_train_set message by parsing vote pairs and forwarding."""
         if len(args) % 2 != 0:

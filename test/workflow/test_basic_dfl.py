@@ -17,7 +17,7 @@
 
 """Tests for BasicDFL (new engine)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -137,6 +137,9 @@ class TestBasicDeclaredMessages:
         msgs = wf.get_messages()
         expected = {
             "node_initialized",
+            "pre_send_initial_model",
+            "initial_model",
+            "node_ready",
             "peer_round_updated",
             "add_model",
             "vote_train_set",
@@ -153,6 +156,7 @@ class TestBasicDeclaredMessages:
         msgs = wf.get_messages()
         assert msgs["add_model"].is_weights is True
         assert msgs["partial_model"].is_weights is True
+        assert msgs["initial_model"].is_weights is True
         assert msgs["node_initialized"].is_weights is False
         assert msgs["vote_train_set"].is_weights is False
 
@@ -167,14 +171,17 @@ class TestBasicDeclaredMessages:
         msgs = wf.get_messages()
         # Handlers without explicit during= → None pre-compose
         assert msgs["node_initialized"].during is None
-        assert msgs["add_model"].during is None
-        assert msgs["models_aggregated"].during is None
-        assert msgs["pre_send_model_init"].during == frozenset({"round_init", "learning"})
-        assert msgs["pre_send_model_learning"].during == frozenset({"learning", "voting"})
-        assert msgs["partial_model"].during is None
+        assert msgs["initial_model"].during is None
+        assert msgs["node_ready"].during is None
+        assert msgs["add_model"].during == frozenset({"learning"})
+        assert msgs["models_aggregated"].during == frozenset({"learning", "voting", "round_init"})
+        assert msgs["pre_send_initial_model"].during == frozenset({"setup"})
+        assert msgs["pre_send_model_init"].during == frozenset({"setup", "round_init", "learning", "voting"})
+        assert msgs["pre_send_model_learning"].during == frozenset({"learning", "voting", "round_init"})
+        assert msgs["partial_model"].during == frozenset({"learning", "voting", "round_init"})
         # Handlers with explicit during=
-        assert msgs["peer_round_updated"].during == frozenset({"round_init", "learning", "voting"})
-        assert msgs["vote_train_set"].during == frozenset({"voting", "round_init"})
+        assert msgs["peer_round_updated"].during == frozenset({"setup", "round_init", "learning", "voting"})
+        assert msgs["vote_train_set"].during == frozenset({"voting", "round_init", "learning"})
 
 
 class TestBasicMessageRegistry:
@@ -185,6 +192,9 @@ class TestBasicMessageRegistry:
         registry = composed_workflow.get_messages()
         expected_messages = {
             "node_initialized",
+            "pre_send_initial_model",
+            "initial_model",
+            "node_ready",
             "peer_round_updated",
             "add_model",
             "vote_train_set",
@@ -202,82 +212,6 @@ class TestBasicMessageRegistry:
         assert registry["partial_model"].is_weights is True
         assert registry["node_initialized"].is_weights is False
         assert registry["vote_train_set"].is_weights is False
-
-
-class TestBasicConditions:
-    """Tests for workflow condition methods."""
-
-    def test_all_nodes_started(self, composed_workflow, ctx):
-        """Test _all_nodes_started condition via setup stage."""
-        ctx.peers["node_1"] = BasicPeerState()
-        ctx.peers["node_2"] = BasicPeerState()
-        ctx.peers["node_3"] = BasicPeerState()
-
-        ctx.cp.get_neighbors.return_value = {"node_2": {}, "node_3": {}}
-
-        setup_stage = composed_workflow._stage_map["setup"]
-        assert setup_stage._all_nodes_started(ctx)
-
-    def test_all_nodes_started_false_when_missing(self, composed_workflow, ctx):
-        """Test _all_nodes_started returns false when peers are missing."""
-        ctx.peers["node_1"] = BasicPeerState()
-        ctx.cp.get_neighbors.return_value = {"node_2": {}, "node_3": {}}
-
-        setup_stage = composed_workflow._stage_map["setup"]
-        assert not setup_stage._all_nodes_started(ctx)
-
-    def test_in_train_set(self, composed_workflow, ctx):
-        """Test _in_train_set condition via voting stage."""
-        voting_stage = composed_workflow._stage_map["voting"]
-
-        ctx.train_set = ["node_1", "node_2"]
-        ctx.address = "node_1"
-        assert voting_stage._in_train_set(ctx)
-
-        ctx.address = "node_3"
-        assert not voting_stage._in_train_set(ctx)
-
-    def test_total_rounds_reached_false_when_total_rounds_is_none(self, composed_workflow, ctx):
-        """Test that _total_rounds_reached returns False when total_rounds is None."""
-        ctx.experiment.total_rounds = None
-        round_init_stage = composed_workflow._stage_map["round_init"]
-        assert round_init_stage._total_rounds_reached(ctx) is False
-
-    def test_total_rounds_reached_true_when_reached(self, composed_workflow, ctx):
-        """Test that _total_rounds_reached returns True when round >= total_rounds."""
-        ctx.experiment = Experiment("test", 2, epochs_per_round=1)
-        with patch("p2pfl.workflow.engine.experiment.logger"):
-            ctx.experiment.increase_round("node1")
-            ctx.experiment.increase_round("node1")
-            round_init_stage = composed_workflow._stage_map["round_init"]
-            assert round_init_stage._total_rounds_reached(ctx) is True
-
-    def test_all_votes_received(self, composed_workflow, ctx):
-        """Test _all_votes_received condition via voting stage."""
-        voting_stage = composed_workflow._stage_map["voting"]
-
-        ctx.peers["node_1"] = BasicPeerState()
-        ctx.peers["node_2"] = BasicPeerState()
-        assert not voting_stage._all_votes_received(ctx)
-
-        ctx.peers["node_1"].votes = {"a": 1}
-        assert not voting_stage._all_votes_received(ctx)
-
-        ctx.peers["node_2"].votes = {"b": 2}
-        assert voting_stage._all_votes_received(ctx)
-
-    def test_all_models_received(self, composed_workflow, ctx):
-        """Test _all_models_received condition via learning stage."""
-        learning_stage = composed_workflow._stage_map["learning"]
-        ctx.train_set = ["node_1", "node_2"]
-
-        ctx.peers["node_1"] = BasicPeerState()
-        ctx.peers["node_2"] = BasicPeerState()
-        assert not learning_stage._all_models_received(ctx)
-
-        ctx.peers["node_1"].model = MagicMock()
-        ctx.peers["node_2"].model = MagicMock()
-        assert learning_stage._all_models_received(ctx)
 
 
 class TestBasicPeerState:
@@ -330,6 +264,5 @@ class TestBasicValidation:
         assert "voting" in transitions["round_init"]
         assert "finish" in transitions["round_init"]
         assert "learning" in transitions["voting"]
-        assert "round_init" in transitions["voting"]
         assert "round_init" in transitions["learning"]
         assert transitions["finish"] == {None}

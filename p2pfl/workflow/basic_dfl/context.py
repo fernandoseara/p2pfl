@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 class BasicPeerState:
     """Per-peer mutable state for BasicDFL workflow."""
 
-    round_number: int = 0
+    round_number: int = -1
     model: P2PFLModel | None = None
     aggregated_from: list[str] = field(default_factory=list)
     votes: dict[str, int] = field(default_factory=dict)

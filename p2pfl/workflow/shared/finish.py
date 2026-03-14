@@ -30,5 +30,5 @@ class FinishStage(Stage[TContext]):
     async def run(self) -> str | None:
         """Perform final evaluation and signal workflow completion."""
         await evaluate_and_broadcast(self.ctx)
-        logger.info(self.ctx.address, "Training finished!!")
+        logger.info(self.ctx.address, "🏁 Training finished!")
         return None

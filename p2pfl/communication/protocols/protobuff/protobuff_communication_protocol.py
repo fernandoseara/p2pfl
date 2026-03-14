@@ -337,7 +337,7 @@ class ProtobuffCommunicationProtocol(CommunicationProtocol):
         neis = self._neighbors.get_all(only_direct=True)
         neis_clients = [nei[0] for nei in neis.values()]
 
-        await asyncio.gather(*(nei.send(msg) for nei in neis_clients))
+        await asyncio.gather(*(nei.send(msg, disconnect_on_error=False) for nei in neis_clients))
 
     @running
     def get_neighbors(self, only_direct: bool = False) -> dict[str, Any]:

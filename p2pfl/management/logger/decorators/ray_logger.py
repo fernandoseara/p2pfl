@@ -267,17 +267,6 @@ class RayP2PFLogger(P2PFLogger):
         """
         ray.get(self.ray_actor.unregister_node.remote(node))
 
-    def round_updated(self, node: str, round: int) -> None:
-        """
-        Notify a round update.
-
-        Args:
-            node: The node address.
-            round: The new round number.
-
-        """
-        ray.get(self.ray_actor.round_updated.remote(node, round))
-
     def experiment_started(self, node: str, experiment: Experiment | None) -> None:
         """
         Notify the experiment start.
@@ -289,26 +278,29 @@ class RayP2PFLogger(P2PFLogger):
         """
         ray.get(self.ray_actor.experiment_started.remote(node, experiment))
 
-    def experiment_finished(self, node: str) -> None:
+    def on_experiment_change(self, address: str, field_name: str, value: Any) -> None:
         """
-        Notify the experiment end.
+        Handle an experiment attribute change via the Ray actor.
 
         Args:
-            node: The node address.
+            address: The node address.
+            field_name: The name of the changed attribute.
+            value: The new value.
 
         """
-        ray.get(self.ray_actor.experiment_finished.remote(node))
+        ray.get(self.ray_actor.on_experiment_change.remote(address, field_name, value))
 
-    def experiment_updated(self, node: str, experiment: Experiment) -> None:
+    def experiment_ended(self, address: str, experiment: Experiment, status: str) -> None:
         """
-        Notify the round end.
+        Forward experiment end to the Ray actor.
 
         Args:
-            node: The node address.
-            experiment: The experiment to update.
+            address: The node address.
+            experiment: The experiment.
+            status: The final status.
 
         """
-        ray.get(self.ray_actor.experiment_updated.remote(node, experiment))
+        ray.get(self.ray_actor.experiment_ended.remote(address, experiment, status))
 
     def get_nodes(self) -> dict[str, dict[Any, Any]]:
         """

@@ -32,6 +32,8 @@ from p2pfl.communication.protocols.protobuff.proto import node_pb2, node_pb2_grp
 from p2pfl.management.logger import logger
 from p2pfl.utils.node_component import NodeComponent, allow_no_addr_check
 
+_MSG_BUFFER_MAX_SIZE = 200
+
 
 class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
     """
@@ -68,6 +70,9 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
         # Background tasks
         self._background_tasks: set[asyncio.Task[Any]] = set()
+
+        # Buffer for messages that arrive before their command is registered
+        self._pending_msgs_buffer: list[node_pb2.RootMessage] = []
 
     ####
     # Management
@@ -199,9 +204,13 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                 logger.error(self.address, error_text + f"\n{traceback.format_exc()}")
                 return node_pb2.ResponseMessage(error=error_text)
         else:
-            # disconnect node
-            logger.error(self.address, f"Unknown command: {request.cmd} from {request.source}")
-            return node_pb2.ResponseMessage(error=f"Unknown command: {request.cmd}")
+            # Buffer unknown messages for deferred replay when the command is registered
+            if len(self._pending_msgs_buffer) < _MSG_BUFFER_MAX_SIZE:
+                self._pending_msgs_buffer.append(request)
+                logger.debug(self.address, f"📦 Buffered unknown command: {request.cmd} from {request.source}")
+            else:
+                logger.warning(self.address, f"Message buffer full, dropping unknown command: {request.cmd} from {request.source}")
+            return node_pb2.ResponseMessage()
 
         # If message gossip
         if request.HasField("gossip_message") and request.gossip_message.ttl > 0:
@@ -236,12 +245,63 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
 
         """
         if isinstance(cmds, list):
+            new_names: set[str] = set()
             for cmd in cmds:
                 self.__commands[cmd.get_name()] = cmd
+                new_names.add(cmd.get_name())
         elif isinstance(cmds, Command):
             self.__commands[cmds.get_name()] = cmds
+            new_names = {cmds.get_name()}
         else:
             raise Exception("Command not valid")
+
+        # Replay any buffered messages that match the newly registered commands
+        if self._pending_msgs_buffer:
+            self._replay_buffered_messages(new_names)
+
+    def _replay_buffered_messages(self, new_names: set[str]) -> None:
+        """
+        Replay buffered messages that match newly registered command names.
+
+        Args:
+            new_names: Set of command names that were just registered.
+
+        """
+        remaining: list[node_pb2.RootMessage] = []
+        for msg in self._pending_msgs_buffer:
+            if msg.cmd not in new_names:
+                remaining.append(msg)
+                continue
+
+            logger.debug(self.address, f"📦 Replaying buffered command: {msg.cmd} from {msg.source}")
+
+            if msg.HasField("gossip_message"):
+                # Execute the command
+                task = asyncio.create_task(self.__commands[msg.cmd].execute(msg.source, msg.round, *msg.gossip_message.args))
+                self._track_background_task(task, msg.cmd)
+                # Forward via gossip if TTL allows
+                if msg.gossip_message.ttl > 0:
+                    msg.gossip_message.ttl -= 1
+                    task = asyncio.create_task(self._gossiper.add_message(msg))
+                    self._track_background_task(task, f"{msg.cmd}_gossip_forward")
+            elif msg.HasField("weights"):
+                # Weights are fire-and-forget
+                task = asyncio.create_task(
+                    self.__commands[msg.cmd].execute(
+                        msg.source,
+                        msg.round,
+                        weights=msg.weights.weights,
+                        contributors=msg.weights.contributors,
+                        num_samples=msg.weights.num_samples,
+                    )
+                )
+                self._track_background_task(task, msg.cmd)
+            elif msg.HasField("direct_message"):
+                # Direct messages: response is lost (caller already got empty response)
+                task = asyncio.create_task(self.__commands[msg.cmd].execute(msg.source, msg.round, *msg.direct_message.args))
+                self._track_background_task(task, msg.cmd)
+
+        self._pending_msgs_buffer = remaining
 
     @allow_no_addr_check
     def remove_command(self, cmds: str | Command | list[str | Command]) -> None:

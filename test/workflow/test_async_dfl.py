@@ -17,7 +17,7 @@
 
 """Tests for AsyncDFL workflow (new engine)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -185,32 +185,6 @@ class TestComputePriority:
 class TestTrainingRoundStageConditions:
     """Tests for TrainingRoundStage condition helpers."""
 
-    def test_total_rounds_reached_false(self):
-        """Test _total_rounds_reached returns False when not reached."""
-        stage = TrainingRoundStage()
-        ctx = MagicMock(spec=AsyncDFLContext)
-        ctx.experiment = Experiment("test", total_rounds=5)
-        ctx.experiment.round = 2
-        assert stage._total_rounds_reached(ctx) is False
-
-    def test_total_rounds_reached_true(self):
-        """Test _total_rounds_reached returns True when reached."""
-        stage = TrainingRoundStage()
-        ctx = MagicMock(spec=AsyncDFLContext)
-        ctx.experiment = Experiment("test", total_rounds=5)
-        with patch("p2pfl.workflow.engine.experiment.logger"):
-            for _ in range(5):
-                ctx.experiment.increase_round("test")
-        assert stage._total_rounds_reached(ctx) is True
-
-    def test_total_rounds_reached_false_when_none(self):
-        """Test _total_rounds_reached returns False when total_rounds is None."""
-        stage = TrainingRoundStage()
-        ctx = MagicMock(spec=AsyncDFLContext)
-        ctx.experiment = Experiment("test", total_rounds=5)
-        ctx.experiment.total_rounds = None
-        assert stage._total_rounds_reached(ctx) is False
-
     def test_select_neighbors_top_3(self):
         """Test _select_neighbors picks top 3 by priority."""
         priorities = [("a", 1.0), ("b", 3.0), ("c", 2.0), ("d", 0.5), ("e", 4.0)]
@@ -240,7 +214,7 @@ class TestAsyncDFLContext:
         )
         assert isinstance(ctx, AsyncDFLContext)
         assert ctx.address == "test"
-        assert ctx.experiment.data["tau"] == 3
+        assert ctx.experiment.tau == 3
         assert ctx.peers == {}
         assert ctx.candidates == []
 
@@ -256,4 +230,4 @@ class TestAsyncDFLContext:
             experiment=Experiment("test", total_rounds=5),
         )
         wf.validate_experiment(ctx)
-        assert ctx.experiment.data["tau"] == 2
+        assert ctx.experiment.tau == 2
