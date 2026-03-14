@@ -60,21 +60,23 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         await self._broadcast_loss(ctx)
 
         # Phase 4: Network update (every tau rounds)
-        if experiment.round > 0 and experiment.round % ctx.experiment.data["tau"] == 0:
+        if experiment.round > 0 and experiment.round % experiment.tau == 0:
             await self._network_update(ctx)
 
         # Phase 5: Round finish
-        experiment.increase_round(address)
+        experiment.round += 1
         for p in ctx.peers.values():
             p.reset_round()
         logger.info(address, f"Round {experiment.round} finished.")
 
         # Check termination
-        if self._total_rounds_reached(ctx):
+        if ctx.experiment.is_complete():
             return "finish"
         return "training_round"
 
-    # -- Phase 1: Debiasing --
+    ###
+    #    Phase 1: Debiasing
+    ###
 
     def _debias_model(self, ctx: AsyncDFLContext) -> None:
         """Apply push-sum debiasing to the local model."""
@@ -84,7 +86,9 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         if peer is not None and hasattr(model, "set_push_sum_weight"):
             model.set_push_sum_weight(peer.push_sum_weight)
 
-    # -- Phase 3: Loss broadcasting --
+    ###
+    #    Phase 3: Loss broadcasting
+    ###
 
     async def _broadcast_loss(self, ctx: AsyncDFLContext) -> None:
         """Broadcast the current training loss to all peers."""
@@ -108,7 +112,9 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         except Exception as e:
             logger.warning(ctx.address, f"Failed to broadcast loss: {e}")
 
-    # -- Phase 4: Network update --
+    ###
+    #    Phase 4: Network update
+    ###
 
     async def _network_update(self, ctx: AsyncDFLContext) -> None:
         """Compute priorities, select neighbors, gossip, and aggregate."""
@@ -117,7 +123,7 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         # Compute priorities and select neighbors
         neighbor_priorities = self._compute_priorities(ctx)
         logger.info(address, f"Neighbor priorities: {neighbor_priorities}")
-        ctx.candidates = self._select_neighbors(neighbor_priorities, top_k=ctx.experiment.data["top_k_neighbors"])
+        ctx.candidates = self._select_neighbors(neighbor_priorities, top_k=ctx.experiment.top_k_neighbors)
         logger.info(address, f"Selected neighbors: {ctx.candidates}")
 
         # Gossip model to selected neighbors
@@ -129,7 +135,7 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
     def _compute_priorities(self, ctx: AsyncDFLContext) -> list[tuple[str, float]]:
         """Compute priority for each neighbor based on loss divergence and staleness."""
         peers = ctx.peers
-        tau = ctx.experiment.data["tau"]
+        tau = ctx.experiment.tau
         neighbor_priorities: list[tuple[str, float]] = []
 
         local_peer = peers.get(ctx.address)
@@ -148,7 +154,7 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
                 tl_ji=neighbor_peer.p2p_updating_idx,
                 f_ti=local_loss,
                 f_tj=neighbor_loss,
-                dmax=ctx.experiment.data["dmax"],
+                dmax=ctx.experiment.dmax,
             )
             neighbor_priorities.append((neighbor, priority))
 
@@ -246,12 +252,9 @@ class TrainingRoundStage(Stage[AsyncDFLContext]):
         await evaluate_and_broadcast(ctx)
         logger.info(address, "Aggregation finished.")
 
-    # -- Condition helpers --
-
-    def _total_rounds_reached(self, ctx: AsyncDFLContext) -> bool:
-        return ctx.experiment.is_complete()
-
-    # -- Message handlers --
+    ###
+    #    Message handlers
+    ###
 
     @on_message("loss_information_updating")
     async def handle_loss_information(self, source: str, round: int, *args) -> None:

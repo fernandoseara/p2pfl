@@ -73,14 +73,17 @@ class AsyncDFL(Workflow[AsyncDFLContext]):
     def validate_experiment(self, ctx: AsyncDFLContext) -> None:
         """Resolve defaults and validate AsyncDFL-specific hyperparameters."""
         exp = ctx.experiment
-        exp.data.setdefault("tau", 2)
-        exp.data.setdefault("dmax", 5)
-        exp.data.setdefault("top_k_neighbors", 3)
-        if exp.data["tau"] < 1:
+        if not hasattr(exp, "tau"):
+            exp.tau = 2
+        if not hasattr(exp, "dmax"):
+            exp.dmax = 5
+        if not hasattr(exp, "top_k_neighbors"):
+            exp.top_k_neighbors = 3
+        if exp.tau < 1:
             raise ValueError("tau must be >= 1.")
-        if exp.data["dmax"] < 1:
+        if exp.dmax < 1:
             raise ValueError("dmax must be >= 1.")
-        if exp.data["top_k_neighbors"] < 1:
+        if exp.top_k_neighbors < 1:
             raise ValueError("top_k_neighbors must be >= 1.")
 
     @staticmethod
