@@ -94,6 +94,7 @@ class WandbLogger(LoggerDecorator):
         if not self._wandb_enabled:
             if wandb_project is not None or wandb_entity is not None:
                 super().debug("WandbLogger", "WandB library not installed but project or entity provided. Install wandb to enable logging.")
+            super().connect(**kwargs)
             return
 
         # Get parameters from function args or environment variables
@@ -119,11 +120,13 @@ class WandbLogger(LoggerDecorator):
         if self._api_key is None and "WANDB_API_KEY" not in os.environ:
             if wandb_project is not None or wandb_entity is not None:
                 super().warning("WandbLogger", "WandB project or entity provided but no API key found.")
+            super().connect(**kwargs)
             return
 
         # Mark as connected (credentials stored)
         self._connected = True
         super().debug("WandbLogger", "WandB credentials stored successfully")
+        super().connect(**kwargs)
 
     def experiment_started(self, node: str, experiment: Experiment) -> None:
         """
@@ -140,7 +143,6 @@ class WandbLogger(LoggerDecorator):
             return super().experiment_started(node, experiment)
 
         if not self._connected:
-            super().debug("WandbLogger", "WandB not connected. Call connect() first or set environment variables.")
             return super().experiment_started(node, experiment)
 
         # Skip if already running (handles round increases)
@@ -183,6 +185,21 @@ class WandbLogger(LoggerDecorator):
 
         # Call parent's experiment_started
         super().experiment_started(node, experiment)
+
+    # Mutable operational fields excluded from wandb.config (everything else is sent)
+    _SKIP_CONFIG_FIELDS = {"round", "current_stage"}
+
+    def on_experiment_change(self, address: str, field_name: str, value: Any) -> None:
+        """Forward experiment changes to W&B."""
+        if self._run is not None and wandb_module is not None:
+            try:
+                if field_name == "round":
+                    wandb_module.log({f"{address}/round": value})
+                elif field_name not in self._SKIP_CONFIG_FIELDS:
+                    wandb_module.config.update({field_name: value}, allow_val_change=True)
+            except Exception as e:
+                super().warning("WandbLogger", f"Failed to log experiment change to W&B: {e}")
+        super().on_experiment_change(address, field_name, value)
 
     def log_metric(self, addr: str, metric: str, value: float, step: int | None = None, round: int | None = None) -> None:
         """Log a metric to wandb."""

@@ -19,22 +19,22 @@
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from p2pfl.exceptions import ZeroRoundsException
-from p2pfl.management.logger import logger
+from p2pfl.workflow.engine.observable import Observable
 
 
 @dataclass
-class Experiment:
+class Experiment(Observable):
     """
     Tracks experiment metadata and round progression.
 
-    TODO: Integrate with a dynamic log system so that all experiment state
-    changes (round progression, metric updates, data dict mutations) are
-    automatically emitted as log events. The log system should be pluggable
-    to support different backends (file, MLflow, wandb, etc.).
+    Inherits from ``Observable`` so that any attribute change (e.g. ``round``,
+    ``trainset_size``, ``tau``) automatically notifies registered observers.
+    Workflow-specific parameters are stored as dynamic attributes via
+    ``Experiment.create(**kwargs)`` and ``setattr``.
 
     Args:
         exp_name: The name of the experiment.
@@ -42,10 +42,6 @@ class Experiment:
         is_initiator: Whether this node initiated the experiment.
         epochs_per_round: The number of epochs per round.
         round: The current round number.
-        data: Workflow-specific parameters and flexible tracking data.
-            Workflow hyperparams (e.g. ``trainset_size``, ``tau``, ``dmax``)
-            are stored here via ``Experiment.create(**kwargs)`` and validated
-            by each workflow's ``validate_experiment()``.
         dataset_name: The name of the dataset.
         model_name: The name of the model.
         aggregator_name: The name of the aggregator.
@@ -62,7 +58,8 @@ class Experiment:
     epochs_per_round: int = 1
     round: int = 0
 
-    data: dict[str, Any] = field(default_factory=dict)
+    current_stage: str | None = None
+
     dataset_name: str | None = None
     model_name: str | None = None
     aggregator_name: str | None = None
@@ -77,28 +74,29 @@ class Experiment:
 
     @classmethod
     def create(cls, **kwargs: Any) -> Experiment:
-        """Create an Experiment, routing unknown kwargs to ``data``."""
+        """Create an Experiment, routing unknown kwargs to dynamic attributes."""
         known = {f.name for f in dataclasses.fields(cls)}
         init_kwargs = {k: v for k, v in kwargs.items() if k in known}
         extra = {k: v for k, v in kwargs.items() if k not in known}
-        if extra:
-            init_kwargs.setdefault("data", {}).update(extra)
-        return cls(**init_kwargs)
+        exp = cls(**init_kwargs)
+        for k, v in extra.items():
+            setattr(exp, k, v)
+        return exp
+
+    def __getattr__(self, name: str) -> Any:
+        """Allow dynamic attribute access for workflow-specific params (e.g. trainset_size, tau)."""
+        raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
     def is_complete(self) -> bool:
         """Check whether the experiment has reached its total round count."""
-        if self.total_rounds is None:
-            return False
         return self.round >= self.total_rounds
-
-    def increase_round(self, address: str) -> None:
-        """Increment the round counter and notify the logger."""
-        self.round += 1
-        logger.round_updated(address, self.round)
 
     def to_dict(self, exclude_none: bool = True) -> dict:
         """
         Convert the experiment to a dictionary.
+
+        Includes both dataclass fields and any dynamic attributes set via
+        ``setattr`` (excluding ``_``-prefixed internals).
 
         Args:
             exclude_none: If True, exclude fields with None values.
@@ -107,19 +105,16 @@ class Experiment:
             Dictionary representation of the experiment.
 
         """
-        config = {
-            "exp_name": self.exp_name,
-            "total_rounds": self.total_rounds,
-            "workflow": self.workflow,
-            "epochs_per_round": self.epochs_per_round,
-            "dataset_name": self.dataset_name,
-            "model_name": self.model_name,
-            "aggregator_name": self.aggregator_name,
-            "framework_name": self.framework_name,
-            "batch_size": self.batch_size,
-            "learning_rate": self.learning_rate,
-            **self.data,
-        }
+        # Start with dataclass fields
+        field_names = {f.name for f in dataclasses.fields(self)}
+        config: dict[str, Any] = {}
+        for name in field_names:
+            config[name] = getattr(self, name)
+
+        # Add dynamic attributes (non-underscore, non-field)
+        for name, value in self.__dict__.items():
+            if not name.startswith("_") and name not in field_names:
+                config[name] = value
 
         if exclude_none:
             return {k: v for k, v in config.items() if v is not None}

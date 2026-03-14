@@ -47,6 +47,14 @@ class General:
     """Disable Ray for local testing."""
     RESOURCE_MONITOR_PERIOD: int = 10
     """Period (seconds) to send resource monitor information."""
+    WEB_BATCH_SIZE: int = 200
+    """Maximum number of entries to buffer before flushing to web services."""
+    WEB_BATCH_INTERVAL: float = 5.0
+    """Interval (seconds) between automatic flushes of buffered web service data."""
+    WEB_GEOLOCATION: bool = False
+    """Enable geolocation lookup via ip-api.com at node registration (opt-in)."""
+    LOG_FULL_TIMESTAMP: bool = False
+    """Show full date+time in logs (default: time only)."""
 
 
 @dataclass

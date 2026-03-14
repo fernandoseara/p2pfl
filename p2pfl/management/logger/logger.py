@@ -59,8 +59,23 @@ RED = "\033[91m"
 YELLOW = "\033[93m"
 GREEN = "\033[92m"
 BLUE = "\033[94m"
-CYAN = "\033[96m"
 RESET = "\033[0m"
+
+
+def _color_for(value: str) -> str:
+    """Generate a pretty pastel color from a string using golden-ratio hue spacing."""
+    # FNV-1a hash for good distribution on short strings
+    h = 0x811C9DC5
+    for c in value:
+        h ^= ord(c)
+        h = (h * 0x01000193) & 0xFFFFFFFF
+    # Golden ratio spacing ensures consecutive hashes land far apart on the hue wheel
+    hue = ((h * 137.508) % 360) / 60.0
+    x = 1.0 - abs(hue % 2 - 1.0)
+    r, g, b = [(1, x, 0), (x, 1, 0), (0, 1, x), (0, x, 1), (x, 0, 1), (1, 0, x)][int(hue) % 6]
+    # Pastel: blend toward white (0.55 color + 0.45 white), then scale to 255
+    ri, gi, bi = int((r * 0.55 + 0.45) * 255), int((g * 0.55 + 0.45) * 255), int((b * 0.55 + 0.45) * 255)
+    return f"\033[38;2;{ri};{gi};{bi}m"
 
 
 class ColoredFormatter(logging.Formatter):
@@ -113,8 +128,7 @@ class P2PFLogger:
         self.local_metrics = LocalMetricStorage(disable_locks=disable_locks)
         self.global_metrics = GlobalMetricStorage(disable_locks=disable_locks)
         self.message_storage = MessageStorage(disable_locks=disable_locks)
-        self.node_monitor = NodeMonitor(report_fn=None)
-        self.node_monitor.start()
+        self.node_monitor = NodeMonitor()
 
         # Python logging
         self._logger = logging.getLogger("p2pfl")
@@ -126,9 +140,10 @@ class P2PFLogger:
 
         # STDOUT - Handler
         stream_handler = logging.StreamHandler()
+        datefmt = "%Y-%m-%d %H:%M:%S" if Settings.general.LOG_FULL_TIMESTAMP else "%H:%M:%S"
         cmd_formatter = ColoredFormatter(
-            f"{GRAY}[ {YELLOW}%(asctime)s {GRAY}| {CYAN}%(node)s {GRAY}| %(levelname)s{GRAY} ]{RESET} %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+            f"{GRAY}[ \033[38;2;140;140;160m%(asctime)s {GRAY}| %(node)s {GRAY}| %(context)s%(levelname)s{GRAY} ]{RESET} %(message)s",
+            datefmt=datefmt,
         )
         stream_handler.setFormatter(cmd_formatter)
         self._logger.addHandler(stream_handler)  # not async
@@ -148,6 +163,9 @@ class P2PFLogger:
 
     def cleanup(self) -> None:
         """Cleanup the logger."""
+        # Stop resource monitoring
+        self.node_monitor.stop()
+
         # Unregister nodes
         for node in self._nodes.copy():
             self.unregister_node(node)
@@ -270,17 +288,33 @@ class P2PFLogger:
             message: The message to log.
 
         """
-        # Traditional logging
+        # Build context string (round + stage) with independent colors
+        context = ""
+        node_data = self._nodes.get(node)
+        colored_node = f"{_color_for(node)}{node}{RESET}"
+        if node_data:
+            parts = []
+            r = node_data.get("round")
+            if r is not None:
+                r_str = f"R{r}"
+                parts.append(f"{_color_for(r_str)}{r_str}{RESET}")
+            s = node_data.get("stage")
+            if s:
+                parts.append(f"{_color_for(s)}{s}{RESET}")
+            if parts:
+                context = f"{f' {GRAY}| '.join(parts)} {GRAY}| "
+
+        extra = {"node": colored_node, "context": context}
         if level == logging.DEBUG:
-            self._logger.debug(message, extra={"node": node})
+            self._logger.debug(message, extra=extra)
         elif level == logging.INFO:
-            self._logger.info(message, extra={"node": node})
+            self._logger.info(message, extra=extra)
         elif level == logging.WARNING:
-            self._logger.warning(message, extra={"node": node})
+            self._logger.warning(message, extra=extra)
         elif level == logging.ERROR:
-            self._logger.error(message, extra={"node": node})
+            self._logger.error(message, extra=extra)
         elif level == logging.CRITICAL:
-            self._logger.critical(message, extra={"node": node})
+            self._logger.critical(message, extra=extra)
         else:
             raise ValueError(f"Invalid level: {level}")
 
@@ -399,45 +433,49 @@ class P2PFLogger:
             experiment: The experiment.
 
         """
+        if address not in self._nodes:
+            raise NodeNotRegistered(f"Cannot start experiment: node '{address}' is not registered.")
         self._nodes[address]["Experiment"] = experiment
         self._nodes[address]["round"] = 0
+        if not self.node_monitor.running:
+            self.node_monitor.start()
 
-    def round_updated(self, address: str, round: int) -> None:
+    def experiment_ended(self, address: str, experiment: Experiment, status: str) -> None:
         """
-        Notify a round update.
+        Notify that an experiment has ended.
 
         Args:
             address: The node address.
-            round: The new round number.
+            experiment: The experiment.
+            status: Final status (e.g. "finished", "cancelled", "failed").
 
         """
-        self._nodes[address]["round"] = round
+        if address in self._nodes:
+            self._nodes[address].pop("Experiment", None)
+            self._nodes[address].pop("round", None)
+        # Stop monitor only when no nodes have active experiments
+        if not any("Experiment" in data for data in self._nodes.values()):
+            self.node_monitor.stop()
 
-    def experiment_updated(self, address: str, experiment: Experiment) -> None:
+    def on_experiment_change(self, address: str, field_name: str, value: Any) -> None:
         """
-        Notify the round end.
+        Handle an experiment attribute change.
+
+        Called by the ``ExperimentLoggerObserver`` whenever an observed
+        experiment attribute is set. Updates internal round and stage tracking.
 
         Args:
             address: The node address.
-            experiment: The experiment to update.
+            field_name: The name of the changed attribute.
+            value: The new value.
 
         """
-        self.warning(address, "Uncatched Round Finished on Logger")
-        if self._nodes[address]["Experiment"] is not None:
-            self._nodes[address]["Experiment"] = experiment
-        else:
-            raise Exception(f"Node {address} has no experiment.")
-
-    def experiment_finished(self, address: str) -> None:
-        """
-        Notify the experiment end.
-
-        Args:
-            address: The node address.
-
-        """
-        self.warning(address, "Uncatched Experiment Ended on Logger")
-        del self._nodes[address]["Experiment"]
+        if address not in self._nodes:
+            return
+        if field_name == "round":
+            self._nodes[address]["round"] = value
+        elif field_name == "current_stage":
+            self._nodes[address]["stage"] = value
 
     def get_nodes(self) -> dict[str, dict[Any, Any]]:
         """

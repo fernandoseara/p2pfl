@@ -50,20 +50,23 @@ def ray_installed() -> bool:
     os.environ["RAY_DEDUP_LOGS"] = "0"
 
     if importlib.util.find_spec("ray") is not None:
-        # Try to initialize ray
-        import ray
+        try:
+            import ray
 
-        # If ray not initialized, initialize it
-        if not ray.is_initialized():
-            init_kwargs = {
-                "namespace": "p2pfl",
-                "include_dashboard": False,
-                "logging_level": Settings.general.LOG_LEVEL,
-                "logging_config": ray.LoggingConfig(encoding="TEXT", log_level=Settings.general.LOG_LEVEL),
-            }
-            # macOS: Import TF/Torch first in workers to avoid deadlocks with HuggingFace to_tf_dataset()
-            if sys.platform == "darwin":
-                init_kwargs["runtime_env"] = {"worker_process_setup_hook": _worker_setup}
-            ray.init(**init_kwargs)
-        return True
+            # If ray not initialized, initialize it
+            if not ray.is_initialized():
+                init_kwargs = {
+                    "namespace": "p2pfl",
+                    "include_dashboard": False,
+                    "logging_level": Settings.general.LOG_LEVEL,
+                    "logging_config": ray.LoggingConfig(encoding="TEXT", log_level=Settings.general.LOG_LEVEL),
+                }
+                # macOS: Import TF/Torch first in workers to avoid deadlocks with HuggingFace to_tf_dataset()
+                if sys.platform == "darwin":
+                    init_kwargs["runtime_env"] = {"worker_process_setup_hook": _worker_setup}
+                ray.init(**init_kwargs)
+            return True
+        except (AttributeError, TypeError, RuntimeError) as e:
+            print(f"[p2pfl] Ray found but not usable: {e}")
+            return False
     return False

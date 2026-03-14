@@ -19,12 +19,15 @@
 from .context import TContext, WorkflowContext
 from .experiment import Experiment
 from .message import MessageEntry, OnMessage, on_message
+from .observable import Observable, Observer
 from .stage import Stage
 from .workflow import Workflow, WorkflowStatus
 
 __all__ = [
     "MessageEntry",
     "Experiment",
+    "Observable",
+    "Observer",
     "TContext",
     "Stage",
     "Workflow",

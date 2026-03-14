@@ -16,25 +16,18 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""
-Communication with P2PFL Web Services (via REST API).
+"""Communication with P2PFL Web Services (via REST API)."""
 
-.. todo:: Implement batch sending.
+from __future__ import annotations
 
-.. todo:: Implement get_pending_actions.
-
-.. todo:: Implement unregister_node.
-
-.. todo:: Implement get_experiment_id.
-"""
-
+import asyncio
 import datetime
+import threading
+from typing import Any
 
-import requests
+import httpx
 
-##################################
-#    P2PFL Web Services (API)    #
-##################################
+from p2pfl.settings import Settings
 
 
 class P2pflWebServicesError(Exception):
@@ -56,51 +49,174 @@ class P2pflWebServicesError(Exception):
 
 class P2pflWebServices:
     """
-    Class that manages the communication with the p2pfl-web services.
+    Class that manages the communication with the p2pfl web services.
+
+    All buffered data (logs, metrics, messages, experiment updates, system
+    metrics) is accumulated in a single buffer and flushed as a single
+    ``POST /batch`` request — either periodically by a background asyncio
+    task or when the buffer reaches ``Settings.general.WEB_BATCH_SIZE``.
+
+    Each entry in the batch carries a ``type`` field so the backend can
+    dispatch accordingly.
+
+    Immediate (non-batched) operations like ``register_node`` and
+    ``create_experiment`` use synchronous HTTP helpers.
 
     Args:
-        url: The URL of the p2pfl-web services.
-        key: The key to access the services.
+        url: The base URL of the web services API.
+        key: The API key to access the services.
 
     """
 
+    # Hard cap on buffer size to prevent unbounded memory growth
+    _MAX_BUFFER_SIZE = 10_000
+
     def __init__(self, url: str, key: str) -> None:
         """Initialize the p2pfl web services."""
-        self.__url = url
-        # http warning
-        if not url.startswith("https://"):
-            print("P2pflWebServices Warning: Connection must be over https, traffic will not be encrypted")
-        self.__key = key
+        self._base_url = url.rstrip("/")
+        self._headers = {
+            "Content-Type": "application/json",
+            "x-api-key": key,
+        }
+        # Maps node address -> server-assigned node id
         self.node_id: dict[str, int] = {}
-        # TODO: Check connection
+        # Maps experiment name -> server-assigned experiment id
+        self._exp_id: dict[str, int] = {}
+        # Maps node address -> experiment name
+        self._node_exp: dict[str, str] = {}
 
-    def __build_headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        headers["x-api-key"] = self.__key
-        return headers
+        # Single batch buffer — lock needed: singleton logger is called from multiple threads
+        self._buffer: list[dict] = []
+        self._lock = threading.Lock()
+        self._flush_task: asyncio.Task[None] | None = None
+        self._running = False
 
-    def register_node(self, node: str) -> None:
+        # Sync HTTP client for immediate operations (register, unregister, sync flush)
+        self._client = httpx.Client(headers=self._headers, timeout=5.0)
+
+    # --- Lifecycle ---
+
+    def _ensure_flush_task(self) -> None:
+        """Lazily start the background flush task if an event loop is running."""
+        if self._flush_task is not None and not self._flush_task.done():
+            return
+        try:
+            self._running = True
+            self._flush_task = asyncio.get_running_loop().create_task(self._flush_loop())
+        except RuntimeError:
+            pass
+
+    async def _flush_loop(self) -> None:
+        """Periodic async flush via ``POST /batch``."""
+        async with httpx.AsyncClient(headers=self._headers, timeout=5.0) as client:
+            while self._running:
+                await asyncio.sleep(Settings.general.WEB_BATCH_INTERVAL)
+                entries = self._drain()
+                if entries:
+                    await self._async_send(client, entries)
+
+    def stop(self) -> None:
+        """Cancel the flush task, flush remaining data, close client."""
+        self._running = False
+        if self._flush_task is not None and not self._flush_task.done():
+            self._flush_task.cancel()
+        self._flush_task = None
+        self.flush()
+        self._client.close()
+
+    # --- Batching internals ---
+
+    def _enqueue(self, entry: dict) -> None:
+        """Append an entry to the batch buffer. Never blocks on HTTP."""
+        with self._lock:
+            self._buffer.append(entry)
+            # Drop oldest entries if buffer exceeds hard cap
+            if len(self._buffer) > self._MAX_BUFFER_SIZE:
+                overflow = len(self._buffer) - self._MAX_BUFFER_SIZE
+                del self._buffer[:overflow]
+        self._ensure_flush_task()
+
+    def _drain(self) -> list[dict]:
+        """Atomically drain the buffer."""
+        with self._lock:
+            entries = self._buffer
+            self._buffer = []
+        return entries
+
+    def flush(self) -> None:
+        """Flush all buffered entries synchronously (used during shutdown)."""
+        entries = self._drain()
+        if entries:
+            self._sync_send(entries)
+
+    def _sync_send(self, entries: list[dict]) -> None:
+        """Send a batch synchronously via ``POST /batch``. Best-effort (drops on failure)."""
+        try:
+            response = self._client.post(self._base_url + "/batch", json=entries, timeout=10)
+            response.raise_for_status()
+        except Exception as e:
+            print(f"[P2PFL Web Services] Dropped batch ({len(entries)} entries): {e}")
+
+    async def _async_send(self, client: httpx.AsyncClient, entries: list[dict]) -> None:
+        """Send a batch asynchronously via ``POST /batch``. Re-enqueues once on failure."""
+        try:
+            response = await client.post(self._base_url + "/batch", json=entries)
+            response.raise_for_status()
+        except Exception as e:
+            print(f"[P2PFL Web Services] Error sending batch ({len(entries)} entries): {e}, re-enqueuing...")
+            with self._lock:
+                self._buffer.extend(entries)
+                if len(self._buffer) > self._MAX_BUFFER_SIZE:
+                    del self._buffer[: len(self._buffer) - self._MAX_BUFFER_SIZE]
+
+    # --- HTTP helpers (sync, for immediate operations) ---
+
+    def _get(self, path: str, *, timeout: int = 5) -> dict:
+        response = self._client.get(self._base_url + path, timeout=timeout)
+        response.raise_for_status()
+        return response.json()  # type: ignore[no-any-return]
+
+    def _post(self, path: str, data: Any, *, timeout: int = 5) -> dict:
+        response = self._client.post(self._base_url + path, json=data, timeout=timeout)
+        response.raise_for_status()
+        if response.status_code == 204:
+            return {}
+        return response.json()  # type: ignore[no-any-return]
+
+    def _delete(self, path: str, *, timeout: int = 5) -> None:
+        response = self._client.delete(self._base_url + path, timeout=timeout)
+        response.raise_for_status()
+
+    # --- Nodes ---
+
+    def register_node(self, node: str, metadata: dict[str, Any] | None = None) -> None:
         """
         Register a node.
 
         Args:
             node: The node address.
+            metadata: Optional system metadata (OS, hardware, GPU, geolocation).
 
         """
-        # Send request
-        data = {
-            "address": node,
-            "creation_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
         try:
-            response = requests.post(self.__url + "/node", json=data, headers=self.__build_headers(), timeout=5)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
+            data: dict[str, Any] = {"address": node}
+            if metadata is not None:
+                data["metadata"] = metadata
+            result = self._post("/nodes", data)
+            self.node_id[node] = result["id"]
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 409:
+                # Node already registered — fetch its ID
+                result = self._get(f"/nodes/{node}")
+                self.node_id[node] = result["id"]
+            else:
+                print(f"[P2PFL Web Services] Failed to register node '{node}': {e}")
+                print(f"  Check that '{self._base_url}' is valid (P2PFL_WEB_LOGGER_URL or ~/.p2pfl_env)")
+                raise
+        except httpx.HTTPError as e:
             print(f"[P2PFL Web Services] Failed to register node '{node}': {e}")
-            print(f"  Check that '{self.__url}' is valid (P2PFL_WEB_LOGGER_URL or ~/.p2pfl_env)")
-            raise e
-        # Get node id
-        self.node_id[node] = response.json()["node_id"]
+            print(f"  Check that '{self._base_url}' is valid (P2PFL_WEB_LOGGER_URL or ~/.p2pfl_env)")
+            raise
 
     def unregister_node(self, node: str) -> None:
         """
@@ -110,11 +226,62 @@ class P2pflWebServices:
             node: The node address.
 
         """
-        print("NOT IMPLEMENTED YET")
+        try:
+            self._delete(f"/nodes/{node}")
+        except httpx.HTTPError as e:
+            print(f"[P2PFL Web Services] Failed to unregister node '{node}': {e}")
 
-    def send_log(self, time: datetime.datetime, node: str, level: int, message: str) -> None:
+    # --- Experiments ---
+
+    def create_experiment(self, node_address: str, **data: Any) -> int:
         """
-        Send a log message.
+        Create an experiment on the web services.
+
+        ``node_address`` is separate because it is not part of the Experiment
+        object — it identifies which node is joining the experiment (sent as
+        a query parameter).  ``**data`` should come from
+        ``experiment.to_dict()``.
+
+        Args:
+            node_address: The node participating in the experiment.
+            **data: Experiment fields (exp_name, total_rounds, workflow, …).
+
+        Returns:
+            The server-assigned experiment ID.
+
+        """
+        exp_name: str = data.get("exp_name", "")
+
+        # Already registered — reuse cached ID (avoids one entry per node)
+        self._node_exp[node_address] = exp_name
+        if exp_name in self._exp_id:
+            return self._exp_id[exp_name]
+
+        result = self._post(f"/experiments?node_address={node_address}", data)
+        exp_id = result["id"]
+        self._exp_id[exp_name] = exp_id
+        return exp_id
+
+    def update_experiment(self, exp_name: str, node_address: str, **changes: Any) -> None:
+        """
+        Buffer an experiment state update.
+
+        Args:
+            exp_name: Experiment name (for ID lookup).
+            node_address: The node reporting the change.
+            **changes: Fields that changed (round, status, current_stage, …).
+
+        """
+        exp_id = self._exp_id.get(exp_name)
+        if exp_id is None:
+            return
+        self._enqueue({"type": "experiment_update", "experiment_id": exp_id, "node_address": node_address, **changes})
+
+    # --- Batched data methods ---
+
+    def send_log(self, time: datetime.datetime, node: str, level: int | str, message: str) -> None:
+        """
+        Buffer a log message.
 
         Args:
             time: The time of the message.
@@ -123,149 +290,92 @@ class P2pflWebServices:
             message: The message.
 
         """
-        # get node id
-        if node not in self.node_id:
-            print(f"P2pflWebServices Warning: Node {node} not registered, skipping log")
-            return
-        node_id = self.node_id[node]
-
-        # Send request
-        data = {
-            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "node_id": node_id,
-            "level": level,
-            "message": message,
-        }
-        try:
-            response = requests.post(
-                self.__url + "/node-log",
-                json=data,
-                headers=self.__build_headers(),
-                timeout=5,
-            )
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            print(node, f"Error logging message: {message}")
-            if hasattr(e, "response") and e.response is not None and e.response.status_code == 401:
-                print("Please check the API key or the node registration in the p2pfl-web services.")
-            raise e
+        self._enqueue(
+            {
+                "type": "log",
+                "timestamp": time.isoformat() if isinstance(time, datetime.datetime) else str(time),
+                "node_address": node,
+                "level": str(level),
+                "message": message,
+            }
+        )
 
     def send_local_metric(self, exp: str, round: int, metric: str, node: str, value: float, step: int) -> None:
         """
-        Send a local metric.
+        Buffer a local metric.
 
         Args:
-            exp: The experiment.
+            exp: The experiment name.
             round: The round.
-            metric: The metric.
+            metric: The metric name.
             node: The node address.
-            value: The value.
-            step: The step.
+            value: The metric value.
+            step: The training step.
 
         """
-        # get node id
-        if node not in self.node_id:
-            print(f"P2pflWebServices Warning: Node {node} not registered, skipping local metric")
+        exp_id = self._exp_id.get(exp)
+        if exp_id is None:
             return
-        node_id = self.node_id[node]
+        self._enqueue(
+            {
+                "type": "metric",
+                "experiment_id": exp_id,
+                "node_address": node,
+                "metric_name": metric,
+                "round": round,
+                "step": step,
+                "value": value,
+                "metric_type": "local",
+            }
+        )
 
-        # get experiment id
-        # ------- NOT IMPLEMENTED ----------
-
-        # Send request
-        data = {
-            "node_id": node_id,
-            "exp_id": exp,
-            "metric_name": metric,
-            "round": round,
-            "step": step,
-            "value": value,
-        }
-        try:
-            response = requests.post(
-                self.__url + "/node-metric/local",
-                json=data,
-                headers=self.__build_headers(),
-                timeout=5,
-            )
-            response.raise_for_status()
-        except Exception as e:
-            raise P2pflWebServicesError(response.status_code, response.text) from e
-
-    def send_global_metric(self, exp: str, round: int, metric: str, node: str, value: float):
+    def send_global_metric(self, exp: str, round: int, metric: str, node: str, value: float) -> None:
         """
-        Send a local metric.
+        Buffer a global metric.
 
         Args:
-            exp: The experiment.
+            exp: The experiment name.
             round: The round.
-            metric: The metric.
+            metric: The metric name.
             node: The node address.
-            value: The value.
+            value: The metric value.
 
         """
-        # get node id
-        if node not in self.node_id:
-            print(f"P2pflWebServices Warning: Node {node} not registered, skipping global metric")
+        exp_id = self._exp_id.get(exp)
+        if exp_id is None:
             return
-        node_id = self.node_id[node]
+        self._enqueue(
+            {
+                "type": "metric",
+                "experiment_id": exp_id,
+                "node_address": node,
+                "metric_name": metric,
+                "round": round,
+                "value": value,
+                "metric_type": "global",
+            }
+        )
 
-        # get experiment id
-        # ------- NOT IMPLEMENTED ----------
-
-        # Send request
-        data = {
-            "node_id": node_id,
-            "exp_id": exp,
-            "metric_name": metric,
-            "round": round,
-            "value": value,
-        }
-        try:
-            response = requests.post(
-                self.__url + "/node-metric/global",
-                json=data,
-                headers=self.__build_headers(),
-                timeout=5,
-            )
-            response.raise_for_status()
-        except Exception as e:
-            raise P2pflWebServicesError(response.status_code, response.text) from e
-
-    def send_system_metric(self, node: str, metric: str, value: float, time: datetime.datetime):
+    def send_system_metric(self, node: str, metric: str, value: float, time: datetime.datetime) -> None:
         """
-        Send a metric.
+        Buffer a system metric.
 
         Args:
             node: The node address.
-            metric: The metric.
+            metric: The metric name.
             value: The value.
-            time: The time.
+            time: The timestamp.
 
         """
-        # get node id
-        if node not in self.node_id:
-            print(f"P2pflWebServices Warning: Node {node} not registered, skipping system metric")
-            return
-        node_id = self.node_id[node]
-
-        # Send request
-        data = {
-            "node_id": node_id,
-            "metric_name": metric,
-            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "value": value,
-        }
-        try:
-            response = requests.post(
-                self.__url + "/node-metric/system",
-                json=data,
-                headers=self.__build_headers(),
-                timeout=5,
-            )
-            response.raise_for_status()
-        except Exception as e:
-            raise P2pflWebServicesError(response.status_code, response.text) from e
+        self._enqueue(
+            {
+                "type": "system_metric",
+                "node_address": node,
+                "timestamp": time.isoformat(),
+                "metric": metric,
+                "value": value,
+            }
+        )
 
     def send_communication_log(
         self,
@@ -280,7 +390,7 @@ class P2pflWebServices:
         additional_info: dict | None = None,
     ) -> None:
         """
-        Send a communication log to the web services.
+        Buffer a communication log.
 
         Args:
             node: The node address.
@@ -289,13 +399,29 @@ class P2pflWebServices:
             cmd: The command or message type.
             source_dest: Source (if receiving) or destination (if sending) node.
             package_type: Type of package ("message" or "weights").
-            package_size: Size of the package in bytes (if available).
-            round_num: The federated learning round number (if applicable).
+            package_size: Size of the package in bytes.
+            round_num: The federated learning round number.
             additional_info: Additional information as a dictionary.
 
         """
-        raise NotImplementedError
+        exp_name = self._node_exp.get(node)
+        exp_id = self._exp_id.get(exp_name) if exp_name else None
+        if exp_id is None:
+            return
+        self._enqueue(
+            {
+                "type": "message",
+                "experiment_id": exp_id,
+                "node_address": node,
+                "cmd": cmd,
+                "direction": direction,
+                "peer": source_dest,
+                "round": round_num,
+                "size_bytes": package_size,
+                "metadata": {"package_type": package_type, **(additional_info or {})},
+            }
+        )
 
-    def get_pending_actions(self):
-        """Get pending actions from the p2pfl-web services."""
+    def get_pending_actions(self) -> list[dict]:
+        """Get pending actions from the web services."""
         raise NotImplementedError

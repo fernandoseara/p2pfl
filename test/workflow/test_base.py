@@ -17,11 +17,12 @@
 
 """Tests for workflow base classes."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from p2pfl.workflow.engine.experiment import Experiment
+from p2pfl.workflow.engine.observable import Observer
 from p2pfl.workflow.engine.stage import Stage
 
 
@@ -29,7 +30,7 @@ class TestExperiment:
     """Tests for Experiment class."""
 
     def test_create_experiment(self):
-        """Test creating an experiment."""
+        """Test creating an experiment with extra kwargs as dynamic attributes."""
         exp = Experiment.create(
             exp_name="test_exp",
             total_rounds=10,
@@ -40,35 +41,54 @@ class TestExperiment:
         assert exp.exp_name == "test_exp"
         assert exp.total_rounds == 10
         assert exp.epochs_per_round == 2
-        assert exp.data["trainset_size"] == 100
+        assert exp.trainset_size == 100
 
     def test_experiment_round_defaults_zero(self):
         """Test that round defaults to 0."""
         exp = Experiment(exp_name="test", total_rounds=5)
         assert exp.round == 0
 
-    def test_experiment_data_defaults_empty(self):
-        """Test that data defaults to empty dict."""
+    def test_experiment_round_fires_observer(self):
+        """Test that setting round notifies observers."""
         exp = Experiment(exp_name="test", total_rounds=5)
-        assert exp.data == {}
+        observer = MagicMock(spec=Observer)
+        exp.add_observer(observer)
 
-    def test_experiment_increase_round(self):
-        """Test increase_round increments and calls logger."""
-        exp = Experiment(exp_name="test", total_rounds=5)
-        with patch("p2pfl.workflow.engine.experiment.logger") as mock_logger:
-            exp.increase_round("node1")
-            assert exp.round == 1
-            mock_logger.round_updated.assert_called_once_with("node1", 1)
-            exp.increase_round("node1")
-            assert exp.round == 2
+        exp.round = 1
+        observer.update.assert_called_with("round", 1)
 
-    def test_experiment_data_tracking(self):
-        """Test that experiment.data can store flexible tracking data."""
+        exp.round = 2
+        assert observer.update.call_count == 2
+        observer.update.assert_called_with("round", 2)
+
+    def test_experiment_dynamic_attrs_fire_observer(self):
+        """Test that setting dynamic attributes notifies observers."""
+        exp = Experiment.create(exp_name="test", total_rounds=5, tau=3)
+        observer = MagicMock(spec=Observer)
+        exp.add_observer(observer)
+
+        exp.tau = 5
+        observer.update.assert_called_with("tau", 5)
+
+    def test_experiment_dynamic_attrs_in_to_dict(self):
+        """Test that dynamic attributes appear in to_dict."""
+        exp = Experiment.create(exp_name="test", total_rounds=5, trainset_size=100, tau=3)
+        d = exp.to_dict()
+        assert d["trainset_size"] == 100
+        assert d["tau"] == 3
+
+    def test_experiment_to_dict_excludes_none(self):
+        """Test that to_dict excludes None values by default."""
         exp = Experiment(exp_name="test", total_rounds=5)
-        exp.data["train_history"] = [0.9, 0.85, 0.8]
-        exp.data["aggregation_info"] = {"method": "fedavg"}
-        assert exp.data["train_history"] == [0.9, 0.85, 0.8]
-        assert exp.data["aggregation_info"]["method"] == "fedavg"
+        d = exp.to_dict()
+        assert "dataset_name" not in d
+
+    def test_experiment_to_dict_includes_none(self):
+        """Test that to_dict includes None values when exclude_none=False."""
+        exp = Experiment(exp_name="test", total_rounds=5)
+        d = exp.to_dict(exclude_none=False)
+        assert "dataset_name" in d
+        assert d["dataset_name"] is None
 
 
 class TestExperimentStr:
@@ -105,6 +125,55 @@ class TestExperimentStr:
         )
         result = str(exp)
         assert "learning_rate" not in result
+
+
+class TestObservable:
+    """Tests for Observable mixin."""
+
+    def test_add_and_notify(self):
+        """Test that observers are notified on setattr."""
+        exp = Experiment(exp_name="test", total_rounds=5)
+        observer = MagicMock(spec=Observer)
+        exp.add_observer(observer)
+        exp.round = 3
+        observer.update.assert_called_with("round", 3)
+
+    def test_remove_observer(self):
+        """Test that removed observers stop receiving notifications."""
+        exp = Experiment(exp_name="test", total_rounds=5)
+        observer = MagicMock(spec=Observer)
+        exp.add_observer(observer)
+        exp.remove_observer(observer)
+        exp.round = 3
+        observer.update.assert_not_called()
+
+    def test_clear_observers(self):
+        """Test that clear_observers removes all observers."""
+        exp = Experiment(exp_name="test", total_rounds=5)
+        obs1 = MagicMock(spec=Observer)
+        obs2 = MagicMock(spec=Observer)
+        exp.add_observer(obs1)
+        exp.add_observer(obs2)
+        exp.clear_observers()
+        exp.round = 3
+        obs1.update.assert_not_called()
+        obs2.update.assert_not_called()
+
+    def test_underscore_attrs_not_notified(self):
+        """Test that _-prefixed attributes don't trigger observers."""
+        exp = Experiment(exp_name="test", total_rounds=5)
+        observer = MagicMock(spec=Observer)
+        exp.add_observer(observer)
+        exp._internal = "secret"
+        observer.update.assert_not_called()
+
+    def test_no_notifications_during_init(self):
+        """Test that dataclass __init__ doesn't trigger observer notifications."""
+        observer = MagicMock(spec=Observer)
+        exp = Experiment(exp_name="test", total_rounds=5)
+        # Observer added after init — no prior notifications
+        exp.add_observer(observer)
+        observer.update.assert_not_called()
 
 
 class TestStage:

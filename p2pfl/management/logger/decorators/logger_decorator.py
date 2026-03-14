@@ -49,6 +49,7 @@ class LoggerDecorator(P2PFLogger):
 
         """
         self._p2pfl_logger = logger() if callable(logger) else logger
+        self.node_monitor = self._p2pfl_logger.node_monitor
 
     def connect(self, **kwargs: Any) -> None:
         """
@@ -188,37 +189,29 @@ class LoggerDecorator(P2PFLogger):
         """
         self._p2pfl_logger.experiment_started(node, experiment)
 
-    def round_updated(self, node: str, round: int) -> None:
+    def experiment_ended(self, address: str, experiment: Experiment, status: str) -> None:
         """
-        Notify a round update.
+        Notify that an experiment has ended.
 
         Args:
-            node: The node address.
-            round: The new round number.
+            address: The node address.
+            experiment: The experiment.
+            status: Final status (e.g. "finished", "cancelled", "failed").
 
         """
-        self._p2pfl_logger.round_updated(node, round)
+        self._p2pfl_logger.experiment_ended(address, experiment, status)
 
-    def experiment_updated(self, node: str, experiment: Experiment) -> None:
+    def on_experiment_change(self, address: str, field_name: str, value: Any) -> None:
         """
-        Notify the round end.
+        Handle an experiment attribute change.
 
         Args:
-            node: The node address.
-            experiment: The experiment to update.
+            address: The node address.
+            field_name: The name of the changed attribute.
+            value: The new value.
 
         """
-        self._p2pfl_logger.experiment_updated(node, experiment)
-
-    def experiment_finished(self, node: str) -> None:
-        """
-        Notify the experiment end.
-
-        Args:
-            node: The node address.
-
-        """
-        self._p2pfl_logger.experiment_finished(node)
+        self._p2pfl_logger.on_experiment_change(address, field_name, value)
 
     def get_nodes(self) -> dict[str, dict[Any, Any]]:
         """

@@ -101,6 +101,8 @@ class WebP2PFLogger(LoggerDecorator):
         """Initialize the logger."""
         super().__init__(p2pflogger)
         self._p2pfl_web_services: P2pflWebServices | None = None
+        self._ended_experiments: set[str] = set()
+        self._node_callbacks: dict[str, Any] = {}
 
         # Load credentials from .p2pfl_env file if it exists
         self._load_env_file()
@@ -172,6 +174,21 @@ class WebP2PFLogger(LoggerDecorator):
             super().warning("WebP2PFLogger", f"Failed to connect to P2PFL Web Services: {e}")
             self._p2pfl_web_services = None
 
+    def on_experiment_change(self, address: str, field_name: str, value: Any) -> None:
+        """Forward experiment changes to web services."""
+        super().on_experiment_change(address, field_name, value)
+        if self._p2pfl_web_services is not None:
+            try:
+                node_data = self.get_nodes().get(address)
+                if node_data is None:
+                    return
+                experiment: Experiment | None = node_data.get("Experiment")
+                if experiment is None:
+                    return
+                self._p2pfl_web_services.update_experiment(experiment.exp_name, address, **{field_name: value})
+            except Exception as e:
+                super().warning("WebP2PFLogger", f"Error forwarding {field_name} update: {e}")
+
     def experiment_started(self, node: str, experiment: Experiment) -> None:
         """
         Handle experiment start for web services.
@@ -181,13 +198,26 @@ class WebP2PFLogger(LoggerDecorator):
             experiment: The experiment object containing metadata.
 
         """
-        # If connected, could send experiment metadata to web services
         if self._p2pfl_web_services is not None:
-            super().debug("WebP2PFLogger", f"Experiment '{experiment.exp_name}' started for node {node}")
-            # TODO: Add experiment metadata to web services
+            try:
+                self._p2pfl_web_services.create_experiment(node, **experiment.to_dict(exclude_none=True))
+                super().debug("WebP2PFLogger", f"Experiment '{experiment.exp_name}' created for node {node}")
+            except Exception as e:
+                super().warning("WebP2PFLogger", f"Failed to create experiment on web services: {e}")
 
         # Call parent's experiment_started
         super().experiment_started(node, experiment)
+
+    def experiment_ended(self, address: str, experiment: Experiment, status: str) -> None:
+        """Send terminal status and flush buffered data on experiment end."""
+        if self._p2pfl_web_services is not None and experiment.exp_name not in self._ended_experiments:
+            self._ended_experiments.add(experiment.exp_name)
+            try:
+                self._p2pfl_web_services.update_experiment(experiment.exp_name, address, status=status)
+                self._p2pfl_web_services.flush()
+            except Exception as e:
+                super().warning("WebP2PFLogger", f"Error flushing on experiment end: {e}")
+        super().experiment_ended(address, experiment, status)
 
     def log_metric(self, addr: str, metric: str, value: float, step: int | None = None, round: int | None = None) -> None:
         """
@@ -206,8 +236,9 @@ class WebP2PFLogger(LoggerDecorator):
         if self._p2pfl_web_services is not None:
             # Get Experiment and round
             try:
-                experiment: Experiment = self._nodes[addr]["Experiment"]
-                current_round = self._nodes[addr].get("round", 0)
+                nodes = self.get_nodes()
+                experiment: Experiment = nodes[addr]["Experiment"]
+                current_round = nodes[addr].get("round", 0)
             except KeyError:
                 # If no experiment is registered for this node, skip web logging
                 return
@@ -288,7 +319,20 @@ class WebP2PFLogger(LoggerDecorator):
         """
         super().register_node(node)
         if self._p2pfl_web_services is not None:
-            self._p2pfl_web_services.register_node(node)
+            from p2pfl.management.node_monitor import collect_node_metadata
+
+            metadata = collect_node_metadata()
+            self._p2pfl_web_services.register_node(node, metadata=metadata)
+
+            # Register a monitor callback to push system metrics in real-time
+            ws = self._p2pfl_web_services
+
+            def _push_metrics(ts: datetime.datetime, metrics: dict[str, float], _node: str = node) -> None:
+                for metric_name, value in metrics.items():
+                    ws.send_system_metric(_node, metric_name, value, ts)
+
+            self._node_callbacks[node] = _push_metrics
+            self.node_monitor.add_callback(_push_metrics)
 
     def unregister_node(self, node: str) -> None:
         """
@@ -298,6 +342,9 @@ class WebP2PFLogger(LoggerDecorator):
             node: The node address.
 
         """
+        cb = self._node_callbacks.pop(node, None)
+        if cb is not None:
+            self.node_monitor.remove_callback(cb)
         super().unregister_node(node)
         if self._p2pfl_web_services is not None:
             self._p2pfl_web_services.unregister_node(node)
@@ -306,7 +353,21 @@ class WebP2PFLogger(LoggerDecorator):
         """
         Finish the current experiment for web services.
 
+        Flushes any buffered data before finishing.
         The connection remains alive for potential future experiments.
         """
+        if self._p2pfl_web_services is not None:
+            self._p2pfl_web_services.flush()
         # Call parent's finish
         super().finish()
+
+    def reset(self) -> None:
+        """Reset state between experiments."""
+        self._ended_experiments.clear()
+        super().reset()
+
+    def cleanup(self) -> None:
+        """Cleanup: stop the flush task and send remaining data."""
+        if self._p2pfl_web_services is not None:
+            self._p2pfl_web_services.stop()
+        super().cleanup()
