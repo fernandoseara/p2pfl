@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2025 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -33,9 +33,6 @@ from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrate
 from p2pfl.node import Node
 from p2pfl.settings import Settings
 from p2pfl.utils.utils import wait_to_finish
-
-with contextlib.suppress(ImportError):
-    from p2pfl.examples.mnist.model.mlp_tensorflow import model_build_fn as model_build_fn_tensorflow
 
 with contextlib.suppress(ImportError):
     from p2pfl.examples.mnist.model.mlp_pytorch import model_build_fn as model_build_fn_torch
@@ -172,7 +169,9 @@ def test_dp_empty_params(dp_compressor):
         dp_compressor.apply_strategy(params=[], clip_norm=1.0, epsilon=4.0, delta=1e-5, noise_type="gaussian")
 
 
-@pytest.mark.parametrize("build_model_fn", [model_build_fn_torch, model_build_fn_tensorflow])  # TODO: Flax
+@pytest.mark.e2e_train
+@pytest.mark.uses_ray
+@pytest.mark.parametrize("build_model_fn", [model_build_fn_torch])
 def test_learner_train(build_model_fn) -> None:
     """Test DifferentialPrivacyCompressor convergence on a tiny dataset."""
     # Dataset

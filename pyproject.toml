@@ -1,6 +1,6 @@
 [project]
 name = "p2pfl"
-version = "0.4.4"
+version = "0.5.0"
 description = "A p2p federated learning framework"
 authors = [{ name = "Pedro Guijas", email = "pguijas@gmail.com" }]
 requires-python = ">=3.10.0, <3.13"
@@ -23,8 +23,7 @@ dependencies = [
     "psutil>=5.9.8,<6",
     "numpy>=1.20,<2.0",
     "typer>=0.12.3,<0.13",
-    "ray>=2.43.0,<3",
-    "datasets==2.15.0",
+    "datasets>=4.0.0",
     "pandas>=2.2.3,<3",
     "tqdm>=4.67.0,<5",
     "protobuf>=5.29.1",
@@ -35,7 +34,7 @@ dependencies = [
 [project.optional-dependencies]
 torch = [
     "torch>=2.2.1,<3",
-    "torchvision>=0.17.1,<0.18",
+    "torchvision>=0.17.1,<1",
     "torchmetrics>=1.3.1,<2",
     "lightning>=2.4.0,<3",
 ]
@@ -47,6 +46,9 @@ tensorflow = [
 flax = ["flax>=0.10.0,<0.11"]
 dp = ["opendp>=0.13.0"]
 wandb = ["wandb>=0.20.1,<0.21"]
+
+xgboost = ["xgboost>=3.0.5", "scikit-learn>=1.7.2"]
+ray = ["ray>=2.10.0,<3"]
 
 [project.urls]
 Homepage = "https://p2pfl.com"
@@ -112,7 +114,9 @@ select = [
     # isort
     "I",
     # comprehensions
-    "C4"
+    "C4",
+    # numpy 2.0 compatibility
+    "NPY201"
 ]
 fixable = ["E", "F", "W", "B", "SIM", "I", "C4"]
 ignore = ["B027", "D203", "D212", "D406", "D407"]
@@ -133,4 +137,12 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "torchvision.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "datasets.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "sklearn.*"
 ignore_missing_imports = true

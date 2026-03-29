@@ -3,8 +3,8 @@ p2pfl.learning.frameworks package
 
 .. automodule:: p2pfl.learning.frameworks
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Subpackages
 -----------
@@ -16,6 +16,7 @@ Subpackages
    p2pfl.learning.frameworks.pytorch
    p2pfl.learning.frameworks.simulation
    p2pfl.learning.frameworks.tensorflow
+   p2pfl.learning.frameworks.xgboost
 
 Submodules
 ----------

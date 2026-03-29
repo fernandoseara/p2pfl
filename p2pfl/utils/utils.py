@@ -1,7 +1,7 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -201,7 +201,23 @@ def full_connection(node: Node, nodes: list[Node]) -> None:
         node.connect(n.addr)
 
 
-def wait_to_finish(nodes: list[Node], timeout=3600, debug=False) -> None:
+class NodeLearningError(Exception):
+    """Exception raised when one or more nodes fail during learning."""
+
+    def __init__(self, failed_nodes: list[tuple[str, Exception]]) -> None:
+        """
+        Initialize the exception.
+
+        Args:
+            failed_nodes: List of (node_addr, error) tuples for failed nodes.
+
+        """
+        self.failed_nodes = failed_nodes
+        node_errors = "; ".join(f"{addr}: {type(e).__name__}: {e}" for addr, e in failed_nodes)
+        super().__init__(f"Learning failed on {len(failed_nodes)} node(s): {node_errors}")
+
+
+def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_error=True) -> None:
     """
     Wait until all nodes have finished the workflow.
 
@@ -209,9 +225,11 @@ def wait_to_finish(nodes: list[Node], timeout=3600, debug=False) -> None:
         nodes: List of nodes.
         timeout: Timeout in seconds (default: 1 hour = 3600 seconds).
         debug: Debug mode.
+        raise_on_error: If True, raise NodeLearningError if any node failed.
 
     Raises:
         TimeoutError: If the nodes don't finish within the timeout period.
+        NodeLearningError: If any node failed during learning (when raise_on_error=True).
 
     """
     # Wait until all nodes finish the workflow
@@ -228,6 +246,12 @@ def wait_to_finish(nodes: list[Node], timeout=3600, debug=False) -> None:
         elapsed = time.time() - start
         if elapsed > timeout:
             raise TimeoutError(f"Timeout waiting for nodes to finish (elapsed: {int(elapsed // 60)} minutes {int(elapsed % 60)} seconds)")
+
+    # Check for failures
+    if raise_on_error:
+        failed = [(n.addr, n.learning_workflow.error) for n in nodes if n.learning_workflow.failed and n.learning_workflow.error]
+        if failed:
+            raise NodeLearningError(failed)
 
 
 def check_equal_models(nodes: list[Node]) -> None:

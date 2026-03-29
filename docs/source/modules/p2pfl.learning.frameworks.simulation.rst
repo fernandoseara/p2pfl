@@ -3,8 +3,8 @@ p2pfl.learning.frameworks.simulation package
 
 .. automodule:: p2pfl.learning.frameworks.simulation
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------

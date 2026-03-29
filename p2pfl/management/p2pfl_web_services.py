@@ -96,7 +96,8 @@ class P2pflWebServices:
             response = requests.post(self.__url + "/node", json=data, headers=self.__build_headers(), timeout=5)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            print(node, f"Error registering node: {e}")
+            print(f"[P2PFL Web Services] Failed to register node '{node}': {e}")
+            print(f"  Check that '{self.__url}' is valid (P2PFL_WEB_LOGGER_URL or ~/.p2pfl_env)")
             raise e
         # Get node id
         self.node_id[node] = response.json()["node_id"]

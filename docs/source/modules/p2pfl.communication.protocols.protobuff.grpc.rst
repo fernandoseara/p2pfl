@@ -3,8 +3,8 @@ p2pfl.communication.protocols.protobuff.grpc package
 
 .. automodule:: p2pfl.communication.protocols.protobuff.grpc
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------

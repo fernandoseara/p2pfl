@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2022 Pedro Guijas Bravo.
 #
@@ -81,11 +81,13 @@ class LightningLearner(Learner):
 
     def fit(self) -> P2PFLModel:
         """Fit the model."""
-        if Settings.general.SEED is not None and not ray_installed():
-            raise ValueError("You must use Ray to set a seed with PyTorch Lightning. Not working on a same process. | pip install ray")
-        set_seed(Settings.general.SEED, self.get_framework())
         try:
             if self.epochs > 0:
+                if Settings.general.SEED is not None and not ray_installed():
+                    raise ValueError(
+                        "You must use Ray to set a seed with PyTorch Lightning. Not working on a same process. | pip install ray"
+                    )
+                set_seed(Settings.general.SEED, self.get_framework())
                 self.__trainer = Trainer(
                     max_epochs=self.epochs,
                     accelerator="auto",

@@ -21,10 +21,8 @@
 import pickle
 from typing import Any
 
-import numpy as np
-
 from p2pfl.learning.compression import COMPRESSION_STRATEGIES_REGISTRY
-from p2pfl.learning.compression.base_compression_strategy import ByteCompressor
+from p2pfl.learning.compression.base_compression_strategy import ByteCompressor, TensorCompressor
 
 
 class CompressionManager:
@@ -36,12 +34,12 @@ class CompressionManager:
         return COMPRESSION_STRATEGIES_REGISTRY
 
     @staticmethod
-    def apply(params: list[np.ndarray], additional_info: dict, techniques: dict[str, dict[str, Any]]) -> bytes:
+    def apply(params: Any, additional_info: dict, techniques: dict[str, dict[str, Any]]) -> bytes:
         """
         Apply compression techniques in sequence to the data.
 
         Args:
-            params: The parameters to compress.
+            params: The parameters to compress (list[np.ndarray] for weights, dict for trees).
             additional_info: Additional information to compress.
             techniques: The techniques to apply.
 
@@ -51,6 +49,9 @@ class CompressionManager:
         applied_techniques = []
         byte_compressor: ByteCompressor | None = None
         encoder_key: str | None = None
+
+        # Check if params are tensor-based (list[np.ndarray]) or tree-based (dict)
+        is_tensor_params = isinstance(params, list)
 
         # apply techniques in sequence
         for name, fn_params in techniques.items():
@@ -63,7 +64,14 @@ class CompressionManager:
                     raise ValueError("Only one encoder can be applied at a time")
                 byte_compressor = instance
                 encoder_key = name
+            elif isinstance(instance, TensorCompressor):
+                # TensorCompressors only work with list[np.ndarray]
+                if is_tensor_params:
+                    params, compression_settings = instance.apply_strategy(params, **fn_params)
+                    applied_techniques.append([name, compression_settings])
+                # Skip TensorCompressors for tree-based models (dict params)
             else:
+                # Unknown compressor type, try to apply if it supports the params type
                 params, compression_settings = instance.apply_strategy(params, **fn_params)
                 applied_techniques.append([name, compression_settings])
 
@@ -87,12 +95,15 @@ class CompressionManager:
         )
 
     @staticmethod
-    def reverse(data: bytes) -> tuple[list[np.ndarray], dict]:
+    def reverse(data: bytes) -> tuple[Any, dict]:
         """
         Reverse compression techniques in sequence.
 
         Args:
-            data: The deserialized data to reverse (inner data is serialized).
+            data: The serialized data to reverse.
+
+        Returns:
+            Tuple of (params, additional_info). Params type matches original.
 
         """
         # Init

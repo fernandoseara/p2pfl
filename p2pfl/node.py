@@ -1,6 +1,6 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution (see https://github.com/pguijas/p2pfl).
-# Copyright (c) 2022 Pedro Guijas Bravo.
+# This file is part of the p2pfl distribution (see https://github.com/pguijas/p2pfl).
+# Copyright (c) 2026 Pedro Guijas Bravo.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,8 +39,7 @@ from p2pfl.communication.commands.weights.partial_model_command import PartialMo
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.communication.protocols.protobuff.grpc import GrpcCommunicationProtocol
 from p2pfl.exceptions import LearnerRunningException, NodeRunningException, ZeroRoundsException
-from p2pfl.learning.aggregators.aggregator import Aggregator
-from p2pfl.learning.aggregators.fedavg import FedAvg
+from p2pfl.learning.aggregators import Aggregator, get_default_aggregator
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
@@ -103,8 +102,15 @@ class Node:
         self._communication_protocol = GrpcCommunicationProtocol() if protocol is None else protocol
         self.addr = self._communication_protocol.set_addr(addr)
 
+        # Select default aggregator based on model type if not provided
+        if aggregator is None:
+            aggregator = get_default_aggregator(model)
+
+        # Validate model-aggregator compatibility early (fail-fast)
+        aggregator.validate_models([model])
+
         # Aggregator
-        self.aggregator = FedAvg() if aggregator is None else aggregator
+        self.aggregator = aggregator
         self.aggregator.set_addr(self.addr)
 
         # Learner
@@ -429,6 +435,9 @@ class Node:
 
         except Exception as e:
             logger.error(self.addr, f"Error {type(e).__name__}: {e}\n{traceback.format_exc()}")
+            self.learning_workflow.failed = True
+            self.learning_workflow.error = e
+            self.learning_workflow.finished = True
             self.stop()
 
     def __stop_learning(self) -> None:

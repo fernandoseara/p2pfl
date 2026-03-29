@@ -3,8 +3,8 @@ p2pfl.communication.protocols.protobuff.memory package
 
 .. automodule:: p2pfl.communication.protocols.protobuff.memory
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------

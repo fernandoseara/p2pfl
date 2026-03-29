@@ -1,5 +1,5 @@
 #
-# This file is part of the federated_learning_p2p (p2pfl) distribution
+# This file is part of the p2pfl distribution
 # (see https://github.com/pguijas/p2pfl).
 # Copyright (c) 2022 Pedro Guijas Bravo.
 #
@@ -19,6 +19,7 @@
 """P2PFL model abstraction."""
 
 import copy
+from abc import ABC, abstractmethod
 from typing import Any
 
 import numpy as np
@@ -27,25 +28,29 @@ from p2pfl.learning.compression.manager import CompressionManager
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError
 
 
-class P2PFLModel:
+class P2PFLModel(ABC):
     """
-    P2PFL model abstraction.
+    Abstract base class for all P2PFL models.
 
     This class encapsulates the different models across all the possible frameworks.
-
     The key concept is the extraction of the model weights in a common format for all the frameworks.
+
+    Important:
+        Inherit from ``WeightBasedModel`` or ``TreeBasedModel`` instead, which handle
+        neural networks and tree ensembles respectively with proper aggregator compatibility.
 
     Args:
         model: The model to encapsulate.
 
-    :: note :: The model type is ANY because the different frameworks do not share a common model type.
+    Note:
+        The model type is ANY because different model types have different parameter formats.
 
     """
 
     def __init__(
         self,
         model: Any,
-        params: list[np.ndarray] | bytes | None = None,
+        params: Any = None,
         num_samples: int | None = None,
         contributors: list[str] | None = None,
         additional_info: dict[str, Any] | None = None,
@@ -73,7 +78,7 @@ class P2PFLModel:
         """Get the model."""
         return self.model
 
-    def encode_parameters(self, params: list[np.ndarray] | None = None) -> bytes:
+    def encode_parameters(self, params: Any = None) -> bytes:
         """
         Encode the parameters of the model.
 
@@ -86,12 +91,12 @@ class P2PFLModel:
 
         return CompressionManager.apply(params, self.additional_info, self.compression)
 
-    def decode_parameters(self, data: bytes) -> tuple[list[np.ndarray], dict[str, Any]]:
+    def decode_parameters(self, data: bytes) -> tuple[Any, dict[str, Any]]:
         """
         Decode the parameters of the model.
 
         Args:
-            data: The parameters of the model.
+            data: The serialized parameters.
 
         """
         try:
@@ -99,17 +104,19 @@ class P2PFLModel:
         except Exception as e:
             raise DecodingParamsError("Error decoding parameters") from e
 
-    def get_parameters(self) -> list[np.ndarray]:
+    @abstractmethod
+    def get_parameters(self) -> Any:
         """
         Get the parameters of the model.
 
         Returns:
-            The parameters of the model
+            The parameters of the model.
 
         """
         raise NotImplementedError
 
-    def set_parameters(self, params: list[np.ndarray] | bytes) -> None:
+    @abstractmethod
+    def set_parameters(self, params: Any) -> None:
         """
         Set the parameters of the model.
 
@@ -183,12 +190,81 @@ class P2PFLModel:
         """
         return self.__class__(copy.deepcopy(self.model), **kwargs)
 
+    @abstractmethod
     def get_framework(self) -> str:
         """
         Retrieve the model framework name.
 
         Returns:
             The name of the model framework.
+
+        """
+        raise NotImplementedError
+
+
+class WeightBasedModel(P2PFLModel):
+    """
+    Base class for neural network models (PyTorch, TensorFlow, Flax).
+
+    Returns parameters as ``list[np.ndarray]`` weight tensors. Compatible with ``WeightAggregator``.
+
+    """
+
+    def decode_parameters(self, data: bytes) -> tuple[list[np.ndarray], dict[str, Any]]:
+        """
+        Decode the parameters of the model.
+
+        Args:
+            data: The serialized parameters.
+
+        Returns:
+            Tuple of (weight arrays, additional info).
+
+        """
+        params, info = super().decode_parameters(data)
+        return list(params), info
+
+    @abstractmethod
+    def get_parameters(self) -> list[np.ndarray]:
+        """
+        Get the parameters of the model.
+
+        Returns:
+            List of numpy arrays, one per layer.
+
+        """
+        raise NotImplementedError
+
+
+class TreeBasedModel(P2PFLModel):
+    """
+    Base class for tree ensemble models (XGBoost).
+
+    Returns parameters as ``dict[str, Any]`` tree structures. Compatible with ``TreeAggregator``.
+
+    """
+
+    def decode_parameters(self, data: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
+        """
+        Decode the parameters of the model.
+
+        Args:
+            data: The serialized parameters.
+
+        Returns:
+            Tuple of (tree structure dict, additional info).
+
+        """
+        params, info = super().decode_parameters(data)
+        return dict(params), info
+
+    @abstractmethod
+    def get_parameters(self) -> dict[str, Any]:
+        """
+        Get the parameters of the model.
+
+        Returns:
+            Parsed tree structure as a dictionary (XGBoost JSON format).
 
         """
         raise NotImplementedError
