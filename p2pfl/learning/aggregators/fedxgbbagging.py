@@ -144,8 +144,8 @@ class FedXgbBagging(TreeAggregator):
         iteration_indptr = bst_prev["learner"]["gradient_booster"]["model"]["iteration_indptr"]
         bst_prev["learner"]["gradient_booster"]["model"]["iteration_indptr"].append(iteration_indptr[-1] + paral_tree_num_curr)
 
-        # Aggregate new trees
-        trees_curr = bst_curr["learner"]["gradient_booster"]["model"]["trees"]
+        # Aggregate new trees (deep copy to avoid mutating the source model)
+        trees_curr = copy.deepcopy(bst_curr["learner"]["gradient_booster"]["model"]["trees"])
         for tree_count in range(paral_tree_num_curr):
             trees_curr[tree_count]["id"] = tree_num_prev + tree_count
             bst_prev["learner"]["gradient_booster"]["model"]["trees"].append(trees_curr[tree_count])

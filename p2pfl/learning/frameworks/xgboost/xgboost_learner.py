@@ -96,30 +96,37 @@ class XGBoostLearner(Learner):
             P2PFLModel: The trained model with updated parameters.
 
         """
-        model, X_train, y_train = self.__get_xgb_model_data(train=True)
-        # prepare callbacks
-        xgb_callbacks = []
-        for cb in self.callbacks:
-            # each P2PFLCallback should expose an XGBoost-compatible callback
-            if hasattr(cb, "to_xgb_callback"):
-                xgb_callbacks.append(cb.to_xgb_callback())
+        if self.epochs > 0:
+            model, X_train, y_train = self.__get_xgb_model_data(train=True)
+            model.set_params(n_estimators=self.epochs)
 
-        try:
-            # Try to get the booster from the current model to continue training
-            previous_booster = self.get_model().get_model().get_booster()
-            model.fit(
-                X_train,
-                y_train,
-                verbose=True,
-                xgb_model=previous_booster,  # Load previous model if exists
-            )
-        except (NotFittedError, Exception):
-            # If no previous model exists or there's an error, start fresh
-            model.fit(X_train, y_train, verbose=True)
+            # prepare callbacks
+            xgb_callbacks = []
+            for cb in self.callbacks:
+                if hasattr(cb, "to_xgb_callback"):
+                    xgb_callbacks.append(cb.to_xgb_callback())
 
-        self.get_model().set_contribution([self.addr], self.get_data().get_num_samples(train=True))
-        # store callback info back to model
-        self.add_callback_info_to_model()
+            try:
+                # Try to get the booster from the current model to continue training
+                previous_booster = self.get_model().get_model().get_booster()
+                model.fit(
+                    X_train,
+                    y_train,
+                    verbose=True,
+                    xgb_model=previous_booster,
+                    callbacks=xgb_callbacks if xgb_callbacks else None,
+                )
+            except NotFittedError:
+                # If no previous model exists, start fresh
+                model.fit(
+                    X_train,
+                    y_train,
+                    verbose=True,
+                    callbacks=xgb_callbacks if xgb_callbacks else None,
+                )
+
+            self.get_model().set_contribution([self.addr], self.get_data().get_num_samples(train=True))
+            self.add_callback_info_to_model()
         return self.get_model()
 
     @allow_no_addr_check
@@ -133,10 +140,6 @@ class XGBoostLearner(Learner):
         """
         # Placeholder: XGBoost sklearn does not support interrupt; could set a flag for custom callback
         raise NotImplementedError("Interrupting XGBoost sklearn fit is not supported")
-
-    # def set_model(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
-    #
-    #     self.__model = model
 
     @allow_no_addr_check
     def evaluate(self) -> dict[str, float]:
@@ -152,23 +155,23 @@ class XGBoostLearner(Learner):
                 For regression: 'mse'.
 
         """
-        model, X_test, y_test = self.__get_xgb_model_data(train=False)
         results: dict[str, float] = {}
-        try:
-            preds = model.predict(X_test)
-        except NotFittedError:
-            return results
+        if self.epochs > 0:
+            model, X_test, y_test = self.__get_xgb_model_data(train=False)
+            try:
+                preds = model.predict(X_test)
+            except NotFittedError:
+                return results
 
-        # classification vs regression metric
-        if np.issubdtype(y_test.dtype, np.integer):
-            accuracy = float(np.mean(preds == y_test))
-            results["accuracy"] = accuracy
-            # Calcular F1 score
-            f1 = f1_score(y_test, preds, average="weighted")
-            results["f1"] = float(f1)
-        else:
-            mse = float(np.mean((preds - y_test) ** 2))
-            results["mse"] = mse
+            # classification vs regression metric
+            if np.issubdtype(y_test.dtype, np.integer):
+                accuracy = float(np.mean(preds == y_test))
+                results["accuracy"] = accuracy
+                f1 = f1_score(y_test, preds, average="weighted")
+                results["f1"] = float(f1)
+            else:
+                mse = float(np.mean((preds - y_test) ** 2))
+                results["mse"] = mse
         return results
 
     @allow_no_addr_check

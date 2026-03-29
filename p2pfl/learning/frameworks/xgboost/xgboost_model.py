@@ -48,10 +48,6 @@ class XGBoostModel(TreeBasedModel):
             (default is None).
         compression (dict[str, dict[str, Any]] | None): Optional compression settings
             (default is None).
-        id (int | None): Model identifier (default is None).
-
-    Attributes:
-        id (int): The model identifier.
 
     Raises:
         ModelNotMatchingError: If the provided model is not an XGBoost sklearn model.
@@ -66,7 +62,6 @@ class XGBoostModel(TreeBasedModel):
         contributors: list[str] | None = None,
         additional_info: dict[str, Any] | None = None,
         compression: dict[str, dict[str, Any]] | None = None,
-        id: int | None = None,
     ) -> None:
         """
         Initialize the XGBoost model wrapper.
@@ -83,7 +78,6 @@ class XGBoostModel(TreeBasedModel):
                 (default is None).
             compression (dict[str, dict[str, Any]] | None): Optional compression settings
                 (default is None).
-            id (int | None): Model identifier (default is None).
 
         Raises:
             ModelNotMatchingError: If the provided model is not an XGBoost sklearn model.
@@ -92,7 +86,6 @@ class XGBoostModel(TreeBasedModel):
         if not isinstance(model, xgb.XGBModel):
             raise ModelNotMatchingError("Provided model is not an XGBoost sklearn model")
         super().__init__(model, params, num_samples, contributors, additional_info, compression)
-        self.id = id if id is not None else 0  # Default ID if not provided
 
     def get_parameters(self) -> dict[str, Any]:
         """
@@ -125,7 +118,8 @@ class XGBoostModel(TreeBasedModel):
         """
         # If bytes, decode compression first
         if isinstance(params, bytes):
-            params, _ = self.decode_parameters(params)
+            params, additional_info = self.decode_parameters(params)
+            self.additional_info.update(additional_info)
 
         if params is None or len(params) == 0:
             return
