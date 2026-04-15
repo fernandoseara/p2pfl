@@ -85,22 +85,34 @@ class TopologyFactory:
             num_edges_target = round(num_nodes * avg_degree / 2)
 
             rng = np.random.default_rng()
-            possible_edges = []
+
+            # Start with a random spanning tree to guarantee connectivity
+            nodes_in_tree = [0]
+            nodes_outside = list(range(1, num_nodes))
+            rng.shuffle(nodes_outside)
+            tree_edges: set[tuple[int, int]] = set()
+            for node in nodes_outside:
+                partner = rng.choice(nodes_in_tree)
+                edge = (min(node, partner), max(node, partner))
+                tree_edges.add(edge)
+                matrix[edge[0], edge[1]] = 1
+                matrix[edge[1], edge[0]] = 1
+                nodes_in_tree.append(node)
+
+            # Add remaining edges randomly
+            remaining_edges = []
             for i in range(num_nodes):
                 for j in range(i + 1, num_nodes):
-                    possible_edges.append((i, j))
+                    if (i, j) not in tree_edges:
+                        remaining_edges.append((i, j))
 
-            max_possible_edges = len(possible_edges)
-            if max_possible_edges == 0:
-                return matrix  # Should not happen if num_nodes > 1 but good practice
+            extra_needed = max(0, num_edges_target - len(tree_edges))
+            extra_needed = min(extra_needed, len(remaining_edges))
 
-            # Ensure we don't try to select more edges than possible
-            num_edges_to_select = min(num_edges_target, max_possible_edges)
-
-            if num_edges_to_select > 0:
-                selected_indices = rng.choice(max_possible_edges, size=num_edges_to_select, replace=False)
+            if extra_needed > 0:
+                selected_indices = rng.choice(len(remaining_edges), size=extra_needed, replace=False)
                 for index in selected_indices:
-                    i, j = possible_edges[index]
+                    i, j = remaining_edges[index]
                     matrix[i, j] = 1
                     matrix[j, i] = 1
         else:

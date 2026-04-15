@@ -65,7 +65,7 @@ class NodeMonitor:
     async def _loop(self) -> None:
         """Periodically collect system resource metrics."""
         while True:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(tz=datetime.timezone.utc)
             resources = self._report_system_resources()
             self.logs[now] = resources
             for cb in self._callbacks:

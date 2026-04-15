@@ -47,7 +47,7 @@ message DirectMessage {
 message Weights {
     bytes weights = 1;
     repeated string contributors = 2;
-    int32 num_samples = 3;
+    int64 num_samples = 3;
 }
 
 message HandShakeRequest {

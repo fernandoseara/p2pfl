@@ -526,6 +526,9 @@ class P2PFLogger:
             additional_info: Additional information as a dictionary.
 
         """
+        if not Settings.general.LOG_COMMUNICATION:
+            return
+
         # Determine emoji based on direction and package type
         emoji = ("📫" if package_type == "message" else "📦") if direction == "received" else ("📤" if package_type == "message" else "📬")
 

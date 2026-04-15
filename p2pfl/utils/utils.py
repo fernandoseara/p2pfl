@@ -90,7 +90,7 @@ async def wait_convergence(
     acum = 0.0
     while True:
         begin = time.time()
-        if all(len(n.get_neighbors(only_direct=only_direct)) == n_neis for n in nodes):
+        if all(len(n.get_neighbors(only_direct=only_direct)) >= n_neis for n in nodes):
             if debug:
                 _print_connectivity_matrix(nodes, only_direct, final=True)
             break

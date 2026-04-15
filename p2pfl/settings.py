@@ -55,6 +55,10 @@ class General:
     """Enable geolocation lookup via ip-api.com at node registration (opt-in)."""
     LOG_FULL_TIMESTAMP: bool = False
     """Show full date+time in logs (default: time only)."""
+    LOG_COMMUNICATION: bool = True
+    """Enable communication logging (disable to reduce overhead at scale)."""
+    MSG_BUFFER_SIZE: int = 10000
+    """Max messages buffered before workflow commands are registered. Increase for large networks (256+ nodes)."""
 
 
 @dataclass
@@ -81,7 +85,7 @@ class Gossip:
     """Time to live (TTL) for a message in the gossip protocol."""
     MESSAGES_PER_PERIOD: int = 100
     """Number of messages to send in each gossip period."""
-    AMOUNT_LAST_MESSAGES_SAVED: int = 100
+    AMOUNT_LAST_MESSAGES_SAVED: int = 1000
     """Number of last messages saved in the gossip protocol (avoid multiple message processing)."""
     MODELS_PERIOD: int = 1
     """Period of gossiping models (times by second)."""
@@ -91,6 +95,8 @@ class Gossip:
     """Amount of equal rounds to exit gossiping. Careful, a low value can cause an early stop of gossiping."""
     MODE_EXPECTATION_TIMEOUT: float = 60.0
     """Timeout (seconds) to wait for a model to be received."""
+    MODELS_GOSSIP_LOOP: bool = True
+    """Use loop-based gossip with retries and partial aggregation (True) or single-pass gossip (False)."""
 
 
 @dataclass

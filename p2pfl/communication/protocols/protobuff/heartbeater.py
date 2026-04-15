@@ -87,7 +87,7 @@ class Heartbeater(NodeComponent):
                     if t - last_seen > timeout:
                         logger.info(
                             self.address,
-                            f"Heartbeat timeout for {nei} ({t - last_seen}). Removing...",
+                            f"Heartbeat timeout for {nei} ({t - last_seen:.1f}s). Removing...",
                         )
                         await self.__neighbors.remove(nei)
             else:
