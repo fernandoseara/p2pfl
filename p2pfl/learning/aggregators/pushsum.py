@@ -55,7 +55,6 @@ class PushSum(WeightAggregator):
 
         # Eq. (6): μ_i^{t+1} = Σ p_{i,j} · μ_j
         push_sum_weight = 0.0
-        contributors: list[str] = []
         total_samples = 0
         for m in models:
             mixing = m.get_info().get("mixing_weight", 1.0)
@@ -64,9 +63,9 @@ class PushSum(WeightAggregator):
             # Eq. (5): ω_i^{t+1} = Σ p_{i,j} · ω_j
             for i, layer in enumerate(m.get_parameters()):
                 accum[i] = np.add(accum[i], layer * mixing)
-            contributors = contributors + m.get_contributors()
             total_samples += m.get_num_samples()
 
+        contributors = self.collect_contributors(models)
         result = models[0].build_copy(params=accum, num_samples=total_samples, contributors=contributors)
         result.add_info("push_sum_weight", push_sum_weight)
         return result

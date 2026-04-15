@@ -124,9 +124,7 @@ class Scaffold(WeightAggregator):
             self.c[i] += accum_c[i]
 
         # Get contributors
-        contributors = []
-        for m in models:
-            contributors.extend(m.get_contributors())
+        contributors = self.collect_contributors(models)
 
         # Return the aggregated model with the global model parameters and the control variates
         aggregated_model = models[0].build_copy(params=self.global_model_params, num_samples=total_samples, contributors=contributors)

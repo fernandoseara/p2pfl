@@ -135,8 +135,14 @@ class MemoryClient(ProtobuffClient):
             else:
                 raise NeighborNotConnectedError(f"Neighbor {self.nei_addr} not connected.")
 
-        # Send
-        res = await self.stub.send(msg, None)  # type: ignore
+        # Copy message to avoid shared-mutation bugs (InMemory passes by reference,
+        # unlike gRPC which serializes). Without this, TTL decrements in the server
+        # mutate the original object, corrupting other sends of the same message.
+        msg_copy = node_pb2.RootMessage()
+        msg_copy.CopyFrom(msg)
+
+        # Send (pass self_addr so the receiver can skip backward gossip forwarding)
+        res = await self.stub.send(msg_copy, self.self_addr)  # type: ignore
 
         # Log successful message sending
         if not res.error:

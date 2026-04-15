@@ -74,9 +74,7 @@ class FedAvg(WeightAggregator):
         accum = [np.divide(layer, total_samples) for layer in accum]
 
         # Get contributors
-        contributors: list[str] = []
-        for m in models:
-            contributors = contributors + m.get_contributors()
+        contributors = self.collect_contributors(models)
 
         # Return an aggregated p2pfl model
         return models[0].build_copy(params=accum, num_samples=total_samples, contributors=contributors)

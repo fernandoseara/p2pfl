@@ -19,6 +19,7 @@
 """Abstract aggregator - STATELESS design."""
 
 from abc import abstractmethod
+from collections.abc import Sequence
 
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel, TreeBasedModel, WeightBasedModel
 from p2pfl.utils.node_component import NodeComponent, allow_no_addr_check
@@ -129,6 +130,18 @@ class Aggregator(NodeComponent):
 
         """
         raise NotImplementedError
+
+    @staticmethod
+    def collect_contributors(models: Sequence[P2PFLModel]) -> list[str]:
+        """Collect deduplicated contributors from models, preserving order."""
+        seen: set[str] = set()
+        contributors: list[str] = []
+        for m in models:
+            for c in m.get_contributors():
+                if c not in seen:
+                    seen.add(c)
+                    contributors.append(c)
+        return contributors
 
     def get_required_callbacks(self) -> list[str]:
         """

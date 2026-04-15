@@ -30,9 +30,8 @@ from p2pfl.communication.protocols.protobuff.gossiper import Gossiper
 from p2pfl.communication.protocols.protobuff.neighbors import Neighbors
 from p2pfl.communication.protocols.protobuff.proto import node_pb2, node_pb2_grpc
 from p2pfl.management.logger import logger
+from p2pfl.settings import Settings
 from p2pfl.utils.node_component import NodeComponent, allow_no_addr_check
-
-_MSG_BUFFER_MAX_SIZE = 200
 
 
 class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
@@ -140,15 +139,18 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         await self._neighbors.remove(request.addr, disconnect_msg=False)
         return google.protobuf.empty_pb2.Empty()
 
-    async def send(self, request: node_pb2.RootMessage, _: grpc.aio.ServicerContext) -> node_pb2.ResponseMessage:
+    async def send(self, request: node_pb2.RootMessage, context: grpc.aio.ServicerContext | str | None = None) -> node_pb2.ResponseMessage:
         """
         Service. Handles both regular messages and model weights.
 
         Args:
             request: The RootMessage containing either a Message or Weights payload.
-            _: Context.
+            context: gRPC context, or sender address string (in-memory protocol).
 
         """
+        # Extract immediate sender for gossip forwarding optimization.
+        # In-memory protocol passes the sender address as a string.
+        forwarded_by: str | None = context if isinstance(context, str) else None
         # If message already processed, return
         if request.HasField("gossip_message") and not await self._gossiper.check_and_set_processed(request):
             return node_pb2.ResponseMessage()
@@ -205,7 +207,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
                 return node_pb2.ResponseMessage(error=error_text)
         else:
             # Buffer unknown messages for deferred replay when the command is registered
-            if len(self._pending_msgs_buffer) < _MSG_BUFFER_MAX_SIZE:
+            if len(self._pending_msgs_buffer) < Settings.general.MSG_BUFFER_SIZE:
                 self._pending_msgs_buffer.append(request)
                 logger.debug(self.address, f"📦 Buffered unknown command: {request.cmd} from {request.source}")
             else:
@@ -216,7 +218,7 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
         if request.HasField("gossip_message") and request.gossip_message.ttl > 0:
             # Update ttl and gossip
             request.gossip_message.ttl -= 1
-            await self._gossiper.add_message(request)
+            await self._gossiper.add_message(request, forwarded_by=forwarded_by)
 
         return node_pb2.ResponseMessage(response=cmd_out)
 

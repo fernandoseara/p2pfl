@@ -94,9 +94,7 @@ class FedXgbBagging(TreeAggregator):
                 global_model = FedXgbBagging._aggregate_boosters(global_model, current_model)
 
         # Get contributors
-        contributors: list[str] = []
-        for m in tree_models:
-            contributors = contributors + m.get_contributors()
+        contributors = self.collect_contributors(tree_models)
 
         # Return an aggregated p2pfl model with the dict params
         returned_model = tree_models[0].build_copy(params=global_model, num_samples=total_samples, contributors=contributors)

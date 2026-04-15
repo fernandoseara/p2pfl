@@ -85,11 +85,13 @@ class Gossiper(NodeComponent):
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
 
-    async def add_message(self, msg: node_pb2.RootMessage) -> None:
+    async def add_message(self, msg: node_pb2.RootMessage, forwarded_by: str | None = None) -> None:
         """Queue a message to be gossiped to all direct neighbors."""
         async with self._pending_msgs_lock:
             neighbors = [
-                v[0] for addr, v in self._neighbors.get_all(only_direct=True).items() if addr != self.address and addr != msg.source
+                v[0]
+                for addr, v in self._neighbors.get_all(only_direct=True).items()
+                if addr != self.address and addr != msg.source and addr != forwarded_by
             ]
             self._pending_msgs.append((msg, neighbors))
 
