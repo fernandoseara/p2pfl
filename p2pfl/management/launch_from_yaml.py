@@ -77,11 +77,11 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
         raise ValueError("Missing 'network' configuration in YAML file.")
     n = network_config.get("nodes")
     if not n:
-        # For hierarchical topology, derive node count from clusters
+        # For hierarchical topology, derive node count from clusters (+1 for root)
         hierarchy = network_config.get("hierarchy", {})
         clusters = hierarchy.get("clusters", [])
         if clusters:
-            n = sum(1 + c.get("workers", 1) for c in clusters)
+            n = 1 + sum(1 + c.get("workers", 1) for c in clusters)
         else:
             raise ValueError("Missing 'nodes' under 'network' configuration in YAML file.")
 
@@ -347,8 +347,9 @@ async def _run_hierarchical(
     """
     Run a hierarchical topology.
 
-    Nodes are split into clusters: each cluster has 1 edge + N workers.
-    Edges are connected to each other via the specified edge_topology.
+    Nodes are organized as: 1 root + clusters (each with 1 edge + N workers).
+    The first node is the root, followed by edge/worker groups.
+    Edges connect to their workers and to the root.
 
     Unlike flat topologies, HFL does NOT gossip the start-learning command
     because each node requires different role-specific parameters.
@@ -359,15 +360,18 @@ async def _run_hierarchical(
 
     hierarchy = network_config.get("hierarchy", {})
     clusters = hierarchy.get("clusters", [])
-    edge_topology = hierarchy.get("edge_topology", "full")
+    edge_trains = hierarchy.get("edge_trains", True)
 
     if not clusters:
         raise ValueError("Missing 'clusters' in hierarchy configuration.")
 
-    # Split nodes into clusters: [edge0, w0_0, w0_1, ..., edge1, w1_0, w1_1, ...]
+    # First node is the root
+    root_node = nodes[0]
+
+    # Split remaining nodes into clusters: [edge0, w0_0, w0_1, ..., edge1, w1_0, w1_1, ...]
     edge_nodes: list[Node] = []
     worker_groups: list[list[Node]] = []
-    idx = 0
+    idx = 1  # skip root
     for cluster in clusters:
         num_workers = cluster.get("workers", 1)
         edge = nodes[idx]
@@ -384,22 +388,31 @@ async def _run_hierarchical(
             await worker.connect(edge.address)
             await edge.connect(worker.address)
 
-    # Connect edges to each other
-    if len(edge_nodes) > 1:
-        edge_matrix = TopologyFactory.generate_matrix(edge_topology, len(edge_nodes))
-        await TopologyFactory.connect_nodes(edge_matrix, edge_nodes)
+    # Connect edges to root (bidirectional)
+    for edge in edge_nodes:
+        await edge.connect(root_node.address)
+        await root_node.connect(edge.address)
 
     # Brief wait for connections to stabilize
     await asyncio.sleep(1)
 
     # Start learning on each node directly (no gossip) with role-specific params.
-    # We use _start_learning_workflow instead of set_start_learning to avoid
-    # gossip propagation, since each node needs different role/topology params.
     exp_name = f"hfl-{time.time()}"
+
+    # Start root
+    root_exp = Experiment.create(
+        exp_name=exp_name,
+        total_rounds=r,
+        epochs_per_round=e,
+        workflow=workflow_name,
+        is_initiator=True,
+        role="root",
+        child_edge_addrs=all_edge_addrs,
+    )
+    await root_node._start_learning_workflow(workflow_name, root_exp)
 
     for edge, workers in zip(edge_nodes, worker_groups, strict=True):
         worker_addrs = [w.address for w in workers]
-        edge_peers = [a for a in all_edge_addrs if a != edge.address]
 
         # Start edge
         edge_exp = Experiment.create(
@@ -410,7 +423,8 @@ async def _run_hierarchical(
             is_initiator=True,
             role="edge",
             worker_addrs=worker_addrs,
-            edge_peers=edge_peers,
+            root_addr=root_node.address,
+            edge_trains=edge_trains,
         )
         await edge._start_learning_workflow(workflow_name, edge_exp)
 

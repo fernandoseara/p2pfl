@@ -46,7 +46,11 @@ class HFLRoundFinishedStage(Stage[HFLContext]):
         if not ctx.experiment.is_complete():
             if ctx.role == "worker":
                 return "worker_train"
-            return "edge_local_train"
+            if ctx.role == "root":
+                return "root_aggregate"
+            if ctx.edge_trains:
+                return "edge_local_train"
+            return "edge_aggregate_workers"
 
         # Final evaluation
         await evaluate_and_broadcast(ctx)

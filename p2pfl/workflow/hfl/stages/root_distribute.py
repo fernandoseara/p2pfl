@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-"""Setup and branching stage for HFL."""
+"""Root distribute-global-model stage for HFL."""
 
 from __future__ import annotations
 
@@ -23,23 +23,24 @@ from p2pfl.workflow.engine.stage import Stage
 from p2pfl.workflow.hfl.context import HFLContext
 
 
-class HFLSetupStage(Stage[HFLContext]):
-    """Initialize the HFL workflow and branch by role."""
+class HFLRootDistributeStage(Stage[HFLContext]):
+    """Root distributes the global model to all child edges."""
 
-    name = "setup"
+    name = "root_distribute"
 
     async def run(self) -> str | None:
-        """Set up learner, initialize round, and branch by role."""
+        """Send global model to every child edge."""
         ctx = self.ctx
+        model = ctx.learner.get_model()
+        payload = ctx.cp.build_weights(
+            "root_global_model",
+            ctx.experiment.round,
+            model.encode_parameters(),
+            model.get_contributors(),
+            model.get_num_samples(),
+        )
+        for edge_addr in ctx.child_edge_addrs:
+            await ctx.cp.send(edge_addr, payload)
 
-        ctx.learner.set_epochs(ctx.experiment.epochs_per_round)
-
-        logger.info(ctx.address, f"Starting HFL as {ctx.role}.")
-
-        if ctx.role == "worker":
-            return "worker_train"
-        if ctx.role == "root":
-            return "root_aggregate"
-        if ctx.edge_trains:
-            return "edge_local_train"
-        return "edge_aggregate_workers"
+        logger.info(ctx.address, f"Global model distributed to {len(ctx.child_edge_addrs)} edges.")
+        return "round_finished"

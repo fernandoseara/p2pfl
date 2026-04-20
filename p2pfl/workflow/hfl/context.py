@@ -46,17 +46,19 @@ class HFLContext(WorkflowContext):
     """
     Typed context for Hierarchical Federated Learning.
 
-    Extends WorkflowContext with role-specific state for two-level
-    hierarchical topology (workers -> edges).
+    Extends WorkflowContext with role-specific state for hierarchical
+    topology (workers -> edges -> root).
     """
 
-    # Role: "worker" or "edge"
+    # Role: "worker", "edge", or "root"
     role: str = "worker"
 
     # Topology (configured before learning starts)
     edge_addr: str | None = None  # For workers: assigned edge
     worker_addrs: list[str] = field(default_factory=list)  # For edges: managed workers
-    edge_peers: list[str] = field(default_factory=list)  # For edges: other edge nodes
+    root_addr: str | None = None  # For edges: root node address
+    child_edge_addrs: list[str] = field(default_factory=list)  # For root: child edge addresses
+    edge_trains: bool = True  # Whether edge nodes train on their own data
 
     # Per-peer tracking
     peers: dict[str, HFLPeerState] = field(default_factory=dict)

@@ -1,4 +1,4 @@
-description: "Hierarchical Federated Learning with MNIST: 2 edge nodes, 2 workers each."
+description: "Hierarchical Federated Learning with MNIST: 1 root, 2 edge nodes, 2 workers each (7 nodes total)."
 
 # Defines network setup
 network:
@@ -6,7 +6,7 @@ network:
   protocol: "MemoryCommunicationProtocol"
   topology: "hierarchical"
   hierarchy:
-    edge_topology: "full"  # How edges connect to each other
+    edge_trains: false       # Whether edges train on their own data (false = pure aggregators)
     clusters:
       - workers: 2         # Edge 0 with 2 workers
       - workers: 2         # Edge 1 with 2 workers
@@ -15,7 +15,7 @@ network:
 experiment:
   name: "hfl_mnist"
   rounds: 10
-  epochs: 1
+  epochs: 5
   seed: 666
   workflow: hfl
   wait_timeout: 10  # Timeout in minutes

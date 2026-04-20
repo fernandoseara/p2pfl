@@ -18,8 +18,10 @@
 
 from p2pfl.workflow.hfl.stages.edge_aggregate_workers import HFLEdgeAggregateWorkersStage
 from p2pfl.workflow.hfl.stages.edge_distribute import HFLEdgeDistributeStage
-from p2pfl.workflow.hfl.stages.edge_gossip import HFLEdgeGossipStage
 from p2pfl.workflow.hfl.stages.edge_local_train import HFLEdgeLocalTrainStage
+from p2pfl.workflow.hfl.stages.edge_sync_root import HFLEdgeSyncRootStage
+from p2pfl.workflow.hfl.stages.root_aggregate import HFLRootAggregateStage
+from p2pfl.workflow.hfl.stages.root_distribute import HFLRootDistributeStage
 from p2pfl.workflow.hfl.stages.round_finished import HFLRoundFinishedStage
 from p2pfl.workflow.hfl.stages.setup import HFLSetupStage
 from p2pfl.workflow.hfl.stages.worker_train import HFLWorkerTrainStage
@@ -31,7 +33,9 @@ __all__ = [
     "HFLWorkerWaitGlobalStage",
     "HFLEdgeLocalTrainStage",
     "HFLEdgeAggregateWorkersStage",
-    "HFLEdgeGossipStage",
+    "HFLEdgeSyncRootStage",
     "HFLEdgeDistributeStage",
+    "HFLRootAggregateStage",
+    "HFLRootDistributeStage",
     "HFLRoundFinishedStage",
 ]
