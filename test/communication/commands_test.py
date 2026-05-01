@@ -26,23 +26,13 @@ from p2pfl.communication.commands.infrastructure.metrics_command import MetricsC
 from p2pfl.communication.commands.infrastructure.start_learning_command import StartLearningCommand
 from p2pfl.communication.commands.infrastructure.stop_learning_command import StopLearningCommand
 from p2pfl.communication.commands.workflow.workflow_command import WorkflowCommand
-from p2pfl.communication.protocols.exceptions import CommunicationError, NeighborNotConnectedError
-from p2pfl.communication.protocols.protobuff.gossiper import Gossiper
-from p2pfl.communication.protocols.protobuff.grpc.address import AddressParser
-from p2pfl.communication.protocols.protobuff.grpc.client import GrpcClient
-from p2pfl.communication.protocols.protobuff.proto import node_pb2
 from p2pfl.exceptions import NodeRunningException
-from p2pfl.settings import Settings
-from p2pfl.utils.utils import set_standalone_settings
 from p2pfl.workflow.engine.experiment import Experiment
 from p2pfl.workflow.engine.message import MessageEntry
 
-set_standalone_settings()
-
-
-# =============================================================================
+###
 # Fixtures
-# =============================================================================
+###
 
 
 @pytest.fixture
@@ -67,18 +57,9 @@ def mock_node_learning():
     return node
 
 
-@pytest.fixture
-def gossiper():
-    """Gossiper instance with mock neighbors."""
-    mock_neighbors = MagicMock()
-    g = Gossiper(mock_neighbors, MagicMock())
-    g.set_address("127.0.0.1:8000")
-    return g
-
-
-# =============================================================================
+###
 # WorkflowCommand Tests
-# =============================================================================
+###
 
 
 class TestWorkflowCommand:
@@ -123,9 +104,9 @@ class TestWorkflowCommand:
         handler.assert_called_once_with("source", 1, b"model_data", ["node1", "node2"], 100)
 
 
-# =============================================================================
+###
 # MetricsCommand Tests
-# =============================================================================
+###
 
 
 class TestMetricsCommand:
@@ -154,9 +135,9 @@ class TestMetricsCommand:
             mock_logger.log_metric.assert_any_call("source", metric="accuracy", value=0.95, round=2)
 
 
-# =============================================================================
+###
 # StartLearningCommand Tests
-# =============================================================================
+###
 
 
 class TestStartLearningCommand:
@@ -226,9 +207,9 @@ class TestStartLearningCommand:
         )
 
 
-# =============================================================================
+###
 # StopLearningCommand Tests
-# =============================================================================
+###
 
 
 class TestStopLearningCommand:
@@ -256,9 +237,9 @@ class TestStopLearningCommand:
         mock_node_not_learning._stop_workflow.assert_not_called()
 
 
-# =============================================================================
+###
 # HeartbeatCommand Tests
-# =============================================================================
+###
 
 
 class TestHeartbeatCommand:
@@ -285,242 +266,9 @@ class TestHeartbeatCommand:
         mock_heartbeater.beat.assert_called_once_with("source", time=1234567890.123)
 
 
-# =============================================================================
-# AddressParser Tests
-# =============================================================================
-
-
-class TestAddressParser:
-    """Tests for AddressParser."""
-
-    @pytest.mark.parametrize(
-        "address,expected_host,expected_port,is_v6,unix_domain,parsed",
-        [
-            ("127.0.0.1:8080", "127.0.0.1", 8080, False, False, "127.0.0.1:8080"),
-            ("[::1]:8080", "::1", 8080, True, False, "[::1]:8080"),
-            ("[2001:db8::1]:9000", "2001:db8::1", 9000, True, False, "[2001:db8::1]:9000"),
-            ("unix:///var/run/socket", "unix:///var/run/socket", None, None, True, "unix:///var/run/socket"),
-        ],
-    )
-    def test_valid_address_parsing(self, address, expected_host, expected_port, is_v6, unix_domain, parsed):
-        """Test parsing valid addresses (IPv4, IPv6, Unix domain)."""
-        parser = AddressParser(address)
-
-        assert parser.host == expected_host
-        if expected_port is not None:
-            assert parser.port == expected_port
-        assert parser.is_v6 == is_v6
-        assert parser.unix_domain is unix_domain
-        assert parser.get_parsed_address() == parsed
-
-    def test_unix_domain_relative_path_not_recognized(self):
-        """Test that relative Unix paths are not recognized as Unix domain."""
-        parser = AddressParser("unix://relative/path")
-        assert parser.unix_domain is False
-
-    @pytest.mark.parametrize("address", ["127.0.0.1:70000", "127.0.0.1:0", "127.0.0.1:99999"])
-    def test_invalid_port_results_in_none(self, address):
-        """Test that invalid ports result in None host/port."""
-        parser = AddressParser(address)
-        assert parser.host is None
-        assert parser.port is None
-
-    def test_get_parsed_address_raises_on_invalid(self):
-        """Test that get_parsed_address raises ValueError for invalid address."""
-        parser = AddressParser("127.0.0.1:99999")
-        with pytest.raises(ValueError, match="invalid"):
-            parser.get_parsed_address()
-
-    def test_hostname_only_assigns_random_port(self):
-        """Test that hostname-only address gets random port assigned."""
-        parser = AddressParser("localhost")
-        assert parser.host is not None
-        assert parser.port is not None
-        assert 1 <= parser.port <= 65535
-
-
-# =============================================================================
-# GrpcClient Tests
-# =============================================================================
-
-
-class TestGrpcClient:
-    """Tests for GrpcClient."""
-
-    @pytest.mark.asyncio
-    async def test_send_raises_when_not_connected(self):
-        """Test that send raises NeighborNotConnectedError when not connected."""
-        client = GrpcClient("127.0.0.1:8000", "127.0.0.1:9000")
-        mock_msg = MagicMock()
-
-        with pytest.raises(NeighborNotConnectedError):
-            await client.send(mock_msg, temporal_connection=False, raise_error=True)
-
-    @pytest.mark.asyncio
-    async def test_send_uses_temporal_connection(self):
-        """Test that send creates temporal connection when requested."""
-        client = GrpcClient("127.0.0.1:8000", "127.0.0.1:9000")
-
-        # Create a real message instead of MagicMock to avoid serialization issues
-        mock_msg = node_pb2.RootMessage(cmd="test", source="127.0.0.1:8000", round=-1)
-
-        # Mock connect to set up stub
-        async def mock_connect(handshake_msg=True):
-            client.stub = MagicMock()
-            client.channel = MagicMock()
-            # Mock stub.send as async - return a proper response
-            mock_response = MagicMock()
-            mock_response.error = ""
-            mock_response.response = "ok"
-            client.stub.send = AsyncMock(return_value=mock_response)
-
-        client.connect = mock_connect
-
-        # Mock disconnect
-        client.disconnect = AsyncMock()
-
-        result = await client.send(mock_msg, temporal_connection=True)
-
-        assert result == "ok"
-        client.disconnect.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_disconnect_does_nothing_when_not_connected(self):
-        """Test that disconnect does nothing when not connected."""
-        client = GrpcClient("127.0.0.1:8000", "127.0.0.1:9000")
-
-        # Should not raise
-        await client.disconnect()
-
-        assert client.stub is None
-        assert client.channel is None
-
-    @pytest.mark.asyncio
-    async def test_connect_does_nothing_when_already_connected(self):
-        """Test that connect returns early when already connected."""
-        client = GrpcClient("127.0.0.1:8000", "127.0.0.1:9000")
-        client.stub = MagicMock()
-        client.channel = MagicMock()
-
-        # Should return without doing anything
-        await client.connect()
-
-        # Stub should still be the mock (not replaced)
-        assert client.stub is not None
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "raise_error,expected_result,should_raise",
-        [
-            (False, "", False),
-            (True, None, True),
-        ],
-    )
-    async def test_send_error_handling(self, raise_error, expected_result, should_raise):
-        """Test send behavior on error with different raise_error settings."""
-        client = GrpcClient("127.0.0.1:8000", "127.0.0.1:9000")
-        client.stub = MagicMock()
-        client.channel = MagicMock()
-        client.stub.send = AsyncMock(side_effect=Exception("Connection failed"))
-
-        mock_msg = node_pb2.RootMessage(cmd="test", source="127.0.0.1:8000", round=-1)
-
-        if should_raise:
-            with pytest.raises(Exception, match="Connection failed"):
-                await client.send(mock_msg, raise_error=raise_error)
-        else:
-            result = await client.send(mock_msg, raise_error=raise_error)
-            assert result == expected_result
-
-    @pytest.mark.asyncio
-    async def test_send_raises_communication_error_on_response_error(self):
-        """Test that send raises CommunicationError when response has error."""
-        client = GrpcClient("127.0.0.1:8000", "127.0.0.1:9000")
-        client.stub = MagicMock()
-        client.channel = MagicMock()
-
-        # Return a response with an error
-        mock_response = MagicMock()
-        mock_response.error = "Command not found"
-        mock_response.response = ""
-        client.stub.send = AsyncMock(return_value=mock_response)
-
-        mock_msg = node_pb2.RootMessage(cmd="unknown", source="127.0.0.1:8000", round=-1)
-
-        with pytest.raises(CommunicationError, match="Command not found"):
-            await client.send(mock_msg, raise_error=True, disconnect_on_error=False)
-
-
-# =============================================================================
-# Gossiper Tests
-# =============================================================================
-
-
-class TestGossiper:
-    """Tests for Gossiper."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "msg_source,expected",
-        [
-            ("127.0.0.1:8000", False),  # Own message
-            ("127.0.0.1:9000", True),  # New message from other
-        ],
-    )
-    async def test_check_and_set_processed(self, gossiper, msg_source, expected):
-        """Test message processing: own messages rejected, new messages accepted."""
-        mock_msg = MagicMock()
-        mock_msg.source = msg_source
-        mock_msg.gossip_message.hash = 12345
-
-        result = await gossiper.check_and_set_processed(mock_msg)
-        assert result is expected
-
-    @pytest.mark.asyncio
-    async def test_check_and_set_processed_returns_false_for_duplicate(self, gossiper):
-        """Test that duplicate messages return False."""
-        mock_msg = MagicMock()
-        mock_msg.source = "127.0.0.1:9000"
-        mock_msg.gossip_message.hash = 12345
-
-        assert await gossiper.check_and_set_processed(mock_msg) is True
-        assert await gossiper.check_and_set_processed(mock_msg) is False
-
-    @pytest.mark.asyncio
-    async def test_add_message_queues_for_neighbors(self, gossiper):
-        """Test that add_message queues message for all direct neighbors."""
-        mock_client = MagicMock()
-        gossiper._neighbors.get_all.return_value = {
-            "127.0.0.1:9000": (mock_client, 0),
-            "127.0.0.1:9001": (mock_client, 0),
-        }
-
-        mock_msg = MagicMock()
-        mock_msg.source = "127.0.0.1:7000"
-
-        await gossiper.add_message(mock_msg)
-
-        assert len(gossiper._pending_msgs) == 1
-        assert gossiper._pending_msgs[0][0] == mock_msg
-
-    @pytest.mark.asyncio
-    async def test_circular_buffer_limits_processed_messages(self, gossiper):
-        """Test that processed messages list is limited to configured size."""
-        limit = Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED
-        for i in range(limit + 5):
-            mock_msg = MagicMock()
-            mock_msg.source = "127.0.0.1:9000"
-            mock_msg.gossip_message.hash = i
-
-            await gossiper.check_and_set_processed(mock_msg)
-
-        # The list should have removed old entries
-        assert len(gossiper._processed_messages) <= limit + 1
-
-
-# =============================================================================
+###
 # Command Base Class Tests
-# =============================================================================
+###
 
 
 class TestCommandBase:

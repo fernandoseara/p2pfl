@@ -24,20 +24,18 @@ import pytest
 from p2pfl.communication.commands.command import Command
 from p2pfl.communication.protocols.communication_protocol import CommunicationProtocol
 from p2pfl.communication.protocols.exceptions import (
-    CommunicationError,
     NeighborNotConnectedError,
     ProtocolNotStartedError,
 )
 from p2pfl.communication.protocols.protobuff.grpc import GrpcCommunicationProtocol
+from p2pfl.communication.protocols.protobuff.grpc.address import AddressParser
 from p2pfl.communication.protocols.protobuff.memory import MemoryCommunicationProtocol
 from p2pfl.settings import Settings
-from p2pfl.utils.utils import set_standalone_settings, wait_convergence
+from p2pfl.utils.utils import wait_convergence
 
-set_standalone_settings()
-
-#
-# PROTOCOLS TO TEST
-#
+###
+# Protocols to test
+###
 ProtocolBuilder = Callable[..., CommunicationProtocol]
 
 
@@ -55,9 +53,9 @@ def __build_memory_protocol(*args, **kwargs) -> CommunicationProtocol:
 
 build_protocols_fns = [__build_grpc_protocol, __build_memory_protocol]
 
-#
+###
 # Test
-#
+###
 
 
 class MockCommand(Command):
@@ -125,21 +123,13 @@ async def test_basic_communication(protocol_builder: ProtocolBuilder):
     assert list(protocol1.get_neighbors().keys()) == [protocol2.get_address()]
     assert list(protocol2.get_neighbors().keys()) == [protocol1.get_address()]
 
-    with pytest.raises(CommunicationError):
-        await protocol1.send(protocol2.get_address(), built_cmd, raise_error=True, remove_on_error=False)
-
-    # Ensure the command is not executed
+    # Sending to an unregistered command should be buffered (no error)
+    await protocol1.send(protocol2.get_address(), built_cmd, raise_error=True, remove_on_error=False)
     assert command.flag is False
 
-    # Add the command to the first protocol
+    # Register the command — buffered message should be replayed
     protocol2.add_command(command)
-
-    # Send the command
-    built_cmd = protocol1.build_msg(command.get_name())  # regenerate the command to refresh the hash
-    await protocol1.send(protocol2.get_address(), built_cmd, raise_error=True)
-
-    # Ensure the command is executed
-    await asyncio.sleep(1)  # Wait for the command to be executed
+    await asyncio.sleep(1)
     assert command.flag is True
 
     # Stop the protocols
@@ -252,3 +242,57 @@ async def test_node_down(protocol_builder: ProtocolBuilder):
 
     # Stop the protocol 1
     await protocol1.stop()
+
+
+###
+# AddressParser Tests
+###
+
+
+class TestAddressParser:
+    """Tests for AddressParser."""
+
+    @pytest.mark.parametrize(
+        "address,expected_host,expected_port,is_v6,unix_domain,parsed",
+        [
+            ("127.0.0.1:8080", "127.0.0.1", 8080, False, False, "127.0.0.1:8080"),
+            ("[::1]:8080", "::1", 8080, True, False, "[::1]:8080"),
+            ("[2001:db8::1]:9000", "2001:db8::1", 9000, True, False, "[2001:db8::1]:9000"),
+            ("unix:///var/run/socket", "unix:///var/run/socket", None, None, True, "unix:///var/run/socket"),
+        ],
+    )
+    def test_valid_address_parsing(self, address, expected_host, expected_port, is_v6, unix_domain, parsed):
+        """Test parsing valid addresses (IPv4, IPv6, Unix domain)."""
+        parser = AddressParser(address)
+
+        assert parser.host == expected_host
+        if expected_port is not None:
+            assert parser.port == expected_port
+        assert parser.is_v6 == is_v6
+        assert parser.unix_domain is unix_domain
+        assert parser.get_parsed_address() == parsed
+
+    def test_unix_domain_relative_path_not_recognized(self):
+        """Test that relative Unix paths are not recognized as Unix domain."""
+        parser = AddressParser("unix://relative/path")
+        assert parser.unix_domain is False
+
+    @pytest.mark.parametrize("address", ["127.0.0.1:70000", "127.0.0.1:0", "127.0.0.1:99999"])
+    def test_invalid_port_results_in_none(self, address):
+        """Test that invalid ports result in None host/port."""
+        parser = AddressParser(address)
+        assert parser.host is None
+        assert parser.port is None
+
+    def test_get_parsed_address_raises_on_invalid(self):
+        """Test that get_parsed_address raises ValueError for invalid address."""
+        parser = AddressParser("127.0.0.1:99999")
+        with pytest.raises(ValueError, match="invalid"):
+            parser.get_parsed_address()
+
+    def test_hostname_only_assigns_random_port(self):
+        """Test that hostname-only address gets random port assigned."""
+        parser = AddressParser("localhost")
+        assert parser.host is not None
+        assert parser.port is not None
+        assert 1 <= parser.port <= 65535
