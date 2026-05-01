@@ -231,6 +231,7 @@ class TestMessageBufferingE2E:
         hello before start_learning reaches them. The buffer + replay-after-RUNNING
         fix ensures no messages are lost.
         """
+
         # Minimal workflow: broadcast hello, wait for all peers
         class HelloStage(Stage[WorkflowContext]):
             async def run(self) -> str | None:

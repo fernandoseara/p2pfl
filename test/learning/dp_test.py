@@ -157,5 +157,3 @@ def test_dp_empty_params(dp_compressor):
     """
     with pytest.raises(ValueError, match="must not be empty"):
         dp_compressor.apply_strategy(params=[], clip_norm=1.0, epsilon=4.0, delta=1e-5, noise_type="gaussian")
-
-
