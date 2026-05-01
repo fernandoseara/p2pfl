@@ -30,10 +30,22 @@ from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.management.launch_from_yaml.utils import export_experiment_data, load_by_package_and_name, resize_partitions
 from p2pfl.management.logger import logger
+from p2pfl.management.logger.logger import P2PFLogger
+from p2pfl.management.p2pfl_web_services import P2pflWebServices
 from p2pfl.node import Node
 from p2pfl.settings import Settings
 from p2pfl.utils.topologies import TopologyFactory
 from p2pfl.utils.utils import wait_convergence, wait_to_finish
+
+
+def _find_web_services(lgr: P2PFLogger) -> P2pflWebServices | None:
+    """Walk the logger decorator chain to find the P2pflWebServices instance."""
+    current: Any = lgr
+    while current is not None:
+        if hasattr(current, "_p2pfl_web_services") and current._p2pfl_web_services is not None:
+            return current._p2pfl_web_services
+        current = getattr(current, "_p2pfl_logger", None)
+    return None
 
 
 async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
@@ -73,10 +85,17 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     profiling_enabled = profiling.get("enabled", False)
     profiling_output_dir = profiling.get("output_dir", "profile")
     if profiling_enabled:
+        import asyncio
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
         import yappi  # type: ignore
 
+        yappi.set_context_name_callback(lambda: threading.current_thread().name)
         yappi.start()
+        asyncio.get_event_loop().set_default_executor(ThreadPoolExecutor(thread_name_prefix="p2pfl-asyncio"))
 
+    actual_exp_name: str | None = None
     start_time = None
     if profiling.get("measure_time", False):
         start_time = time.time()
@@ -257,7 +276,7 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
             raise ValueError("Skipping training, amount of round is less than 1")
 
         # Start Learning
-        await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size, workflow=workflow_name)
+        actual_exp_name = await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size, workflow=workflow_name)
 
         # Wait and check
         wait_timeout = experiment_config.get("wait_timeout", 60)
@@ -298,6 +317,11 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
             for thread in yappi.get_thread_stats():
                 yappi.get_func_stats(ctx_id=thread.id).save(f"{profile_dir}/{thread.name}-{thread.id}.pstat", type="pstat")
             print(f"Profile stats saved in {profile_dir}")
+
+            # Upload to web services if connected
+            web_services = _find_web_services(logger)
+            if web_services is not None and actual_exp_name is not None:
+                web_services.upload_profiling(actual_exp_name, profile_dir)
 
         # Export experiment data (opt-in)
         if export_results:

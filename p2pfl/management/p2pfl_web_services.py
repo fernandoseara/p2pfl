@@ -21,8 +21,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import datetime
 import json
+import os
 import threading
 from typing import Any
 
@@ -191,14 +193,16 @@ class P2pflWebServices:
     def _get(self, path: str, *, timeout: int = 5) -> dict:
         response = self._client.get(self._base_url + path, timeout=timeout)
         response.raise_for_status()
-        return response.json()  # type: ignore[no-any-return]
+        result: dict = response.json()
+        return result
 
     def _post(self, path: str, data: Any, *, timeout: int = 5) -> dict:
         response = self._client.post(self._base_url + path, json=data, timeout=timeout)
         response.raise_for_status()
         if response.status_code == 204:
             return {}
-        return response.json()  # type: ignore[no-any-return]
+        result: dict = response.json()
+        return result
 
     def _patch(self, path: str, data: Any, *, timeout: int = 5) -> None:
         response = self._client.patch(self._base_url + path, json=data, timeout=timeout)
@@ -457,6 +461,43 @@ class P2pflWebServices:
                 "metadata": {"package_type": package_type, **(additional_info or {})},
             }
         )
+
+    def upload_profiling(self, exp_name: str, profile_dir: str) -> None:
+        """
+        Upload profiling .pstat files for an experiment.
+
+        Args:
+            exp_name: The experiment name.
+            profile_dir: Local directory containing .pstat files.
+
+        """
+        exp_id = self._exp_id.get(exp_name)
+        if exp_id is None:
+            return
+
+        files: list[dict[str, str]] = []
+        for fname in os.listdir(profile_dir):
+            if fname.endswith(".pstat"):
+                fpath = os.path.join(profile_dir, fname)
+                with open(fpath, "rb") as f:
+                    files.append(
+                        {
+                            "filename": fname,
+                            "data": base64.b64encode(f.read()).decode("ascii"),
+                        }
+                    )
+
+        if not files:
+            return
+
+        try:
+            self._post(
+                f"/experiments/{exp_id}/profiling",
+                {"files": files},
+                timeout=30,
+            )
+        except Exception as e:
+            print(f"[P2PFL Web Services] Failed to upload profiling data: {e}")
 
     def get_pending_actions(self) -> list[dict]:
         """Get pending actions from the web services."""

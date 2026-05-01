@@ -56,7 +56,7 @@ class GrpcServer(ProtobuffServer):
         # Server
         maxMsgLength = 1024 * 1024 * 1024
         self.__server = aio.server(
-            futures.ThreadPoolExecutor(max_workers=10),
+            futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix="p2pfl-grpc"),
             options=[
                 ("grpc.max_send_message_length", maxMsgLength),
                 ("grpc.max_receive_message_length", maxMsgLength),
