@@ -37,7 +37,7 @@ def mnist_dataset() -> P2PFLDataset:
     return P2PFLDataset(hg_ds)
 
 
-def __test_mnist_sample(item):
+def _test_mnist_sample(item):
     assert "image" in item
     assert "label" in item
 
@@ -52,7 +52,7 @@ def test_mnist_sample(mnist_dataset):
 
     item = mnist_dataset.get(0, train=True)
 
-    __test_mnist_sample(item)
+    _test_mnist_sample(item)
 
 
 def test_generate_train_test_split():
@@ -131,7 +131,7 @@ def test_generate_partitions(mnist_dataset, strategy):
 
     # Check item
     item = partitions[0].get(0, train=True)
-    __test_mnist_sample(item)
+    _test_mnist_sample(item)
 
 
 def test_get_on_plain_dataset():

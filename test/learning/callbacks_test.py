@@ -20,6 +20,7 @@
 import contextlib
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 from p2pfl.learning.frameworks import Framework
@@ -111,21 +112,14 @@ def test_callback_factory_missing_required_callback_raises():
 ###
 
 
-def test_fedprox_callback_get_name():
-    """Test FedProxCallback.get_name returns correct name."""
-    pytest.importorskip("lightning", reason="PyTorch Lightning not available")
-    from p2pfl.learning.frameworks.pytorch.callbacks.fedprox_callback import FedProxCallback
-
-    callback = FedProxCallback()
-    assert callback.get_name() == "fedprox"
-
-
 def test_fedprox_callback_first_round_skips_proximal():
     """Test that FedProxCallback skips proximal term on first round."""
     pytest.importorskip("lightning", reason="PyTorch Lightning not available")
     from p2pfl.learning.frameworks.pytorch.callbacks.fedprox_callback import FedProxCallback
 
     callback = FedProxCallback()
+    assert callback.get_name() == "fedprox"
+
     mock_trainer = MagicMock()
     mock_module = MagicMock()
 
@@ -134,7 +128,7 @@ def test_fedprox_callback_first_round_skips_proximal():
 
     assert callback.proximal_mu is None
     assert callback.initial_params is None
-    assert callback._is_first_round is False  # Should be set to False after first call
+    assert callback._is_first_round is False
 
 
 def test_fedprox_callback_second_round_requires_info():
@@ -218,7 +212,7 @@ def test_scaffold_pt_on_train_start_initializes_control_variates_as_zeros():
 def test_scaffold_pt_on_train_start_loads_global_c_from_additional_info():
     """Test that on_train_start loads global control variate from additional_info."""
     torch = pytest.importorskip("torch", reason="PyTorch not available")
-    np = pytest.importorskip("numpy", reason="NumPy not available")
+
     pytest.importorskip("lightning", reason="PyTorch Lightning not available")
     from p2pfl.learning.frameworks.pytorch.callbacks.scaffold_callback import SCAFFOLDCallback
 
@@ -293,7 +287,7 @@ def test_scaffold_pt_gradient_correction():
 def test_scaffold_pt_on_train_end_computes_delta_c_correctly():
     """Test on_train_end computes delta_c_i = new_c_i - old_c_i following the SCAFFOLD formula."""
     torch = pytest.importorskip("torch", reason="PyTorch not available")
-    np = pytest.importorskip("numpy", reason="NumPy not available")
+
     pytest.importorskip("lightning", reason="PyTorch Lightning not available")
     from p2pfl.learning.frameworks.pytorch.callbacks.scaffold_callback import SCAFFOLDCallback
 
@@ -388,7 +382,7 @@ def test_scaffold_pt_gradient_correction_raises_without_lr():
 def test_scaffold_pt_multiple_params():
     """Test SCAFFOLD delta computation with multiple parameter groups."""
     torch = pytest.importorskip("torch", reason="PyTorch not available")
-    np = pytest.importorskip("numpy", reason="NumPy not available")
+
     pytest.importorskip("lightning", reason="PyTorch Lightning not available")
     from p2pfl.learning.frameworks.pytorch.callbacks.scaffold_callback import SCAFFOLDCallback
 
@@ -425,34 +419,20 @@ def test_scaffold_pt_multiple_params():
 ###
 
 
-def test_scaffold_tf_get_name():
-    """Test TF SCAFFOLDCallback.get_name returns correct name."""
-    pytest.importorskip("tensorflow", reason="TensorFlow not available")
+def test_scaffold_tf_on_train_begin_initializes_control_variates():
+    """Test TF on_train_begin initializes c_i and c as zeros from default state."""
+    tf = pytest.importorskip("tensorflow", reason="TensorFlow not available")
     from p2pfl.learning.frameworks.tensorflow.callbacks.scaffold_callback import SCAFFOLDCallback
 
     callback = SCAFFOLDCallback()
+
+    # Verify name and initial state before training
     assert callback.get_name() == "scaffold"
-
-
-def test_scaffold_tf_initial_state():
-    """Test TF SCAFFOLDCallback initial state."""
-    pytest.importorskip("tensorflow", reason="TensorFlow not available")
-    from p2pfl.learning.frameworks.tensorflow.callbacks.scaffold_callback import SCAFFOLDCallback
-
-    callback = SCAFFOLDCallback()
     assert callback.c == []
     assert callback.c_i == []
     assert callback.initial_model_params == []
     assert callback.saved_lr is None
     assert callback.K == 0
-
-
-def test_scaffold_tf_on_train_begin_initializes_control_variates():
-    """Test TF on_train_begin initializes c_i and c as zeros."""
-    tf = pytest.importorskip("tensorflow", reason="TensorFlow not available")
-    from p2pfl.learning.frameworks.tensorflow.callbacks.scaffold_callback import SCAFFOLDCallback
-
-    callback = SCAFFOLDCallback()
 
     # Set up mock model with trainable variables and optimizer
     param1 = tf.Variable([1.0, 2.0, 3.0])
@@ -486,7 +466,7 @@ def test_scaffold_tf_on_train_begin_initializes_control_variates():
 def test_scaffold_tf_on_train_begin_loads_global_c():
     """Test TF on_train_begin loads global_c from additional_info."""
     tf = pytest.importorskip("tensorflow", reason="TensorFlow not available")
-    np = pytest.importorskip("numpy", reason="NumPy not available")
+
     from p2pfl.learning.frameworks.tensorflow.callbacks.scaffold_callback import SCAFFOLDCallback
 
     callback = SCAFFOLDCallback()
@@ -524,7 +504,7 @@ def test_scaffold_tf_on_train_batch_end_increments_K():
 def test_scaffold_tf_on_train_end_computes_delta_c_correctly():
     """Test TF on_train_end computes delta_c_i and delta_y_i following SCAFFOLD formula."""
     tf = pytest.importorskip("tensorflow", reason="TensorFlow not available")
-    np = pytest.importorskip("numpy", reason="NumPy not available")
+
     from p2pfl.learning.frameworks.tensorflow.callbacks.scaffold_callback import SCAFFOLDCallback
 
     callback = SCAFFOLDCallback()
@@ -561,7 +541,7 @@ def test_scaffold_tf_on_train_end_computes_delta_c_correctly():
 def test_scaffold_tf_on_train_end_updates_c_i():
     """Test TF on_train_end correctly updates c_i in place via assign_add."""
     tf = pytest.importorskip("tensorflow", reason="TensorFlow not available")
-    np = pytest.importorskip("numpy", reason="NumPy not available")
+
     from p2pfl.learning.frameworks.tensorflow.callbacks.scaffold_callback import SCAFFOLDCallback
 
     callback = SCAFFOLDCallback()
@@ -601,7 +581,7 @@ def test_scaffold_tf_on_train_end_raises_without_init():
 def test_scaffold_tf_on_train_end_multiple_params():
     """Test TF SCAFFOLD delta computation with multiple parameter groups."""
     tf = pytest.importorskip("tensorflow", reason="TensorFlow not available")
-    np = pytest.importorskip("numpy", reason="NumPy not available")
+
     from p2pfl.learning.frameworks.tensorflow.callbacks.scaffold_callback import SCAFFOLDCallback
 
     callback = SCAFFOLDCallback()

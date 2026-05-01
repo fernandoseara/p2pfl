@@ -401,7 +401,6 @@ def test_ptq_per_channel_invalid_axis(ptq_compressor):
 def test_ptq_per_channel_1d_fallback(ptq_compressor):
     """Test that per-channel quantization on a 1D tensor falls back to per-tensor."""
     tensor_1d = np.random.randn(10).astype(np.float32)
-    # Call internal method directly to exercise the 1D fallback path (lines 320-323)
     q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor_1d, np.dtype("int8"), "symmetric", 0)
     assert q_tensor.shape == tensor_1d.shape
     assert q_tensor.dtype == np.int8
@@ -435,7 +434,6 @@ def test_ptq_per_channel_symmetric_zero_channel(ptq_compressor):
 def test_ptq_per_channel_asymmetric(ptq_compressor):
     """Test per-channel asymmetric quantization covering the asymmetric branch in _quantize_per_channel."""
     tensor = np.random.randn(4, 5).astype(np.float32)
-    # Call internal method to exercise asymmetric per-channel quantization (lines 384-415)
     q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor, np.dtype("int8"), "asymmetric", 0)
     assert q_tensor.dtype == np.int8
     assert q_tensor.shape == tensor.shape
@@ -448,7 +446,6 @@ def test_ptq_per_channel_asymmetric_constant_zero_channel(ptq_compressor):
     """Test per-channel asymmetric where a channel has all zeros (tmin==tmax==0)."""
     tensor = np.random.randn(3, 4).astype(np.float32)
     tensor[0, :] = 0.0
-    # Call internal method to exercise asymmetric constant-zero branch (lines 388-392)
     q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor, np.dtype("int8"), "asymmetric", 0)
     # The zero channel should be quantized to all zeros with scale=1.0
     assert np.all(q_tensor[0, :] == 0)
@@ -460,7 +457,6 @@ def test_ptq_per_channel_asymmetric_constant_nonzero_channel(ptq_compressor):
     """Test per-channel asymmetric quantization where a channel is constant nonzero."""
     tensor = np.random.randn(3, 4).astype(np.float32)
     tensor[2, :] = 7.0  # Constant nonzero channel
-    # Call internal method to exercise the constant nonzero branch (lines 394-399)
     q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor, np.dtype("int8"), "asymmetric", 0)
     assert q_tensor.dtype == np.int8
     assert q_tensor.shape == tensor.shape
@@ -634,7 +630,7 @@ def test_ptq_quantize_per_channel_empty_2d_tensor(ptq_compressor):
 
 
 def test_ptq_dequantize_per_channel_asymmetric_path(ptq_compressor):
-    """Test _dequantize_per_channel with nonzero zero_points exercises the asymmetric branch (line 554)."""
+    """Test _dequantize_per_channel with nonzero zero_points exercises the asymmetric branch."""
     # Create a quantized tensor and manually set up scales/zero_points with nonzero zero_point
     tensor = np.array([[10, 20, 30], [40, 50, 60], [70, 80, 90]], dtype=np.int8)
     scales = np.array([0.1, 0.2, 0.3], dtype=np.float64)
@@ -678,7 +674,7 @@ def test_topk_sparsification(sample_k: float):
     decompressed_parameters = technique.reverse_strategy(compressed_parameters, technique_params)
     total_decompressed_size = sum(layer.size for layer in decompressed_parameters)
     assert total_decompressed_size == total_original_size
-    for orig, decomp in zip(original_params, decompressed_parameters, strict=False):
+    for orig, decomp in zip(original_params, decompressed_parameters, strict=True):
         assert orig.shape == decomp.shape, "Decompressed shape does not match original"
 
 
@@ -711,7 +707,7 @@ def test_lowrank(threshold: float):
     assert total_original == total_decompressed, "Number of elements not matching after reverse strategy."
 
     tol = 0.05
-    for orig, decomp in zip(original_params, decompressed_parameters, strict=False):
+    for orig, decomp in zip(original_params, decompressed_parameters, strict=True):
         if orig.ndim == 2:
             # relative error to compressed layers, expected ~= 1 - threshold
             energy_total = np.sum(np.linalg.svd(orig, full_matrices=False)[1] ** 2)
@@ -746,7 +742,7 @@ def test_zlib(level: int):
 @pytest.mark.parametrize("preset", [1, 5, 9])
 def test_lzma(preset: int):
     """
-    Test Zlib compression algorithm.
+    Test LZMA compression algorithm.
 
     Args:
         preset: LZMA level of compression.
@@ -840,7 +836,7 @@ def test_manager_multiple_techniques(compression_manager: CompressionManager):
     assert pickle.loads(decompressed_bytes)["additional_info"]["applied_techniques"][1][0] == "low_rank"
 
     decompressed_params, decompressed_info = compression_manager.reverse(compressed_data)
-    for orig, decomp in zip(original_params, decompressed_params, strict=False):
+    for orig, decomp in zip(original_params, decompressed_params, strict=True):
         assert orig.shape == decomp.shape
     assert len(decompressed_params) == len(original_params)
 

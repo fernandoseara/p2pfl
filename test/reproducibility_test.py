@@ -25,10 +25,10 @@ Not recomended to run always, as they are slow.
 """
 
 import numpy as np
-import pytest  # noqa: E402, I001
-from datasets import DatasetDict, load_dataset  # noqa: E402, I001
+import pytest
+from datasets import DatasetDict, load_dataset
 
-from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset  # noqa: E402
+from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.dataset.partition_strategies import DirichletPartitionStrategy, RandomIIDPartitionStrategy
 from p2pfl.settings import Settings
 
