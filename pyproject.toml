@@ -94,7 +94,7 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 140
-exclude = ["p2pfl/communication/protocols/protobuff/proto", "docs"]
+exclude = ["p2pfl/communication/protocols/protobuff/proto", "docs", "scripts"]
 
 [tool.ruff.lint]
 select = [
@@ -123,10 +123,23 @@ fixable = ["E", "F", "W", "B", "SIM", "I", "C4"]
 ignore = ["B027", "D203", "D212", "D406", "D407"]
 
 [tool.pytest.ini_options]
-addopts = "-v --cov=p2pfl"
+addopts = "-v --cov=p2pfl --cov-report=json:coverage.json"
+filterwarnings = [
+    "ignore::DeprecationWarning:lightning.*",
+    "ignore::UserWarning:lightning.*",
+    "ignore::UserWarning:torchvision.*",
+    "ignore::FutureWarning:datasets.*",
+    "ignore::RuntimeWarning:numpy.*",
+]
 
 [tool.coverage.run]
 relative_files = true
+omit = [
+    "p2pfl/__main__.py",
+    "p2pfl/communication/protocols/protobuff/proto/**",
+    "p2pfl/examples/**",
+    "p2pfl/workflow/diagram.py",
+]
 
 [tool.mypy]
 disallow_untyped_calls = true

@@ -6,6 +6,7 @@ Read `docs/` for project setup, architecture, and components before making chang
 
 ## Git
 
+- **NEVER** commit unless the user explicitly asks you to. Do not commit proactively.
 - **NEVER** use `git checkout --`, `git restore`, `reset --hard`, or `clean -f` to discard uncommitted changes. Leave files unstaged instead — do not destroy in-progress work.
 - Do not use destructive git operations without explicit user approval.
 - **NEVER** add `Co-Authored-By: Claude` to commit messages.
@@ -17,6 +18,14 @@ Read `docs/` for project setup, architecture, and components before making chang
 Always run before committing:
 - `uv run ruff check .` — lint (fix with `--fix` when possible)
 - `uv run mypy -p p2pfl` — type checking
+
+## Tests
+
+- **Minimal tests.** Only test meaningful behavior — scenarios where a real bug could go undetected. Don't add tests for coverage's sake.
+- **Don't test the language or libraries.** No tests for `isinstance`, `np.allclose` returning False, type coercion (str vs enum), or other standard library behavior.
+- **Don't test trivial code paths.** If the main behavior is tested, alternative input types or formatting variants don't need separate tests.
+- **Don't test logging/prints/visualization** unless that IS the function's core purpose.
+- **When reviewing tests:** focus on quality issues in existing tests (state leakage, broken collection, dead code) — not on proposing new tests to add.
 
 ## Code Review Workflow
 
