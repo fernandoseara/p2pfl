@@ -37,7 +37,6 @@ from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.management.logger import logger
 from p2pfl.node import Node  # noqa: E402
 from p2pfl.settings import Settings
-from p2pfl.utils.check_ray import ray_installed
 from p2pfl.utils.topologies import TopologyFactory, TopologyType
 from p2pfl.utils.utils import (  # noqa: E402
     set_standalone_settings,
@@ -269,15 +268,7 @@ def test_local_training_reproducibility(model_build_fn):
         pytest.skip("PyTorch not available")
 
 
-async def __train_with_seed(s, n, r, model_build_fn, disable_ray: bool = False):
-    # Ray
-    if disable_ray:
-        Settings.general.DISABLE_RAY = True
-    else:
-        Settings.general.DISABLE_RAY = False
-
-    assert ray_installed() != disable_ray
-
+async def __train_with_seed(s, n, r, model_build_fn):
     # Seed
     Settings.general.SEED = s
 
@@ -359,21 +350,19 @@ def __flatten_results(item):
 @pytest.mark.asyncio
 @pytest.mark.skip(reason="Working but slow....")
 @pytest.mark.parametrize(
-    "input",
+    "model_build_fn",
     [
-        (model_build_fn_tensorflow, True),
-        (model_build_fn_pytorch, False),
-        (model_build_fn_tensorflow, False),
+        model_build_fn_tensorflow,
+        model_build_fn_pytorch,
     ],
 )
-async def test_global_training_reproducibility(input):
+async def test_global_training_reproducibility(model_build_fn):
     """Test that seed ensures reproducible global training results."""
-    model_build_fn, disable_ray = input
     n, r = 10, 1
 
-    exp_name1 = await __train_with_seed(666, n, r, model_build_fn, disable_ray)
-    exp_name2 = await __train_with_seed(666, n, r, model_build_fn, disable_ray)
-    exp_name3 = await __train_with_seed(777, n, r, model_build_fn, disable_ray)
+    exp_name1 = await __train_with_seed(666, n, r, model_build_fn)
+    exp_name2 = await __train_with_seed(666, n, r, model_build_fn)
+    exp_name3 = await __train_with_seed(777, n, r, model_build_fn)
 
     # Check if metrics are the same in the 2 trainings -> set seed works
     assert np.allclose(__flatten_results(__get_results(exp_name1)), __flatten_results(__get_results(exp_name2)))

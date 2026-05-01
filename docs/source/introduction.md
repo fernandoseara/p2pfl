@@ -21,7 +21,7 @@ P2PFL offers a range of features designed to make decentralized federated learni
 | 📈 Real-time Monitoring | Manage and track experiment through [P2PFL Web Services platform](https://p2pfl.com). |
 | 🧠 ML Frameworks | Seamlessly integrate [PyTorch](https://pytorch.org/), [TensorFlow/Keras](https://www.tensorflow.org/), and [JAX](https://github.com/google/jax) models. |
 | 📡 Communication Protocol Agnostic | Choose the communication protocol that best suits your needs (e.g., [gRPC](https://grpc.io/)). |
-| 🔌 Integrations  | Enhanced capabilities through integrations: [Hugging Face Datasets](https://huggingface.co/datasets), ML frameworks, communication protocols, and [Ray](https://www.ray.io/) for large-scale simulations. |
+| 🔌 Integrations  | Enhanced capabilities through integrations: [Hugging Face Datasets](https://huggingface.co/datasets), ML frameworks, and communication protocols. |
 
 ## 🫂 Who Should Use P2PFL?
 

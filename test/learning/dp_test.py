@@ -171,7 +171,6 @@ def test_dp_empty_params(dp_compressor):
 
 @pytest.mark.asyncio
 @pytest.mark.e2e_train
-@pytest.mark.uses_ray
 @pytest.mark.parametrize("build_model_fn", [model_build_fn_torch])
 async def test_learner_train(build_model_fn) -> None:
     """Test DifferentialPrivacyCompressor convergence on a tiny dataset."""

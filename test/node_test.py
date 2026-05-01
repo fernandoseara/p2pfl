@@ -82,7 +82,6 @@ def log_test_start_and_end(request):
 #   stochastic process, so is not fully deterministic!.
 #
 @pytest.mark.e2e_train
-@pytest.mark.uses_ray
 @pytest.mark.asyncio
 @pytest.mark.parametrize("x", [(2, 2), (6, 3)])
 @pytest.mark.parametrize("model_build_fn", [model_build_fn_pytorch, model_build_fn_tensorflow])
@@ -179,7 +178,6 @@ async def test_convergence(x, model_build_fn):
             await n.stop()
 
 
-# DISABLED! NOT IMPLEMENTED BY RAY/TF
 async def _test_interrupt_train(two_nodes):
     """Test interrupting training of a node."""
     n1, n2 = two_nodes

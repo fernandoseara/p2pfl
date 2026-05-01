@@ -36,6 +36,5 @@ experiment:
 settings:
   general:
     log_level: "INFO"
-    disable_ray: True
   SSL:
     use_ssl: false

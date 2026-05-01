@@ -28,7 +28,7 @@ P2PFL offers a range of features designed to make decentralized federated learni
 | 📈 Real-time Monitoring | Manage and track experiment through [P2PFL Web Services platform](https://p2pfl.com). |
 | 🧠 ML Frameworks | Seamlessly integrate [PyTorch](https://pytorch.org/), [TensorFlow/Keras](https://www.tensorflow.org/), and [JAX](https://github.com/google/jax) models. |
 | 📡 Communication Protocol Agnostic | Choose the communication protocol that best suits your needs (e.g., [gRPC](https://grpc.io/)). |
-| 🔌 Integrations  | Enhanced capabilities through integrations: [Hugging Face Datasets](https://huggingface.co/datasets), ML frameworks, communication protocols, and [Ray](https://www.ray.io/) for large-scale simulations. |
+| 🔌 Integrations  | Enhanced capabilities through integrations: [Hugging Face Datasets](https://huggingface.co/datasets), ML frameworks, and communication protocols. |
 
 ## 📥 Installation
 
@@ -50,15 +50,12 @@ cd p2pfl
 uv sync --all-extras
 ```
 
-> **Note:** The above command installs all dependencies (PyTorch, TensorFlow, and Ray). If you only need specific frameworks, you can use:
+> **Note:** The above command installs all dependencies (PyTorch and TensorFlow). If you only need specific frameworks, you can use:
 > - `uv sync` - Install only core dependencies
 > - `uv sync --extra torch` - Install with PyTorch support
 > - `uv sync --extra tensorflow` - Install with TensorFlow support
-> - `uv sync --extra ray` - Install with Ray support
 > 
 > Use `--no-dev` to exclude development dependencies.
-
-> **⚠️ Important for Ray users:** If you're using Ray, we recommend activating the virtual environment traditionally instead of using `uv run` to avoid dependency issues with Ray workers. See the [installation guide](https://p2pfl.github.io/p2pfl/installation.html#working-with-traditional-virtual-environment-activation) for details.
 
 #### 🐳 Docker
 

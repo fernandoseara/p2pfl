@@ -34,7 +34,7 @@ node = Node(
 For scenarios where nodes reside within the same process (e.g., local testing, simulations, debugging), in-memory communication provides a significantly faster and more efficient alternative to network-based protocols like gRPC.  By directly exchanging data in memory, this protocol eliminates the overhead associated with serialization and network transmission.  This is particularly beneficial for:
 
 * **Local testing and debugging:** Enables rapid iteration and simplified debugging during development.
-* **Simulation environments:** Facilitates efficient simulation of large federated networks on a single machine using tools like Ray.  See [Simulations](../tutorials/simulation.md) for more information.
+* **Simulation environments:** Facilitates efficient simulation of large federated networks on a single machine.
 
 **Usage in the framework:**
 

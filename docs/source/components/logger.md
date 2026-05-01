@@ -76,10 +76,7 @@ To enhance the functionality of the logger, decorators are used for specific tas
 
 - **File Logging (FileLogger class)**: A decorator that wraps a logger class, automatically writing log entries to a specified file. This decorator enhances the base logger by directing the log output to a file in addition to the standard output.
 - **Web Service Logging (WebP2PFLogger class)**: A decorator that wraps a logger class and sends log entries to P2PFL web services. This is useful for centralized logging when working with distributed systems, allowing logs to be monitored remotely.
-- **Ray Cluster Logging (RayP2PFLogger class)**: A decorator that wraps a logger class and sends logs to a Ray cluster. This is particularly useful in federated learning setups using Ray, where logs need to be captured at both the node and system level in a distributed environment.
 - **Async Logging (AsyncLogger class)**: A decorator that wraps the logger to support asynchronous logging. This ensures that logging does not block the main processes in high-performance, distributed environments, improving the overall efficiency of the system.
-
-> Do not use `AsyncLogger` combined with `RayP2PFLogger`.
 
 ## Cleanup and Finalization
 When the logging is no longer needed (e.g., when an experiment ends), the cleanup() method should be called to remove all handlers and unregister nodes. This ensures that all resources are properly released and that no unnecessary handlers remain active.

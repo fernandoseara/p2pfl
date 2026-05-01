@@ -103,7 +103,6 @@ autodoc_mock_imports = [
     "optax",
     "opendp",
     "wandb",
-    "ray",
     "jax",
     "pytorch_lightning",
     "p2pfl.communication.protocols.protobuff.proto.node_pb2",

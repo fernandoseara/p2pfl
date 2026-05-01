@@ -310,7 +310,6 @@ if __name__ == "__main__":
     args = __parse_args()
 
     set_standalone_settings()
-    Settings.training.RAY_ACTOR_POOL_SIZE = 4
     Settings.heartbeat.TIMEOUT = 120
     Settings.gossip.TTL = args.nodes  # ensure all messages arrive
     Settings.training.AGGREGATION_TIMEOUT = 300

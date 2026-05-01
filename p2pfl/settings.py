@@ -43,8 +43,6 @@ class General:
     """Directory to save logs."""
     MAX_LOG_RUNS: int = 10
     """Maximum number of run log files to keep."""
-    DISABLE_RAY: bool = False
-    """Disable Ray for local testing."""
     RESOURCE_MONITOR_PERIOD: int = 10
     """Period (seconds) to send resource monitor information."""
     WEB_BATCH_SIZE: int = 200
@@ -132,7 +130,6 @@ class Training:
     """Timeout (seconds) for synchronization waits (node setup, round-init, model readiness)."""
     DEFAULT_BATCH_SIZE: int = 128
     """Default batch size for training."""
-    RAY_ACTOR_POOL_SIZE: int = 1
 
 
 ###################

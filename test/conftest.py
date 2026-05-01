@@ -19,7 +19,6 @@
 """Pytest configuration for p2pfl tests."""
 
 import contextlib
-import importlib.util
 import os
 import sys
 
@@ -40,41 +39,14 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     import tensorflow  # noqa: F401
 
-#
-# Ray initialization: import logger first (may init Ray), then disable for tests
-#
-
-import pytest
+import pytest  # noqa: E402, F401
 
 from p2pfl.management.logger import logger  # noqa: F401, E402
-from p2pfl.settings import Settings
-
-# Disable Ray for all tests by default
-Settings.general.DISABLE_RAY = True
 
 
 def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line(
         "markers",
-        "uses_ray: mark test as requiring Ray",
-    )
-    config.addinivalue_line(
-        "markers",
         "e2e_train: end-to-end training tests (skip with -m 'not e2e_train')",
     )
-
-
-@pytest.fixture(autouse=True)
-def handle_ray_marker(request):
-    """Enable Ray for tests marked with @pytest.mark.uses_ray."""
-    if request.node.get_closest_marker("uses_ray"):
-        # Skip if Ray is not installed
-        if importlib.util.find_spec("ray") is None:
-            pytest.skip("Ray is not installed")
-
-        Settings.general.DISABLE_RAY = False
-        yield
-        Settings.general.DISABLE_RAY = True
-    else:
-        yield

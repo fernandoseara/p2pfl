@@ -20,7 +20,7 @@
 
 # python -m p2pfl.utils.run_variations p2pfl/examples/cifar10/cifar10.yaml \
 #   --aggregators FedAvg FedMedian Scaffold FedAdagrad FedAdam FedProx FedYogi Krum \
-#   --seeds 42 --rounds 10 --epochs 1 --nodes 10 --param settings.training.ray_actor_pool_size=8
+#   --seeds 42 --rounds 10 --epochs 1 --nodes 10
 
 import argparse
 import asyncio
