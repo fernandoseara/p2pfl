@@ -98,7 +98,7 @@ Regenerate coverage dashboard: `uv run coverage json && uv run python scripts/co
 | `logger/logger.py` | 82% | (exercised by e2e tests) |
 | `logger/decorators/wandb_logger.py` | **46%** | **needs tests** (requires mocking wandb) |
 | `logger/decorators/web_logger.py` | **36%** | **needs tests** (requires mocking httpx) |
-| `p2pfl_web_services.py` | **20%** | `management/p2pfl_web_test.py` (partial) |
+| `p2pfl_web_services.py` | **20%** | `management/web_test.py` |
 | `launch_from_yaml/*.py` | **0%** | **none** |
 
 ## workflow/
