@@ -19,12 +19,14 @@
 
 import contextlib
 from collections.abc import Generator
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 from datasets import DatasetDict, load_dataset  # type: ignore
 
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
+from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.management.logger import logger
@@ -151,7 +153,8 @@ def test_wrong_encoding_tensorflow():
 ####################################
 
 
-def __test_get_set_params_flax():
+@pytest.mark.skip(reason="Flax support disabled pending JAX integration")
+def test_get_set_params_flax():
     """Test setting and getting parameters."""
     # Create the model
     model = MLP_FLASK()
@@ -183,7 +186,8 @@ def __test_get_set_params_flax():
         assert np.all(layer_og + 1 == layer_new)
 
 
-def __test_encoding_flax():
+@pytest.mark.skip(reason="Flax support disabled pending JAX integration")
+def test_encoding_flax():
     """Test encoding and decoding of parameters."""
     model1 = MLP_FLASK()
     seed = jax.random.PRNGKey(0)
@@ -203,7 +207,8 @@ def __test_encoding_flax():
         assert p2pfl_model1.additional_info == p2pfl_model2.additional_info
 
 
-def __test_wrong_encoding_flax():
+@pytest.mark.skip(reason="Flax support disabled pending JAX integration")
+def test_wrong_encoding_flax():
     """Test wrong encoding of parameters."""
     model1 = MLP_FLASK()
     seed = jax.random.PRNGKey(0)
@@ -307,7 +312,8 @@ def test_tensorflow_export_strategy():
 ###################################
 
 
-def __test_flax_export_strategy():
+@pytest.mark.skip(reason="Flax support disabled pending JAX integration")
+def test_flax_export_strategy():
     """Test the FlaxExportStrategy."""
     dataset = TorchvisionDatasetFactory.get_mnist(cache_dir=".", train=True, download=True)
     dataset.set_batch_size(1)
@@ -375,3 +381,262 @@ async def test_learner_train(build_model_fn):
 
     # Test
     await learner.evaluate()
+
+
+###################################
+#    LearnerFactory Tests
+###################################
+
+
+def test_learner_factory_pytorch():
+    """LearnerFactory returns LightningLearner for a PyTorch model."""
+    from p2pfl.learning.frameworks.pytorch.lightning_learner import LightningLearner
+
+    model = model_build_fn_torch()
+    learner_cls = LearnerFactory.create_learner(model)
+    assert learner_cls is LightningLearner
+
+
+def test_learner_factory_tensorflow():
+    """LearnerFactory returns KerasLearner for a TensorFlow model."""
+    from p2pfl.learning.frameworks.tensorflow.keras_learner import KerasLearner
+
+    model = model_build_fn_tensorflow()
+    learner_cls = LearnerFactory.create_learner(model)
+    assert learner_cls is KerasLearner
+
+
+def test_learner_factory_unsupported_framework():
+    """LearnerFactory raises ValueError for an unknown framework string."""
+    mock_model = MagicMock()
+    mock_model.get_framework.return_value = "unknown_framework_xyz"
+    with pytest.raises(ValueError, match="Unsupported framework"):
+        LearnerFactory.create_learner(mock_model)
+
+
+def test_learner_factory_flax():
+    """LearnerFactory returns FlaxLearner for a Flax model."""
+    pytest.importorskip("jax")
+    from p2pfl.learning.frameworks.flax.flax_learner import FlaxLearner
+
+    mock_model = MagicMock()
+    mock_model.get_framework.return_value = Framework.FLAX.value
+    learner_cls = LearnerFactory.create_learner(mock_model)
+    assert learner_cls is FlaxLearner
+
+
+def test_learner_factory_xgboost():
+    """LearnerFactory returns XGBoostLearner for an XGBoost model."""
+    pytest.importorskip("xgboost")
+    from p2pfl.learning.frameworks.xgboost.xgboost_learner import XGBoostLearner
+
+    mock_model = MagicMock()
+    mock_model.get_framework.return_value = Framework.XGBOOST.value
+    learner_cls = LearnerFactory.create_learner(mock_model)
+    assert learner_cls is XGBoostLearner
+
+
+###################################
+#    Learner Base Tests
+###################################
+
+
+class TestLearnerBase:
+    """Tests for base Learner error paths and accessor methods."""
+
+    def _make_learner(self):
+        """Create a LightningLearner with no model/data (for testing accessors)."""
+        from p2pfl.learning.frameworks.pytorch.lightning_learner import LightningLearner
+
+        learner = LightningLearner()
+        return learner
+
+    def test_get_model_without_set_raises(self):
+        """get_model raises ValueError when model is not set."""
+        learner = self._make_learner()
+        with pytest.raises(ValueError, match="Model not initialized"):
+            learner.get_model()
+
+    def test_get_data_without_set_raises(self):
+        """get_data raises ValueError when data is not set."""
+        learner = self._make_learner()
+        with pytest.raises(ValueError, match="Data not initialized"):
+            learner.get_data()
+
+    def test_epochs_accessors(self):
+        """get/set_epochs round-trips correctly."""
+        learner = self._make_learner()
+        assert learner.get_epochs() == 1
+        learner.set_epochs(5)
+        assert learner.get_epochs() == 5
+
+    def test_steps_per_epoch_accessors(self):
+        """get/set_steps_per_epoch round-trips correctly."""
+        learner = self._make_learner()
+        assert learner.get_steps_per_epoch() is None
+        learner.set_steps_per_epoch(100)
+        assert learner.get_steps_per_epoch() == 100
+
+    def test_init_with_aggregator(self):
+        """Learner.__init__ with an aggregator calls indicate_aggregator."""
+        from p2pfl.learning.frameworks.pytorch.lightning_learner import LightningLearner
+
+        mock_agg = MagicMock()
+        mock_agg.get_required_callbacks.return_value = []
+        learner = LightningLearner()
+        learner.set_address("test-addr")
+        learner.indicate_aggregator(mock_agg)
+        # Should not raise and callbacks may be empty since aggregator has no required callbacks
+        assert isinstance(learner.callbacks, list)
+
+
+###################################
+#    LearnerDecorator Tests
+###################################
+
+
+class TestLearnerDecorator:
+    """Tests for the LearnerDecorator delegation."""
+
+    def _make_decorated(self):
+        from p2pfl.learning.frameworks.learner import LearnerDecorator
+        from p2pfl.learning.frameworks.pytorch.lightning_learner import LightningLearner
+
+        inner = LightningLearner()
+        inner.set_address("test-addr")
+        dec = LearnerDecorator(inner)
+        # The decorator's own address must also be set for the metaclass check
+        dec.address = "test-addr"
+        return dec, inner
+
+    def test_set_address_delegates(self):
+        """set_address delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        result = dec.set_address("new-addr")
+        assert result == "new-addr"
+        assert inner.address == "new-addr"
+
+    def test_model_delegation(self):
+        """set_model/get_model delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        model = model_build_fn_torch()
+        dec.set_model(model)
+        assert dec.get_model() is inner.get_model()
+
+    def test_data_delegation(self):
+        """set_data/get_data delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        data = P2PFLDataset(
+            DatasetDict(
+                {
+                    "train": load_dataset("p2pfl/MNIST", split="train[:10]"),
+                    "test": load_dataset("p2pfl/MNIST", split="test[:5]"),
+                }
+            )
+        )
+        dec.set_data(data)
+        assert dec.get_data() is inner.get_data()
+
+    def test_epochs_delegation(self):
+        """set/get_epochs delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        dec.set_epochs(10)
+        assert dec.get_epochs() == 10
+        assert inner.get_epochs() == 10
+
+    def test_steps_per_epoch_delegation(self):
+        """set/get_steps_per_epoch delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        dec.set_steps_per_epoch(50)
+        assert dec.get_steps_per_epoch() == 50
+
+    def test_indicate_aggregator_delegation(self):
+        """indicate_aggregator delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        mock_agg = MagicMock()
+        mock_agg.get_required_callbacks.return_value = []
+        dec.indicate_aggregator(mock_agg)
+
+    def test_get_framework_delegation(self):
+        """get_framework delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        assert dec.get_framework() == inner.get_framework()
+
+    def test_update_callbacks_delegation(self):
+        """update_callbacks_with_model_info delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        model = model_build_fn_torch()
+        dec.set_model(model)
+        # Should not raise
+        dec.update_callbacks_with_model_info()
+
+    def test_add_callback_info_delegation(self):
+        """add_callback_info_to_model delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        model = model_build_fn_torch()
+        dec.set_model(model)
+        dec.add_callback_info_to_model()
+
+    @pytest.mark.asyncio
+    async def test_fit_delegation(self):
+        """Fit delegates to inner learner and returns a model."""
+        dec, inner = self._make_decorated()
+        model = model_build_fn_torch()
+        dec.set_model(model)
+        data = P2PFLDataset(
+            DatasetDict(
+                {
+                    "train": load_dataset("p2pfl/MNIST", split="train[:10]"),
+                    "test": load_dataset("p2pfl/MNIST", split="test[:5]"),
+                }
+            )
+        )
+        dec.set_data(data)
+        dec.set_epochs(1)
+        Settings.general.SEED = None
+        result = await dec.fit()
+        assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_evaluate_delegation(self):
+        """Evaluate delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        model = model_build_fn_torch()
+        dec.set_model(model)
+        data = P2PFLDataset(
+            DatasetDict(
+                {
+                    "train": load_dataset("p2pfl/MNIST", split="train[:10]"),
+                    "test": load_dataset("p2pfl/MNIST", split="test[:5]"),
+                }
+            )
+        )
+        dec.set_data(data)
+        result = await dec.evaluate()
+        assert isinstance(result, dict)
+
+    @pytest.mark.asyncio
+    async def test_train_on_batch_delegation(self):
+        """Train_on_batch delegates to inner learner (raises NotImplementedError for PyTorch)."""
+        dec, inner = self._make_decorated()
+        model = model_build_fn_torch()
+        dec.set_model(model)
+        data = P2PFLDataset(
+            DatasetDict(
+                {
+                    "train": load_dataset("p2pfl/MNIST", split="train[:10]"),
+                    "test": load_dataset("p2pfl/MNIST", split="test[:5]"),
+                }
+            )
+        )
+        dec.set_data(data)
+        # PyTorch Lightning does not support batch training
+        with pytest.raises(NotImplementedError):
+            await dec.train_on_batch()
+
+    @pytest.mark.asyncio
+    async def test_interrupt_fit_delegation(self):
+        """Interrupt_fit delegates to inner learner."""
+        dec, inner = self._make_decorated()
+        # Should not raise even without ongoing fit
+        await dec.interrupt_fit()

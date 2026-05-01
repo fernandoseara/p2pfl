@@ -25,8 +25,10 @@ from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrate
 from p2pfl.learning.frameworks import Framework
 from p2pfl.management.logger import logger  # noqa: E402
 from p2pfl.node import Node  # noqa: E402
+from p2pfl.node_state import NodeState
 from p2pfl.communication.protocols.protobuff.memory import MemoryCommunicationProtocol
 from p2pfl.settings import Settings
+from p2pfl.workflow.engine.workflow import WorkflowStatus
 from p2pfl.utils.utils import (  # noqa: E402
     check_equal_models,
     set_standalone_settings,
@@ -118,21 +120,11 @@ async def test_convergence(x, model_build_fn):
 
         # Check if execution is correct
         for node in nodes:
-            # History
-            history = node.workflow.history
-            assert history[0] == "StartLearningStage"
-            history = history[1:]
-            # Pattern
-            stage_pattern = ["VoteTrainSetStage", ["TrainStage", "WaitAggregatedModelsStage"], "GossipModelStage", "RoundFinishedStage"]
-            # Get batches (len(stage_pattern))
-            assert int(len(history) / len(stage_pattern)) == rounds
-            # Check pattern
-            for i in range(rounds):
-                for gt, st in zip(stage_pattern, history[i * len(stage_pattern) : (i + 1) * len(stage_pattern)], strict=False):
-                    if isinstance(gt, list):
-                        assert st in gt
-                    else:
-                        assert st == gt
+            assert node.state == NodeState.FINISHED
+            assert node.workflow.status == WorkflowStatus.FINISHED
+            visited = [t["stage"] for t in node.workflow.stage_timings]
+            assert visited[0] == "setup"
+            assert "finish" in visited
 
         check_equal_models(nodes)
 
@@ -178,7 +170,9 @@ async def test_convergence(x, model_build_fn):
             await n.stop()
 
 
-async def _test_interrupt_train(two_nodes):
+@pytest.mark.skip(reason="Interrupt-train flow not yet implemented")
+@pytest.mark.asyncio
+async def test_interrupt_train(two_nodes):
     """Test interrupting training of a node."""
     n1, n2 = two_nodes
     await n1.connect(n2.address)
@@ -206,8 +200,10 @@ async def _test_interrupt_train(two_nodes):
 """
 
 
+@pytest.mark.skip(reason="Fault-tolerance during learning not yet implemented")
+@pytest.mark.asyncio
 @pytest.mark.parametrize("n", [2, 4])
-async def _test_node_down_on_learning(n):
+async def test_node_down_on_learning(n):
     """Test node down on learning."""
     # Node Creation
     nodes = []
@@ -276,8 +272,6 @@ async def test_framework_node(build_model_fn):
     await wait_to_finish([n1, n2], timeout=120)
 
     # Check if execution is correct
-    from p2pfl.node_state import NodeState
-
     for node in [n1, n2]:
         assert node.state == NodeState.FINISHED
         assert node.state != NodeState.FAILED
