@@ -29,6 +29,7 @@ from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.learner import Learner
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
 from p2pfl.learning.frameworks.xgboost.xgboost_dataset import XGBoostExportStrategy
+from p2pfl.learning.frameworks.xgboost.xgboost_logger import XGBoostLogger
 from p2pfl.utils.node_component import allow_no_addr_check
 
 
@@ -97,24 +98,16 @@ class XGBoostLearner(Learner):
 
         """
         model, X_train, y_train = self.__get_xgb_model_data(train=True)
-        # prepare callbacks
-        xgb_callbacks = []
+        xgb_callbacks: list[xgb.callback.TrainingCallback] = [XGBoostLogger(self.address)]
         for cb in self.callbacks:
-            # each P2PFLCallback should expose an XGBoost-compatible callback
             if hasattr(cb, "to_xgb_callback"):
                 xgb_callbacks.append(cb.to_xgb_callback())
+        model.set_params(callbacks=xgb_callbacks)
 
         try:
-            # Try to get the booster from the current model to continue training
             previous_booster = self.get_model().get_model().get_booster()
-            model.fit(
-                X_train,
-                y_train,
-                verbose=True,
-                xgb_model=previous_booster,  # Load previous model if exists
-            )
+            model.fit(X_train, y_train, verbose=True, xgb_model=previous_booster)
         except (NotFittedError, Exception):
-            # If no previous model exists or there's an error, start fresh
             model.fit(X_train, y_train, verbose=True)
 
         self.get_model().set_contribution([self.address], self.get_data().get_num_samples(train=True))
