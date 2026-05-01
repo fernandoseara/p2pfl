@@ -49,6 +49,8 @@ class General:
     """Period (seconds) to send resource monitor information."""
     WEB_BATCH_SIZE: int = 200
     """Maximum number of entries to buffer before flushing to web services."""
+    WEB_MAX_BUFFER_SIZE: int = 10_000
+    """Maximum buffer size for web services — oldest entries are dropped when exceeded."""
     WEB_BATCH_INTERVAL: float = 5.0
     """Interval (seconds) between automatic flushes of buffered web service data."""
     WEB_GEOLOCATION: bool = False
