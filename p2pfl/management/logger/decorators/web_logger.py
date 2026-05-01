@@ -201,6 +201,7 @@ class WebP2PFLogger(LoggerDecorator):
         if self._p2pfl_web_services is not None:
             try:
                 self._p2pfl_web_services.create_experiment(node, **experiment.to_dict(exclude_none=True))
+                self._p2pfl_web_services.update_node_status(node, "learning")
                 super().debug("WebP2PFLogger", f"Experiment '{experiment.exp_name}' created for node {node}")
             except Exception as e:
                 super().warning("WebP2PFLogger", f"Failed to create experiment on web services: {e}")
@@ -214,6 +215,8 @@ class WebP2PFLogger(LoggerDecorator):
             self._ended_experiments.add(experiment.exp_name)
             try:
                 self._p2pfl_web_services.update_experiment(experiment.exp_name, address, status=status)
+                node_state = status if status in ("failed", "cancelled") else "idle"
+                self._p2pfl_web_services.update_node_status(address, node_state)
                 self._p2pfl_web_services.flush()
             except Exception as e:
                 super().warning("WebP2PFLogger", f"Error flushing on experiment end: {e}")

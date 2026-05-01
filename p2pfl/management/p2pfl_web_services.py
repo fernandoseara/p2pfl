@@ -200,6 +200,10 @@ class P2pflWebServices:
             return {}
         return response.json()  # type: ignore[no-any-return]
 
+    def _patch(self, path: str, data: Any, *, timeout: int = 5) -> None:
+        response = self._client.patch(self._base_url + path, json=data, timeout=timeout)
+        response.raise_for_status()
+
     def _delete(self, path: str, *, timeout: int = 5) -> None:
         response = self._client.delete(self._base_url + path, timeout=timeout)
         response.raise_for_status()
@@ -234,6 +238,20 @@ class P2pflWebServices:
             print(f"[P2PFL Web Services] Failed to register node '{node}': {e}")
             print(f"  Check that '{self._base_url}' is valid (P2PFL_WEB_LOGGER_URL or ~/.p2pfl_env)")
             raise
+
+    def update_node_status(self, node: str, state: str) -> None:
+        """
+        Update a node's lifecycle state.
+
+        Args:
+            node: The node address.
+            state: The new state ("idle", "learning", "finished", "failed", "cancelled").
+
+        """
+        try:
+            self._patch(f"/nodes/{node}/status", {"state": state})
+        except httpx.HTTPError as e:
+            print(f"[P2PFL Web Services] Failed to update node status for '{node}': {e}")
 
     def unregister_node(self, node: str) -> None:
         """
