@@ -17,11 +17,14 @@
 
 """Tests for BasicDFL (new engine)."""
 
-from unittest.mock import MagicMock
+import asyncio
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.workflow.basic_dfl.context import BasicDFLContext, BasicPeerState
+from p2pfl.workflow.basic_dfl.stages.learning_wait_model import LearningWaitModelStage
 from p2pfl.workflow.basic_dfl.workflow import BasicDFL
 from p2pfl.workflow.engine.experiment import Experiment
 from p2pfl.workflow.engine.workflow import WorkflowStatus
@@ -95,14 +98,28 @@ class TestBasicStageMap:
         """Test that get_stages returns all expected stages."""
         wf = BasicDFL()
         stages = wf.get_stages()
-        expected = {"setup", "round_init", "voting", "learning", "finish"}
+        expected = {
+            "setup",
+            "round_init",
+            "voting",
+            "learning_evaluate",
+            "learning_train",
+            "learning_wait_model",
+            "learning_gossip_loop",
+            "learning_aggregate",
+            "finish",
+        }
         assert {s.name for s in stages} == expected
 
     def test_stage_map_types(self):
         """Test that each stage is the correct type."""
         from p2pfl.workflow.basic_dfl.stages import (
             FinishStage,
-            LearningStage,
+            LearningAggregateStage,
+            LearningEvaluateStage,
+            LearningGossipLoopStage,
+            LearningTrainStage,
+            LearningWaitModelStage,
             RoundInitStage,
             SetupStage,
             VotingStage,
@@ -114,7 +131,11 @@ class TestBasicStageMap:
         assert isinstance(stages["setup"], SetupStage)
         assert isinstance(stages["round_init"], RoundInitStage)
         assert isinstance(stages["voting"], VotingStage)
-        assert isinstance(stages["learning"], LearningStage)
+        assert isinstance(stages["learning_evaluate"], LearningEvaluateStage)
+        assert isinstance(stages["learning_train"], LearningTrainStage)
+        assert isinstance(stages["learning_wait_model"], LearningWaitModelStage)
+        assert isinstance(stages["learning_gossip_loop"], LearningGossipLoopStage)
+        assert isinstance(stages["learning_aggregate"], LearningAggregateStage)
         assert isinstance(stages["finish"], FinishStage)
 
     def test_stages_have_ctx_reference(self, composed_workflow, ctx):
@@ -173,15 +194,15 @@ class TestBasicDeclaredMessages:
         assert msgs["node_initialized"].during is None
         assert msgs["initial_model"].during is None
         assert msgs["node_ready"].during is None
-        assert msgs["add_model"].during == frozenset({"learning"})
-        assert msgs["models_aggregated"].during == frozenset({"learning", "voting", "round_init"})
-        assert msgs["pre_send_initial_model"].during == frozenset({"setup"})
-        assert msgs["pre_send_model_init"].during == frozenset({"setup", "round_init", "learning", "voting"})
-        assert msgs["pre_send_model_learning"].during == frozenset({"learning", "voting", "round_init"})
-        assert msgs["partial_model"].during == frozenset({"learning", "voting", "round_init"})
+        assert msgs["add_model"].during == frozenset({"learning_wait_model"})
+        assert msgs["models_aggregated"].during == frozenset({"learning_.*", "voting", "round_init"})
+        assert msgs["pre_send_initial_model"].during == frozenset({"setup", "round_init"})
+        assert msgs["pre_send_model_init"].during == frozenset({"setup", "round_init", "learning_.*", "voting"})
+        assert msgs["pre_send_model_learning"].during == frozenset({"learning_.*", "voting", "round_init"})
+        assert msgs["partial_model"].during == frozenset({"learning_.*", "voting", "round_init"})
         # Handlers with explicit during=
-        assert msgs["peer_round_updated"].during == frozenset({"setup", "round_init", "learning", "voting"})
-        assert msgs["vote_train_set"].during == frozenset({"voting", "round_init", "learning"})
+        assert msgs["peer_round_updated"].during == frozenset({"setup", "round_init", "learning_.*", "voting"})
+        assert msgs["vote_train_set"].during == frozenset({"voting", "round_init", "learning_.*"})
 
 
 class TestBasicMessageRegistry:
@@ -263,6 +284,142 @@ class TestBasicValidation:
         assert "round_init" in transitions["setup"]
         assert "voting" in transitions["round_init"]
         assert "finish" in transitions["round_init"]
-        assert "learning" in transitions["voting"]
-        assert "round_init" in transitions["learning"]
+        assert "learning_evaluate" in transitions["voting"]
+        assert "learning_train" in transitions["learning_evaluate"]
+        assert "learning_wait_model" in transitions["learning_evaluate"]
+        assert "learning_gossip_loop" in transitions["learning_train"]
+        assert "learning_aggregate" in transitions["learning_gossip_loop"]
+        assert "round_init" in transitions["learning_aggregate"]
+        assert "round_init" in transitions["learning_wait_model"]
         assert transitions["finish"] == {None}
+
+
+###############################################
+# LearningWaitModelStage Tests
+###############################################
+
+
+class TestLearningWaitModelStage:
+    """Tests for LearningWaitModelStage run() and handle_add_model()."""
+
+    @pytest.fixture
+    def wait_stage(self):
+        """Create a LearningWaitModelStage with a mocked context."""
+        stage = LearningWaitModelStage()
+        ctx = MagicMock(spec=BasicDFLContext)
+        ctx.address = "test_node"
+        ctx.experiment = Experiment.create(exp_name="test", total_rounds=5, trainset_size=3)
+        ctx.experiment.round = 2
+        ctx.needs_full_model = True
+        ctx.full_model_ready = asyncio.Event()
+        ctx.learner = MagicMock()
+        stage.ctx = ctx
+        return stage
+
+    @pytest.mark.asyncio
+    async def test_run_waits_and_advances_round(self, wait_stage):
+        """run() waits for full_model_ready, clears needs_full_model, advances round."""
+        ctx = wait_stage.ctx
+        # Pre-set the event so wait returns immediately
+        ctx.full_model_ready.set()
+
+        result = await wait_stage.run()
+
+        assert result == "round_init"
+        assert ctx.needs_full_model is False
+        assert ctx.experiment.round == 3
+
+    @pytest.mark.asyncio
+    async def test_run_timeout_still_advances(self, wait_stage):
+        """run() advances round even on timeout."""
+        ctx = wait_stage.ctx
+        # Patch timeout to a tiny value so it times out fast
+        with patch("p2pfl.workflow.basic_dfl.stages.learning_wait_model.Settings") as mock_settings:
+            mock_settings.training.AGGREGATION_TIMEOUT = 0.01
+            result = await wait_stage.run()
+
+        assert result == "round_init"
+        assert ctx.needs_full_model is False
+        assert ctx.experiment.round == 3
+
+    @pytest.mark.asyncio
+    async def test_handle_add_model_sets_model_and_event(self, wait_stage):
+        """handle_add_model sets the model on the learner and fires the event."""
+        ctx = wait_stage.ctx
+        assert not ctx.full_model_ready.is_set()
+
+        await wait_stage.handle_add_model(
+            source="peer1",
+            round=2,
+            weights=b"model_bytes",
+            contributors=["peer1"],
+            num_samples=100,
+        )
+
+        ctx.learner.set_model.assert_called_once_with(b"model_bytes")
+        assert ctx.full_model_ready.is_set()
+
+    @pytest.mark.asyncio
+    async def test_handle_add_model_stale_round_ignored(self, wait_stage):
+        """handle_add_model ignores messages from a previous round."""
+        ctx = wait_stage.ctx
+
+        await wait_stage.handle_add_model(
+            source="peer1",
+            round=1,  # stale: current round is 2
+            weights=b"old_data",
+            contributors=["peer1"],
+            num_samples=50,
+        )
+
+        ctx.learner.set_model.assert_not_called()
+        assert not ctx.full_model_ready.is_set()
+
+    @pytest.mark.asyncio
+    async def test_handle_add_model_decoding_error(self, wait_stage):
+        """handle_add_model catches DecodingParamsError without crashing."""
+        ctx = wait_stage.ctx
+        ctx.learner.set_model.side_effect = DecodingParamsError("bad bytes")
+
+        await wait_stage.handle_add_model(
+            source="peer1",
+            round=2,
+            weights=b"corrupt",
+            contributors=None,
+            num_samples=None,
+        )
+
+        # Event should NOT be set on error
+        assert not ctx.full_model_ready.is_set()
+
+    @pytest.mark.asyncio
+    async def test_handle_add_model_model_not_matching(self, wait_stage):
+        """handle_add_model catches ModelNotMatchingError without crashing."""
+        ctx = wait_stage.ctx
+        ctx.learner.set_model.side_effect = ModelNotMatchingError("shape mismatch")
+
+        await wait_stage.handle_add_model(
+            source="peer1",
+            round=2,
+            weights=b"wrong_arch",
+            contributors=["peer1"],
+            num_samples=100,
+        )
+
+        assert not ctx.full_model_ready.is_set()
+
+    @pytest.mark.asyncio
+    async def test_handle_add_model_unexpected_error(self, wait_stage):
+        """handle_add_model catches generic exceptions without crashing."""
+        ctx = wait_stage.ctx
+        ctx.learner.set_model.side_effect = RuntimeError("disk full")
+
+        await wait_stage.handle_add_model(
+            source="peer1",
+            round=2,
+            weights=b"data",
+            contributors=["peer1"],
+            num_samples=100,
+        )
+
+        assert not ctx.full_model_ready.is_set()

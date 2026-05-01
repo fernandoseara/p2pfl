@@ -191,17 +191,17 @@ class TestMessageBuffer:
 
         try:
             server = proto._server
-            from p2pfl.communication.protocols.protobuff.server import _MSG_BUFFER_MAX_SIZE
+            max_size = Settings.general.MSG_BUFFER_SIZE
 
             # Fill buffer beyond max
-            for i in range(_MSG_BUFFER_MAX_SIZE + 10):
+            for i in range(max_size + 10):
                 msg = node_pb2.RootMessage(cmd="overflow_cmd", source="node_b", round=0)
                 msg.gossip_message.args.extend([str(i)])
                 msg.gossip_message.ttl = 3
                 msg.gossip_message.hash = 10000 + i
                 await server.send(msg, None)
 
-            assert len(server._pending_msgs_buffer) == _MSG_BUFFER_MAX_SIZE
+            assert len(server._pending_msgs_buffer) == max_size
         finally:
             await proto.stop()
 

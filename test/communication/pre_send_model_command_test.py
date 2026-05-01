@@ -22,15 +22,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from p2pfl.workflow.basic_dfl.context import BasicDFLContext, BasicPeerState
-from p2pfl.workflow.basic_dfl.stages.learning import LearningStage
+from p2pfl.workflow.basic_dfl.stages.learning_gossip_loop import LearningGossipLoopStage
 from p2pfl.workflow.engine.experiment import Experiment
 from p2pfl.workflow.shared.gossiping import should_accept_model
 
 
 @pytest.fixture
 def learning_stage():
-    """Create a LearningStage with a mock context for testing."""
-    stage = LearningStage()
+    """Create a LearningGossipLoopStage with a mock context for testing."""
+    stage = LearningGossipLoopStage()
     stage.ctx = BasicDFLContext(
         address="test_node",
         learner=MagicMock(),
@@ -42,7 +42,7 @@ def learning_stage():
     return stage
 
 
-def set_round(stage: LearningStage, round_num: int) -> None:
+def set_round(stage: LearningGossipLoopStage, round_num: int) -> None:
     """Set up experiment with a specific round."""
     if round_num is not None:
         stage.ctx.experiment.round = round_num
@@ -127,7 +127,7 @@ class TestShouldAcceptModel:
 
 
 class TestPreSendModelHandler:
-    """Tests for handle_pre_send_model_learning on LearningStage."""
+    """Tests for handle_pre_send_model_learning on LearningGossipLoopStage."""
 
     @pytest.mark.asyncio
     async def test_missing_args_returns_false(self, learning_stage):
