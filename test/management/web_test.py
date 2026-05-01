@@ -450,6 +450,32 @@ class TestBufferMechanics:
         assert entries[0]["i"] == 2
         assert entries[2]["i"] == 4
 
+    def test_enqueue_overflow_prints_warning(self, capsys):
+        """Buffer overflow prints a warning with dropped count."""
+        svc, _ = _make_services()
+        svc._last_overflow_warn = 0.0
+        Settings.general.WEB_MAX_BUFFER_SIZE = 3
+        with patch.object(svc, "_ensure_flush_thread"):
+            for i in range(5):
+                svc._enqueue({"i": i})
+        captured = capsys.readouterr()
+        assert "Buffer full" in captured.out
+        assert "dropped 1 oldest entry" in captured.out
+
+    def test_enqueue_overflow_warning_is_rate_limited(self, capsys):
+        """Overflow warning fires at most once per 30s."""
+        svc, _ = _make_services()
+        Settings.general.WEB_MAX_BUFFER_SIZE = 2
+        with patch.object(svc, "_ensure_flush_thread"):
+            # First overflow
+            for i in range(4):
+                svc._enqueue({"i": i})
+            # Second overflow — should be suppressed (same monotonic window)
+            for i in range(4):
+                svc._enqueue({"i": i})
+        captured = capsys.readouterr()
+        assert captured.out.count("Buffer full") == 1
+
     def test_flush_calls_sync_send(self):
         """Test flush calls sync send."""
         svc, client = _make_services()

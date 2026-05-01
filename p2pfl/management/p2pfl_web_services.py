@@ -26,6 +26,7 @@ import datetime
 import json
 import os
 import threading
+import time
 from typing import Any
 
 import httpx
@@ -75,6 +76,8 @@ class P2pflWebServices:
         self._flush_thread: threading.Thread | None = None
         self._running = False
 
+        self._last_overflow_warn: float = 0.0
+
         # Sync HTTP client for immediate operations (register, unregister, sync flush)
         self._client = httpx.Client(headers=self._headers, timeout=5.0)
 
@@ -102,6 +105,9 @@ class P2pflWebServices:
         """Flush buffered entries over a persistent WebSocket with auto-reconnect."""
         ws_url = self._base_url.replace("http://", "ws://").replace("https://", "wss://") + "/batch/ws"
         api_key = self._headers["x-api-key"]
+        backoff = 2.0
+        max_backoff = 60.0
+        consecutive_failures = 0
 
         while self._running:
             pending: list[dict] = []
@@ -112,6 +118,11 @@ class P2pflWebServices:
                     auth = json.loads(await ws.recv())
                     if not auth.get("authenticated"):
                         raise ConnectionError(f"Auth failed: {auth}")
+
+                    if consecutive_failures > 0:
+                        print(f"[P2PFL Web Services] WebSocket reconnected after {consecutive_failures} failed attempt(s).")
+                    backoff = 2.0
+                    consecutive_failures = 0
 
                     while self._running:
                         await asyncio.sleep(Settings.general.WEB_BATCH_INTERVAL)
@@ -127,8 +138,16 @@ class P2pflWebServices:
                 if pending:
                     with self._lock:
                         self._buffer[:0] = pending
-                print(f"[P2PFL Web Services] WebSocket error: {e}, reconnecting in 2s...")
-                await asyncio.sleep(2)
+                consecutive_failures += 1
+                if consecutive_failures == 1:
+                    print(f"[P2PFL Web Services] WebSocket error: {e}, reconnecting in {backoff:.0f}s...")
+                elif consecutive_failures % 10 == 0:
+                    print(
+                        f"[P2PFL Web Services] WebSocket still unreachable "
+                        f"({consecutive_failures} consecutive failures), retrying in {backoff:.0f}s..."
+                    )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
 
     def stop(self) -> None:
         """Stop the flush thread, flush remaining data, close client."""
@@ -148,6 +167,13 @@ class P2pflWebServices:
             if len(self._buffer) > Settings.general.WEB_MAX_BUFFER_SIZE:
                 overflow = len(self._buffer) - Settings.general.WEB_MAX_BUFFER_SIZE
                 del self._buffer[:overflow]
+                now = time.monotonic()
+                if now - self._last_overflow_warn >= 30.0:
+                    self._last_overflow_warn = now
+                    print(
+                        f"[P2PFL Web Services] Buffer full — dropped {overflow} oldest {'entry' if overflow == 1 else 'entries'} "
+                        f"(buffer capped at {Settings.general.WEB_MAX_BUFFER_SIZE})."
+                    )
         self._ensure_flush_thread()
 
     def _drain(self) -> list[dict]:
