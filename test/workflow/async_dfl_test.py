@@ -55,14 +55,14 @@ class TestAsyncDFLCreation:
 class TestAsyncDFLValidation:
     """Tests for AsyncDFL graph validation."""
 
-    def test_validate_is_valid(self):
-        """Test that the workflow graph is valid."""
+    def test_graph_passes_validation(self):
+        """AsyncDFL stage graph has no validation errors."""
         wf = AsyncDFL()
         result = validate(wf)
         assert result.is_valid, f"Validation errors: {result.errors}"
 
-    def test_validate_transitions(self):
-        """Test that transitions are correctly extracted."""
+    def test_transitions_match_expected_stages(self):
+        """setup→training_round, training_round→{training_round,finish}, finish→None."""
         wf = AsyncDFL()
         result = validate(wf)
         transitions = {k: v.targets for k, v in result.transitions.items()}
@@ -156,8 +156,8 @@ class TestAsyncPeerState:
 class TestComputePriority:
     """Tests for the compute_priority function."""
 
-    def test_basic_priority(self):
-        """Test basic priority computation."""
+    def test_returns_nonnegative_float(self):
+        """compute_priority returns a non-negative float for typical inputs."""
         p = compute_priority(ti=10, tp_ij=5, tj=8, tl_ji=3, f_ti=0.5, f_tj=0.5, dmax=5)
         assert isinstance(p, float)
         assert p >= 0

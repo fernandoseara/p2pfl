@@ -270,14 +270,14 @@ class TestBasicWorkflowStatus:
 class TestBasicValidation:
     """Tests for BasicDFL graph validation."""
 
-    def test_validate_is_valid(self):
-        """Test that the workflow graph is valid."""
+    def test_graph_passes_validation(self):
+        """BasicDFL stage graph has no validation errors."""
         wf = BasicDFL()
         result = validate(wf)
         assert result.is_valid, f"Validation errors: {result.errors}"
 
-    def test_validate_transitions(self):
-        """Test that transitions are correctly extracted."""
+    def test_transitions_match_expected_stages(self):
+        """Each stage transitions to the expected next stages."""
         wf = BasicDFL()
         result = validate(wf)
         transitions = {k: v.targets for k, v in result.transitions.items()}

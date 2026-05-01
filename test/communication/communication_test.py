@@ -89,8 +89,8 @@ async def test_connect_invalid_node(protocol_builder: ProtocolBuilder):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("protocol_builder", build_protocols_fns)
-async def test_basic_communication(protocol_builder: ProtocolBuilder):
-    """Test full communication lifecycle: start, connect, send, and command execution."""
+async def test_lifecycle_start_connect_send_stop(protocol_builder: ProtocolBuilder):
+    """Start, connect, send a buffered command, register it, verify replay, then stop."""
     # Create 2 communication protocols
     protocol1 = protocol_builder()
     protocol2 = protocol_builder()

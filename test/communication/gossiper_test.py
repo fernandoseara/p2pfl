@@ -61,8 +61,8 @@ def _make_client(addr: str) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_run_splits_large_target_list_across_periods():
-    """Split large target lists across multiple gossip periods."""
+async def test_run_delivers_all_clients_across_multiple_periods():
+    """All 5 clients receive the message when messages_per_period=2 (needs 3 periods)."""
     g = _make_gossiper(period=0.02, messages_per_period=2)
 
     clients = [_make_client(f"n{i}") for i in range(5)]
@@ -71,9 +71,8 @@ async def test_run_splits_large_target_list_across_periods():
     # Manually inject pending message (bypassing add_message's neighbor lookup)
     g._pending_msgs.append((msg, clients))
 
-    # Run one gossip period manually
+    # Start the gossiper and let it run long enough for multiple periods to drain the queue
     await g.start()
-    # Let it run long enough for multiple periods to drain the queue
     await asyncio.sleep(0.15)
     await g.stop()
 
@@ -83,8 +82,8 @@ async def test_run_splits_large_target_list_across_periods():
 
 
 @pytest.mark.asyncio
-async def test_run_partial_split_leaves_remainder():
-    """After one period with budget=2 and 5 targets, 3 must remain pending."""
+async def test_run_sends_budget_and_queues_remainder():
+    """Only 2 of 5 clients are sent in one period; the remaining 3 stay queued."""
     g = _make_gossiper(period=100, messages_per_period=2)  # long period so we control timing
 
     clients = [_make_client(f"n{i}") for i in range(5)]
@@ -115,8 +114,8 @@ async def test_run_partial_split_leaves_remainder():
 
 
 @pytest.mark.asyncio
-async def test_run_handles_send_failure_gracefully():
-    """When a client.send raises, the gossiper logs a warning and continues."""
+async def test_run_continues_after_failed_send():
+    """A failing client does not prevent the next client from being sent to."""
     g = _make_gossiper(period=0.02, messages_per_period=10)
 
     good_client = _make_client("good")
@@ -142,8 +141,8 @@ async def test_run_handles_send_failure_gracefully():
 
 
 @pytest.mark.asyncio
-async def test_gossip_weights_stops_on_early_stopping():
-    """gossip_weights returns immediately when early_stopping_fn returns True."""
+async def test_gossip_weights_returns_immediately_on_early_stop():
+    """Early stopping=True causes immediate return without calling model_fn."""
     g = _make_gossiper()
     g._neighbors.get_all.return_value = {}
 
@@ -161,8 +160,8 @@ async def test_gossip_weights_stops_on_early_stopping():
 
 
 @pytest.mark.asyncio
-async def test_gossip_weights_stops_on_empty_candidates():
-    """gossip_weights returns when get_candidates_fn returns an empty list."""
+async def test_gossip_weights_returns_when_no_candidates():
+    """No candidates available causes gossip_weights to return after one check."""
     g = _make_gossiper()
 
     call_count = 0
@@ -184,8 +183,8 @@ async def test_gossip_weights_stops_on_empty_candidates():
 
 
 @pytest.mark.asyncio
-async def test_gossip_weights_sends_model_to_candidates():
-    """gossip_weights sends models to sampled candidates."""
+async def test_gossip_weights_sends_model_to_candidate():
+    """Model is sent to the candidate node with temporal_connection=True."""
     g = _make_gossiper()
 
     client_a = _make_client("nodeA")
@@ -216,8 +215,8 @@ async def test_gossip_weights_sends_model_to_candidates():
 
 
 @pytest.mark.asyncio
-async def test_gossip_weights_skips_none_model():
-    """When model_fn returns None model, the send is skipped."""
+async def test_gossip_weights_skips_send_when_model_is_none():
+    """model_fn returning None skips the send entirely."""
     g = _make_gossiper()
 
     client_a = _make_client("nodeA")
@@ -242,8 +241,8 @@ async def test_gossip_weights_skips_none_model():
 
 
 @pytest.mark.asyncio
-async def test_gossip_weights_exits_on_repeated_status():
-    """gossip_weights exits when EXIT_ON_X_EQUAL_ROUNDS consecutive identical statuses are seen."""
+async def test_gossip_weights_exits_after_repeated_status():
+    """3 consecutive identical statuses trigger automatic exit."""
     g = _make_gossiper()
     g._neighbors.get_all.return_value = {}
 
@@ -296,8 +295,8 @@ class TestGossiper:
             ("127.0.0.1:9000", True),  # New message from other
         ],
     )
-    async def test_check_and_set_processed(self, gossiper, msg_source, expected):
-        """Test message processing: own messages rejected, new messages accepted."""
+    async def test_rejects_own_accepts_others(self, gossiper, msg_source, expected):
+        """Own messages are rejected; messages from others are accepted."""
         mock_msg = MagicMock()
         mock_msg.source = msg_source
         mock_msg.gossip_message.hash = 12345
@@ -306,8 +305,8 @@ class TestGossiper:
         assert result is expected
 
     @pytest.mark.asyncio
-    async def test_check_and_set_processed_returns_false_for_duplicate(self, gossiper):
-        """Test that duplicate messages return False."""
+    async def test_duplicate_hash_rejected(self, gossiper):
+        """Same message hash seen twice returns False the second time."""
         mock_msg = MagicMock()
         mock_msg.source = "127.0.0.1:9000"
         mock_msg.gossip_message.hash = 12345
@@ -316,8 +315,8 @@ class TestGossiper:
         assert await gossiper.check_and_set_processed(mock_msg) is False
 
     @pytest.mark.asyncio
-    async def test_add_message_queues_for_neighbors(self, gossiper):
-        """Test that add_message queues message for all direct neighbors."""
+    async def test_add_message_enqueues_for_all_neighbors(self, gossiper):
+        """add_message enqueues one entry targeting all direct neighbors."""
         mock_client = MagicMock()
         gossiper._neighbors.get_all.return_value = {
             "127.0.0.1:9000": (mock_client, 0),
@@ -333,8 +332,8 @@ class TestGossiper:
         assert gossiper._pending_msgs[0][0] == mock_msg
 
     @pytest.mark.asyncio
-    async def test_circular_buffer_limits_processed_messages(self, gossiper):
-        """Test that processed messages list is limited to configured size."""
+    async def test_processed_buffer_stays_at_limit(self, gossiper):
+        """Inserting limit+5 messages keeps the buffer at exactly limit entries."""
         limit = Settings.gossip.AMOUNT_LAST_MESSAGES_SAVED
         for i in range(limit + 5):
             mock_msg = MagicMock()
@@ -343,8 +342,8 @@ class TestGossiper:
 
             await gossiper.check_and_set_processed(mock_msg)
 
-        # The list should have removed old entries
-        assert len(gossiper._processed_messages) <= limit + 1
+        # The buffer should be exactly at capacity
+        assert len(gossiper._processed_messages) == limit
 
 
 ###
@@ -405,8 +404,8 @@ async def _stop_all(hub, spokes):
 
 
 @pytest.mark.asyncio
-async def test_spoke_to_spoke_gossip_delivery():
-    """A gossip message from spoke_0 must reach the hub and all other spokes exactly once."""
+async def test_propagation_spoke_to_all_via_hub():
+    """spoke_0 broadcasts; hub and spoke_1..3 each receive it exactly once, spoke_0 does not."""
     hub, spokes, commands = await _build_star(4)
     hub_cmd, *spoke_cmds = commands
 
@@ -434,8 +433,8 @@ async def test_spoke_to_spoke_gossip_delivery():
 
 
 @pytest.mark.asyncio
-async def test_hub_gossip_reaches_all_spokes():
-    """A gossip message from the hub must reach all spokes exactly once."""
+async def test_propagation_hub_to_all_spokes():
+    """Hub broadcasts; all 4 spokes receive it exactly once, hub does not."""
     hub, spokes, commands = await _build_star(4)
     hub_cmd, *spoke_cmds = commands
 
@@ -457,8 +456,8 @@ async def test_hub_gossip_reaches_all_spokes():
 
 
 @pytest.mark.asyncio
-async def test_multiple_spokes_broadcast_simultaneously():
-    """All spokes broadcast at the same time; each spoke must receive messages from all other spokes exactly once."""
+async def test_propagation_simultaneous_broadcasts():
+    """4 spokes broadcast at once; each receives exactly 3 messages (from the others), hub receives 4."""
     hub, spokes, commands = await _build_star(4)
     hub_cmd, *spoke_cmds = commands
 
@@ -485,8 +484,8 @@ async def test_multiple_spokes_broadcast_simultaneously():
 
 
 @pytest.mark.asyncio
-async def test_gossip_dedup_prevents_duplicate_processing():
-    """Sending the same message twice must not result in duplicate processing."""
+async def test_propagation_dedup_by_hash():
+    """Broadcasting the same message twice delivers it only once (dedup by hash)."""
     hub, spokes, commands = await _build_star(2)
     hub_cmd, *spoke_cmds = commands
 

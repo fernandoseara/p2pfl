@@ -56,8 +56,8 @@ except ImportError:
 ###
 
 
-def test_get_set_params_torch():
-    """Test setting and getting parameters."""
+def test_set_parameters_modifies_weights():
+    """Adding 1 to each layer and setting it back produces params == original + 1."""
     # Create the model
     p2pfl_model = model_build_fn_torch()
     # Modify parameters
@@ -72,8 +72,8 @@ def test_get_set_params_torch():
         assert np.all(layer_og + 1 == layer_new)
 
 
-def test_encoding_torch():
-    """Test encoding and decoding of parameters."""
+def test_encode_decode_preserves_parameters():
+    """Encoding then decoding produces identical parameters and additional_info."""
     p2pfl_model1 = model_build_fn_torch()
     encoded_params = p2pfl_model1.encode_parameters()
 
@@ -86,8 +86,8 @@ def test_encoding_torch():
     assert additional_info == p2pfl_model1.additional_info
 
 
-def test_wrong_encoding_torch():
-    """Test wrong encoding of parameters."""
+def test_decode_wrong_model_type_raises():
+    """Decoding MLP params into MobileNet raises ModelNotMatchingError."""
     p2pfl_model1 = model_build_fn_torch()
     encoded_params = p2pfl_model1.encode_parameters()
     mobile_net = torch.hub.load("pytorch/vision:v0.10.0", "mobilenet_v2", pretrained=False)
