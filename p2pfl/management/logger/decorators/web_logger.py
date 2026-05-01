@@ -20,9 +20,11 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import datetime
 import logging
 import os
+from datetime import timezone
 from typing import TYPE_CHECKING, Any
 
 from p2pfl.management.logger.decorators.logger_decorator import LoggerDecorator
@@ -37,60 +39,38 @@ if TYPE_CHECKING:
 #########################################
 
 
-class DictFormatter(logging.Formatter):
-    """Formatter (logging) that returns a dictionary with the log record attributes."""
+class DictFormatter:
+    """Formatter that extracts structured fields from a log record."""
 
-    def format(self, record):
-        """
-        Format the log record as a dictionary.
-
-        Args:
-            record: The log record.
-
-        """
-        # Get node
+    def format(self, record: logging.LogRecord) -> dict[str, Any]:
+        """Format the log record as a dictionary."""
         if not hasattr(record, "node"):
             raise ValueError("The log record must have a 'node' attribute.")
-        log_dict = {
-            "timestamp": datetime.datetime.fromtimestamp(record.created),
+        return {
+            "timestamp": datetime.datetime.fromtimestamp(record.created, tz=timezone.utc),
             "level": record.levelname,
-            "node": record.node,  # type: ignore
+            "node": record.node,
             "message": record.getMessage(),
         }
-        return log_dict
 
 
 class P2pflWebLogHandler(logging.Handler):
-    """
-    Custom logging handler that sends log entries to the API.
-
-    Args:
-        p2pfl_web: The P2PFL Web Services.
-
-    """
+    """Custom logging handler that sends log entries to the API."""
 
     def __init__(self, p2pfl_web: P2pflWebServices):
         """Initialize the handler."""
         super().__init__()
         self.p2pfl_web = p2pfl_web
-        self.formatter = DictFormatter()  # Instantiate the custom formatter
+        self._dict_formatter = DictFormatter()
 
-    def emit(self, record):
-        """
-        Emit the log record.
-
-        Args:
-            record: The log record.
-
-        """
-        # Format the log record using the custom formatter
-        log_message = self.formatter.format(record)  # type: ignore
-        # Send log entry to the API
+    def emit(self, record: logging.LogRecord) -> None:
+        """Emit the log record."""
+        log_message = self._dict_formatter.format(record)
         self.p2pfl_web.send_log(
-            log_message["timestamp"],  # type: ignore
-            log_message["node"],  # type: ignore
-            log_message["level"],  # type: ignore
-            log_message["message"],  # type: ignore
+            log_message["timestamp"],
+            log_message["node"],
+            log_message["level"],
+            log_message["message"],
         )
 
 
@@ -101,14 +81,21 @@ class WebP2PFLogger(LoggerDecorator):
         """Initialize the logger."""
         super().__init__(p2pflogger)
         self._p2pfl_web_services: P2pflWebServices | None = None
-        self._ended_experiments: set[str] = set()
+        self._ended_experiments: set[tuple[str, str]] = set()
         self._node_callbacks: dict[str, Any] = {}
+        # Thread pool for fire-and-forget lifecycle calls (register/unregister)
+        self._lifecycle_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="p2pfl-web-node-reg")
+        self._pending_futures: list[concurrent.futures.Future[None]] = []
 
         # Load credentials from .p2pfl_env file if it exists
         self._load_env_file()
 
         # Try to auto-connect using environment variables
         self.connect()
+
+    def _prune_done_futures(self) -> None:
+        """Remove completed futures to prevent unbounded list growth."""
+        self._pending_futures = [f for f in self._pending_futures if not f.done()]
 
     def _load_env_file(self) -> None:
         """Load environment variables from ~/.p2pfl_env if it exists."""
@@ -169,7 +156,7 @@ class WebP2PFLogger(LoggerDecorator):
         try:
             self._p2pfl_web_services = P2pflWebServices(str(url), str(key))
             self.add_handler(P2pflWebLogHandler(self._p2pfl_web_services))
-            super().debug("WebP2PFLogger", f"Successfully connected to P2PFL Web Services at {url}")
+            super().info("WebP2PFLogger", f"Successfully connected to P2PFL Web Services at {url}")
         except Exception as e:
             super().warning("WebP2PFLogger", f"Failed to connect to P2PFL Web Services: {e}")
             self._p2pfl_web_services = None
@@ -211,8 +198,9 @@ class WebP2PFLogger(LoggerDecorator):
 
     def experiment_ended(self, address: str, experiment: Experiment, status: str) -> None:
         """Send terminal status and flush buffered data on experiment end."""
-        if self._p2pfl_web_services is not None and experiment.exp_name not in self._ended_experiments:
-            self._ended_experiments.add(experiment.exp_name)
+        key = (experiment.exp_name, address)
+        if self._p2pfl_web_services is not None and key not in self._ended_experiments:
+            self._ended_experiments.add(key)
             try:
                 self._p2pfl_web_services.update_experiment(experiment.exp_name, address, status=status)
                 node_state = status if status in ("failed", "cancelled") else "idle"
@@ -241,17 +229,17 @@ class WebP2PFLogger(LoggerDecorator):
             try:
                 nodes = self.get_nodes()
                 experiment: Experiment = nodes[addr]["Experiment"]
-                current_round = nodes[addr].get("round", 0)
+                effective_round = round if round is not None else nodes[addr].get("round", 0)
             except KeyError:
                 # If no experiment is registered for this node, skip web logging
                 return
 
             if step is None:
                 # Global Metrics
-                self._p2pfl_web_services.send_global_metric(experiment.exp_name, current_round, metric, addr, value)
+                self._p2pfl_web_services.send_global_metric(experiment.exp_name, effective_round, metric, addr, value)
             else:
                 # Local Metrics
-                self._p2pfl_web_services.send_local_metric(experiment.exp_name, current_round, metric, addr, value, step)
+                self._p2pfl_web_services.send_local_metric(experiment.exp_name, effective_round, metric, addr, value, step)
 
     def log_communication(
         self,
@@ -293,7 +281,7 @@ class WebP2PFLogger(LoggerDecorator):
         # Send to web services if connected
         if self._p2pfl_web_services is not None:
             # Create timestamp
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(tz=timezone.utc)
 
             # Send as a structured communication log
             try:
@@ -316,20 +304,32 @@ class WebP2PFLogger(LoggerDecorator):
         """
         Register a node.
 
+        Registration is fire-and-forget: the HTTP POST runs in a background
+        thread so it never blocks ``node.start()``. The server-assigned
+        ``node_id`` is not consumed by any downstream path, so there is no
+        ordering dependency.
+
         Args:
             node: The node address.
 
         """
         super().register_node(node)
         if self._p2pfl_web_services is not None:
-            from p2pfl.management.node_monitor import collect_node_metadata
-
-            metadata = collect_node_metadata()
-            self._p2pfl_web_services.register_node(node, metadata=metadata)
-
-            # Register a monitor callback to push system metrics in real-time
             ws = self._p2pfl_web_services
 
+            def _register() -> None:
+                from p2pfl.management.node_monitor import collect_node_metadata
+
+                try:
+                    metadata = collect_node_metadata()
+                    ws.register_node(node, metadata=metadata)
+                except Exception as e:
+                    print(f"[P2PFL Web Services] Background register_node failed for '{node}': {e}")
+
+            self._prune_done_futures()
+            self._pending_futures.append(self._lifecycle_pool.submit(_register))
+
+            # Register a monitor callback to push system metrics in real-time
             def _push_metrics(ts: datetime.datetime, metrics: dict[str, float], _node: str = node) -> None:
                 for metric_name, value in metrics.items():
                     ws.send_system_metric(_node, metric_name, value, ts)
@@ -341,6 +341,9 @@ class WebP2PFLogger(LoggerDecorator):
         """
         Unregister a node.
 
+        The HTTP DELETE runs in a background thread (fire-and-forget) so it
+        never blocks ``node.stop()``.
+
         Args:
             node: The node address.
 
@@ -350,7 +353,16 @@ class WebP2PFLogger(LoggerDecorator):
             self.node_monitor.remove_callback(cb)
         super().unregister_node(node)
         if self._p2pfl_web_services is not None:
-            self._p2pfl_web_services.unregister_node(node)
+            ws = self._p2pfl_web_services
+
+            def _unregister() -> None:
+                try:
+                    ws.unregister_node(node)
+                except Exception as e:
+                    print(f"[P2PFL Web Services] Background unregister_node failed for '{node}': {e}")
+
+            self._prune_done_futures()
+            self._pending_futures.append(self._lifecycle_pool.submit(_unregister))
 
     def finish(self) -> None:
         """
@@ -370,7 +382,12 @@ class WebP2PFLogger(LoggerDecorator):
         super().reset()
 
     def cleanup(self) -> None:
-        """Cleanup: stop the flush task and send remaining data."""
+        """Cleanup: drain pending registrations, stop flush, and send remaining data."""
+        # Wait for any in-flight register_node calls to finish
+        for fut in self._pending_futures:
+            fut.result(timeout=10)
+        self._pending_futures.clear()
+        self._lifecycle_pool.shutdown(wait=False)
         if self._p2pfl_web_services is not None:
             self._p2pfl_web_services.stop()
         super().cleanup()

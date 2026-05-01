@@ -184,8 +184,14 @@ def _get_geolocation() -> dict | None:
     return None
 
 
+_cached_metadata: dict | None = None
+
+
 def collect_node_metadata() -> dict:
-    """Collect system metadata for node registration. Never raises."""
+    """Collect system metadata for node registration. Never raises. Cached after first call."""
+    global _cached_metadata
+    if _cached_metadata is not None:
+        return _cached_metadata
     try:
         mem = psutil.virtual_memory()
         metadata: dict = {
@@ -213,6 +219,7 @@ def collect_node_metadata() -> dict:
         if geo is not None:
             metadata["geolocation"] = geo
 
+        _cached_metadata = metadata
         return metadata
     except Exception:
         return {}
