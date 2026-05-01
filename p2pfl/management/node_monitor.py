@@ -75,7 +75,8 @@ class NodeMonitor:
     def stop(self) -> None:
         """Cancel the monitoring task."""
         if self._task is not None and not self._task.done():
-            self._task.cancel()
+            with contextlib.suppress(RuntimeError):
+                self._task.cancel()
         self._task = None
 
     def get_logs(self) -> dict[datetime.datetime, dict[str, float]]:

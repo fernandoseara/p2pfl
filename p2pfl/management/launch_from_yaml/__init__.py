@@ -179,9 +179,11 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
         transform_function = transforms_config.get("function")
         if not transforms_package or not transform_function:
             raise ValueError("Missing 'transforms' configuration in YAML file.")
-        transform_class = load_by_package_and_name(transforms_package, transform_function)
+        transform_fn = load_by_package_and_name(transforms_package, transform_function)
+        params = transforms_config.get("params", {})
+        transform = transform_fn(**params) if params else transform_fn
         for partition in partitions:
-            partition.set_transforms(transform_class(**transforms_config.get("params", {})))
+            partition.set_transforms(transform)
 
     #########
     # Model #

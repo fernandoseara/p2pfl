@@ -140,6 +140,13 @@ class XGBoostModel(TreeBasedModel):
         # Load into the existing model
         self.model.load_model(bytearray(model_bytes))
 
+    def build_copy(self, **kwargs: Any) -> "XGBoostModel":
+        """Build a copy without deepcopy (XGBoost C++ objects are not safely copyable)."""
+        new_model = type(self.model)(**self.model.get_params())
+        if "params" not in kwargs:
+            kwargs["params"] = self.get_parameters()
+        return self.__class__(new_model, **kwargs)
+
     def get_framework(self) -> str:
         """
         Return the framework name identifier.

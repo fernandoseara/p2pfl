@@ -104,11 +104,12 @@ class XGBoostLearner(Learner):
                 xgb_callbacks.append(cb.to_xgb_callback())
         model.set_params(callbacks=xgb_callbacks)
 
+        eval_set = [(X_train, y_train)]
         try:
             previous_booster = self.get_model().get_model().get_booster()
-            model.fit(X_train, y_train, verbose=True, xgb_model=previous_booster)
+            model.fit(X_train, y_train, eval_set=eval_set, verbose=False, xgb_model=previous_booster)
         except (NotFittedError, Exception):
-            model.fit(X_train, y_train, verbose=True)
+            model.fit(X_train, y_train, eval_set=eval_set, verbose=False)
 
         self.get_model().set_contribution([self.address], self.get_data().get_num_samples(train=True))
         # store callback info back to model

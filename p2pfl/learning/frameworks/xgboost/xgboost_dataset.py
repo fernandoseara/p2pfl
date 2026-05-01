@@ -55,7 +55,15 @@ class XGBoostExportStrategy(DataExportStrategy):
         label_key = kwargs.get("label_key")
         feature_keys = kwargs.get("feature_keys")
 
-        # Convert to pandas and then numpy
+        # If a set_transform is active, use batch accessor (applies transform)
+        if data._format_type == "custom":
+            batch = data[:]
+            label_key = label_key or "label"
+            feature_keys_resolved = feature_keys or [k for k in batch if k != label_key]
+            X = np.column_stack([np.stack(batch[k]) for k in feature_keys_resolved])
+            y = np.array(batch[label_key])
+            return X, y
+
         df = data.to_pandas()
         if label_key is None:
             label_key = df.columns[-1]

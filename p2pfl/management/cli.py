@@ -21,6 +21,9 @@
 import asyncio
 import os
 import sys
+
+if sys.platform == "darwin":
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
 from glob import glob
 from typing import Annotated, TypedDict
 
