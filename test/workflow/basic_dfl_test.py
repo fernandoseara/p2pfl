@@ -420,3 +420,91 @@ class TestLearningWaitModelStage:
         )
 
         assert not ctx.full_model_ready.is_set()
+
+
+###
+# LearningAggregateStage Tests
+###
+
+
+class TestLearningAggregateStage:
+    """Tests for the aggregation stage."""
+
+    @pytest.fixture
+    def aggregate_stage(self, ctx):
+        """Create a LearningAggregateStage with wired context."""
+        stage = LearningAggregateStage()
+        stage.ctx = ctx
+        ctx.experiment.round = 3
+        ctx.train_set = ["peer1", "peer2"]
+        return stage
+
+    @pytest.mark.asyncio
+    async def test_run_aggregates_and_advances_round(self, aggregate_stage):
+        """run() aggregates peer models, sets result on learner, and increments round."""
+        ctx = aggregate_stage.ctx
+        model_a = MagicMock()
+        model_a.get_contributors.return_value = ["peer1"]
+        model_b = MagicMock()
+        model_b.get_contributors.return_value = ["peer2"]
+
+        ctx.peers["peer1"] = BasicPeerState()
+        ctx.peers["peer1"].model = model_a
+        ctx.peers["peer2"] = BasicPeerState()
+        ctx.peers["peer2"].model = model_b
+
+        agg_result = MagicMock()
+        ctx.aggregator.aggregate.return_value = agg_result
+
+        next_stage = await aggregate_stage.run()
+
+        ctx.aggregator.aggregate.assert_called_once()
+        ctx.learner.set_model.assert_called_once_with(agg_result)
+        assert ctx.experiment.round == 4
+        assert next_stage == "round_init"
+
+    @pytest.mark.asyncio
+    async def test_run_skips_peers_without_model(self, aggregate_stage):
+        """run() only aggregates peers that have a model set."""
+        ctx = aggregate_stage.ctx
+        model_a = MagicMock()
+        model_a.get_contributors.return_value = ["peer1"]
+
+        ctx.peers["peer1"] = BasicPeerState()
+        ctx.peers["peer1"].model = model_a
+        ctx.peers["peer2"] = BasicPeerState()
+        ctx.peers["peer2"].model = None
+
+        ctx.aggregator.aggregate.return_value = MagicMock()
+
+        await aggregate_stage.run()
+
+        models_passed = ctx.aggregator.aggregate.call_args[0][0]
+        assert len(models_passed) == 1
+
+    def test_deduplicate_removes_fully_covered_models(self):
+        """_deduplicate_models drops models whose contributors are already covered."""
+        wide = MagicMock()
+        wide.get_contributors.return_value = ["a", "b", "c"]
+        narrow = MagicMock()
+        narrow.get_contributors.return_value = ["a", "b"]
+
+        result = LearningAggregateStage._deduplicate_models([narrow, wide])
+
+        assert len(result) == 1
+        assert result[0] is wide
+
+    def test_deduplicate_keeps_partially_new(self):
+        """_deduplicate_models keeps models that contribute at least one new node."""
+        m1 = MagicMock()
+        m1.get_contributors.return_value = ["a", "b"]
+        m2 = MagicMock()
+        m2.get_contributors.return_value = ["b", "c"]
+
+        result = LearningAggregateStage._deduplicate_models([m1, m2])
+
+        assert len(result) == 2
+
+    def test_deduplicate_empty_list(self):
+        """_deduplicate_models returns empty list for empty input."""
+        assert LearningAggregateStage._deduplicate_models([]) == []
