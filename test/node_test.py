@@ -426,8 +426,8 @@ async def test_framework_node(build_model_fn):
     p2pfl_model = build_model_fn()
 
     # Nodes
-    n1 = Node(p2pfl_model, partitions[0])
-    n2 = Node(p2pfl_model.build_copy(), partitions[1])
+    n1 = Node(p2pfl_model, partitions[0], address="127.0.0.1")
+    n2 = Node(p2pfl_model.build_copy(), partitions[1], address="127.0.0.1")
 
     # Start
     await n1.start()
