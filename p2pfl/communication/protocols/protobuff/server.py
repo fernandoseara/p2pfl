@@ -314,13 +314,20 @@ class ProtobuffServer(ABC, node_pb2_grpc.NodeServicesServicer, NodeComponent):
             cmds: Command name, Command instance, or list of either.
 
         """
+        removed_names: set[str] = set()
         if isinstance(cmds, list):
             for cmd in cmds:
                 name = cmd if isinstance(cmd, str) else cmd.get_name()
                 self.__commands.pop(name, None)
+                removed_names.add(name)
         elif isinstance(cmds, str):
             self.__commands.pop(cmds, None)
+            removed_names.add(cmds)
         elif isinstance(cmds, Command):
             self.__commands.pop(cmds.get_name(), None)
+            removed_names.add(cmds.get_name())
         else:
             raise Exception("Command not valid")
+
+        if self._pending_msgs_buffer and removed_names:
+            self._pending_msgs_buffer = [m for m in self._pending_msgs_buffer if m.cmd not in removed_names]

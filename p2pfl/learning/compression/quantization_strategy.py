@@ -276,7 +276,7 @@ class PTQuantization(TensorCompressor):
                 else:
                     # Map the constant value to the middle of the quantization range
                     mid_q = (qmin + qmax) // 2
-                    return np.full_like(tensor, mid_q, dtype=target_dtype), tmin / mid_q, 0
+                    return np.full_like(tensor, mid_q, dtype=target_dtype), float(tmin / mid_q), 0
 
             # Calculate scale and zero point
             scale = (tmax - tmin) / (qmax - qmin)
@@ -394,7 +394,7 @@ class PTQuantization(TensorCompressor):
                         # Map the constant value to the middle of the quantization range
                         mid_q = (qmin + qmax) // 2
                         transposed_quantized[c] = np.full_like(channel_tensor, mid_q, dtype=target_dtype)
-                        scales[c] = float(tmin / mid_q)
+                        scales[c] = abs(float(tmin / mid_q))
                         zero_points[c] = 0
                         continue
 
@@ -441,7 +441,7 @@ class PTQuantization(TensorCompressor):
 
         """
         # Validate scale and zero_point
-        if not isinstance(scale, int | float):
+        if not isinstance(scale, int | float | np.floating):
             raise ValueError(f"Invalid scale factor: {scale}. Scale must be a number.")
 
         if scale <= 0:

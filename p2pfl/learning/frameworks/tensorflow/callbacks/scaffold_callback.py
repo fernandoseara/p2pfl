@@ -41,10 +41,10 @@ class ScaffoldOptimizerWrapper(Optimizer):
             eta_l: The learning rate.
 
         """
-        self._optimizer = optimizer  # Use a different name to avoid recursion in __getattr__
-        self.c_i = c_i
-        self.c = c
-        self.eta_l = eta_l
+        object.__setattr__(self, "_optimizer", optimizer)
+        object.__setattr__(self, "c_i", c_i)
+        object.__setattr__(self, "c", c)
+        object.__setattr__(self, "eta_l", eta_l)
 
     @tf.function
     def apply_gradients(self, grads_and_vars, name=None, **kwargs):

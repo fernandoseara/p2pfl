@@ -56,11 +56,10 @@ class DeBiasedAsyDFLKerasModel(tf.keras.Model):
 
     def __init__(self, model: tf.keras.Model, push_sum_weight: float = 1.0, **kwargs):
         """Initialize the model."""
-        super().__init__(**kwargs)
         self.model = model
-        self.push_sum_weight = tf.Variable(tf.constant(push_sum_weight, dtype=tf.float32), dtype=tf.float32, trainable=False)
-
         self._custom_loss = self.model.loss
+        super().__init__(**kwargs)
+        self.push_sum_weight = tf.Variable(tf.constant(push_sum_weight, dtype=tf.float32), dtype=tf.float32, trainable=False)
 
     @property
     def loss(self):
