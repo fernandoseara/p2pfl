@@ -39,7 +39,9 @@ from p2pfl.management.node_monitor import (
 runner = CliRunner()
 
 
-# ── CLI ──────────────────────────────────────────────────────────────
+###
+# CLI
+###
 
 
 class TestCLI:
@@ -98,7 +100,9 @@ class TestCLI:
         assert result.exit_code == 0
 
 
-# ── MessageStorage ───────────────────────────────────────────────────
+###
+# MessageStorage
+###
 
 
 class TestMessageStorage:
@@ -167,7 +171,9 @@ class TestMessageStorage:
         assert len(s.get_messages()) == 1
 
 
-# ── LocalMetricStorage ───────────────────────────────────────────────
+###
+# LocalMetricStorage
+###
 
 
 class TestLocalMetricStorage:
@@ -192,7 +198,9 @@ class TestLocalMetricStorage:
         assert s.get_all_logs()["exp1"][0]["n1"]["loss"] == [(0, 0.5)]
 
 
-# ── GlobalMetricStorage ──────────────────────────────────────────────
+###
+# GlobalMetricStorage
+###
 
 
 class TestGlobalMetricStorage:
@@ -221,7 +229,9 @@ class TestGlobalMetricStorage:
         assert s.get_all_logs()["exp1"]["n1"]["loss"] == [(0, 0.5)]
 
 
-# ── NodeMonitor ──────────────────────────────────────────────────────
+###
+# NodeMonitor
+###
 
 
 class TestNodeMonitor:
@@ -257,7 +267,9 @@ class TestNodeMonitor:
         assert "cpu" in collected[0]
 
 
-# ── collect_node_metadata & helpers ──────────────────────────────────
+###
+# collect_node_metadata & helpers
+###
 
 
 class TestNodeMetadata:
@@ -285,10 +297,8 @@ class TestNodeMetadata:
         """Geolocation returns None when disabled."""
         from p2pfl.settings import Settings
 
-        original = Settings.general.WEB_GEOLOCATION
         Settings.general.WEB_GEOLOCATION = False
         assert _get_geolocation() is None
-        Settings.general.WEB_GEOLOCATION = original
 
     # ── remove_callback ─────────────────────────────────────────────
 
@@ -437,16 +447,12 @@ class TestNodeMetadata:
         mock_httpx = MagicMock()
         mock_httpx.get.return_value = mock_resp
 
-        original = Settings.general.WEB_GEOLOCATION
         Settings.general.WEB_GEOLOCATION = True
-        try:
-            with patch.dict("sys.modules", {"httpx": mock_httpx}):
-                result = _get_geolocation()
-            assert result is not None
-            assert result["country"] == "Spain"
-            assert result["lat"] == 42.88
-        finally:
-            Settings.general.WEB_GEOLOCATION = original
+        with patch.dict("sys.modules", {"httpx": mock_httpx}):
+            result = _get_geolocation()
+        assert result is not None
+        assert result["country"] == "Spain"
+        assert result["lat"] == 42.88
 
     def test_geolocation_enabled_http_error(self):
         """Geolocation returns None on HTTP error."""
@@ -457,14 +463,10 @@ class TestNodeMetadata:
         mock_httpx = MagicMock()
         mock_httpx.get.return_value = mock_resp
 
-        original = Settings.general.WEB_GEOLOCATION
         Settings.general.WEB_GEOLOCATION = True
-        try:
-            with patch.dict("sys.modules", {"httpx": mock_httpx}):
-                result = _get_geolocation()
-            assert result is None
-        finally:
-            Settings.general.WEB_GEOLOCATION = original
+        with patch.dict("sys.modules", {"httpx": mock_httpx}):
+            result = _get_geolocation()
+        assert result is None
 
     def test_geolocation_enabled_exception(self):
         """Geolocation returns None on connection exception."""
@@ -473,14 +475,10 @@ class TestNodeMetadata:
         mock_httpx = MagicMock()
         mock_httpx.get.side_effect = ConnectionError("no network")
 
-        original = Settings.general.WEB_GEOLOCATION
         Settings.general.WEB_GEOLOCATION = True
-        try:
-            with patch.dict("sys.modules", {"httpx": mock_httpx}):
-                result = _get_geolocation()
-            assert result is None
-        finally:
-            Settings.general.WEB_GEOLOCATION = original
+        with patch.dict("sys.modules", {"httpx": mock_httpx}):
+            result = _get_geolocation()
+        assert result is None
 
     # ── collect_node_metadata: gpus and geolocation populated ──────
 

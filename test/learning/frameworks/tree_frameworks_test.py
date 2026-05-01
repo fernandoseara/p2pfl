@@ -31,9 +31,9 @@ from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset  # noqa: E402
 from p2pfl.learning.frameworks.xgboost.xgboost_learner import XGBoostLearner  # noqa: E402
 from p2pfl.learning.frameworks.xgboost.xgboost_model import XGBoostModel  # noqa: E402
 
-####################################
-#    XGBoost Serialization Tests
-####################################
+###
+# XGBoost Serialization Tests
+###
 
 
 def test_xgboost_get_set_params_classifier():
@@ -175,9 +175,9 @@ def test_xgboost_incremental_training():
     assert new_accuracy >= initial_accuracy
 
 
-##############################
-#    XGBoost Model Copy Tests
-##############################
+###
+# XGBoost Model Copy Tests
+###
 
 
 def test_xgboost_build_copy():
@@ -206,9 +206,9 @@ def test_xgboost_build_copy():
     assert np.array_equal(pred1, pred2)
 
 
-##################################
-#    XGBoost Metadata Tests
-##################################
+###
+# XGBoost Metadata Tests
+###
 
 
 def test_xgboost_model_metadata():
@@ -283,9 +283,9 @@ async def test_xgboost_learner_train_on_batch_raises():
         await learner.train_on_batch()
 
 
-##################################
-#    XGBoost End-to-End Tests
-##################################
+###
+# XGBoost End-to-End Tests
+###
 
 
 def test_xgboost_e2e_dict_params_workflow():

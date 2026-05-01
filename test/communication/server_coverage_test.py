@@ -8,9 +8,6 @@ import pytest
 from p2pfl.communication.commands.command import Command
 from p2pfl.communication.protocols.protobuff.memory import MemoryCommunicationProtocol
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
-from p2pfl.utils.utils import set_standalone_settings
-
-set_standalone_settings()
 
 
 class _TrackingCommand(Command):
@@ -47,7 +44,9 @@ class _FailingCommand(Command):
         raise ValueError("boom")
 
 
-# ========== Handshake error path ==========
+###
+# Handshake error path
+###
 
 
 class TestHandshakeError:
@@ -73,7 +72,9 @@ class TestHandshakeError:
             await proto.stop()
 
 
-# ========== send() edge cases ==========
+###
+# send() edge cases
+###
 
 
 class TestServerSend:
@@ -176,7 +177,9 @@ class TestServerSend:
             await proto.stop()
 
 
-# ========== Background task exception logging ==========
+###
+# Background task exception logging
+###
 
 
 class TestBackgroundTaskTracking:
@@ -204,7 +207,9 @@ class TestBackgroundTaskTracking:
             await proto.stop()
 
 
-# ========== add_command invalid type ==========
+###
+# add_command invalid type
+###
 
 
 class TestAddCommandInvalid:
@@ -224,7 +229,9 @@ class TestAddCommandInvalid:
             await proto.stop()
 
 
-# ========== Replay buffer: weights and direct_message ==========
+###
+# Replay buffer: weights and direct_message
+###
 
 
 class TestReplayBuffer:
@@ -285,7 +292,9 @@ class TestReplayBuffer:
             await proto.stop()
 
 
-# ========== remove_command ==========
+###
+# remove_command
+###
 
 
 class TestRemoveCommand:

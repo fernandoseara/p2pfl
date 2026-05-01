@@ -294,9 +294,9 @@ class TestBasicValidation:
         assert transitions["finish"] == {None}
 
 
-###############################################
+###
 # LearningWaitModelStage Tests
-###############################################
+###
 
 
 class TestLearningWaitModelStage:

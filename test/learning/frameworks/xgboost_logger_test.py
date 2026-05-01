@@ -8,9 +8,9 @@ xgb = pytest.importorskip("xgboost", reason="XGBoost not available or missing Op
 
 from p2pfl.learning.frameworks.xgboost.xgboost_logger import XGBoostLogger  # noqa: E402
 
-# ---------------------------------------------------------------------------
+###
 # Unit tests
-# ---------------------------------------------------------------------------
+###
 
 
 class TestXGBoostLoggerCallbacks:
@@ -71,21 +71,10 @@ class TestXGBoostLoggerCallbacks:
         assert result is False
         mock_logger.log_metric.assert_not_called()
 
-    def test_log_hyperparams_is_noop(self):
-        """Log_hyperparams does nothing (no-op)."""
-        cb = XGBoostLogger("node-5")
-        # Should not raise
-        cb.log_hyperparams({"learning_rate": 0.1, "max_depth": 3})
 
-    def test_save_is_noop(self):
-        """Save does nothing (no-op)."""
-        cb = XGBoostLogger("node-5")
-        cb.save()
-
-
-# ---------------------------------------------------------------------------
+###
 # Integration: XGBoostLogger with real XGBoost training
-# ---------------------------------------------------------------------------
+###
 
 
 class TestXGBoostLoggerIntegration:

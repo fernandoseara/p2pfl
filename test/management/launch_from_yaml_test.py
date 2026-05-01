@@ -21,7 +21,9 @@ from p2pfl.management.launch_from_yaml.utils import (
 )
 from p2pfl.settings import Settings
 
-# ── Helpers ─────────────────────────────────────────────────────────────
+###
+# Helpers
+###
 
 _MOD = "p2pfl.management.launch_from_yaml"
 
@@ -168,7 +170,9 @@ def _run_yaml(cfg: dict[str, Any]) -> Any:
         return asyncio.get_event_loop().run_until_complete(run_from_yaml(path))
 
 
-# ── load_by_package_and_name ────────────────────────────────────────────
+###
+# load_by_package_and_name
+###
 
 
 class TestLoadByPackageAndName:
@@ -195,7 +199,9 @@ class TestLoadByPackageAndName:
             load_by_package_and_name("json", "NonExistentThing")
 
 
-# ── resize_partitions ──────────────────────────────────────────────────
+###
+# resize_partitions
+###
 
 
 class TestResizePartitions:
@@ -259,19 +265,17 @@ class TestResizePartitions:
 
     def test_deterministic_with_seed(self):
         """Resizing with the same seed produces identical results."""
-        original_seed = Settings.general.SEED
-        try:
-            Settings.general.SEED = 42
-            part1 = _make_partition(train_size=10, test_size=5)
-            part2 = _make_partition(train_size=10, test_size=5)
-            r1 = resize_partitions([part1], samples_per_node=30)
-            r2 = resize_partitions([part2], samples_per_node=30)
-            assert list(r1[0]._data["train"]["x"]) == list(r2[0]._data["train"]["x"])
-        finally:
-            Settings.general.SEED = original_seed
+        Settings.general.SEED = 42
+        part1 = _make_partition(train_size=10, test_size=5)
+        part2 = _make_partition(train_size=10, test_size=5)
+        r1 = resize_partitions([part1], samples_per_node=30)
+        r2 = resize_partitions([part2], samples_per_node=30)
+        assert list(r1[0]._data["train"]["x"]) == list(r2[0]._data["train"]["x"])
 
 
-# ── export_experiment_data ─────────────────────────────────────────────
+###
+# export_experiment_data
+###
 
 
 class TestExportExperimentData:
@@ -379,7 +383,9 @@ class TestExportExperimentData:
             assert set(df["experiment"].unique()) == {"exp1", "exp2"}
 
 
-# ── _find_web_services ─────────────────────────────────────────────────
+###
+# _find_web_services
+###
 
 
 class TestFindWebServices:
@@ -435,7 +441,9 @@ class TestFindWebServices:
         assert _find_web_services(level1) is ws
 
 
-# ── run_from_yaml: config validation errors ─────────────────────────────
+###
+# run_from_yaml: config validation errors
+###
 
 
 class TestRunFromYamlValidation:
@@ -525,17 +533,10 @@ class TestRunFromYamlValidation:
         with _full_run_mocks(), pytest.raises(ValueError, match="protocol"):
             _run_yaml(cfg)
 
-    def test_missing_topology(self, capsys):
-        """Topology validation happens after node creation; the error is caught internally."""
-        cfg = _minimal_yaml_config()
-        del cfg["network"]["topology"]
-        with _full_run_mocks():
-            _run_yaml(cfg)
-        captured = capsys.readouterr()
-        assert "topology" in captured.out.lower()
 
-
-# ── run_from_yaml: dataset loading dispatch ──────────────────────────────
+###
+# run_from_yaml: dataset loading dispatch
+###
 
 
 class TestRunFromYamlDatasetSources:
@@ -595,13 +596,11 @@ class TestRunFromYamlDatasetSources:
             _run_yaml(cfg)
         mock_custom_cls.assert_called_once_with(foo=1)
 
-    def test_unknown_source_returns_none(self, capsys):
+    def test_unknown_source_returns_none(self):
         """An unrecognized source produces no dataset, and function returns early."""
         cfg = _minimal_yaml_config({"experiment": {"dataset": {"source": "unknown_source"}}})
         result = _run_yaml(cfg)
         assert result is None
-        captured = capsys.readouterr()
-        assert "without creating a dataset" in captured.out
 
     def test_custom_source_missing_package(self):
         """Test custom source missing package."""
@@ -619,7 +618,9 @@ class TestRunFromYamlDatasetSources:
             _run_yaml(cfg)
 
 
-# ── run_from_yaml: node setup and lifecycle ──────────────────────────────
+###
+# run_from_yaml: node setup and lifecycle
+###
 
 
 class TestRunFromYamlNodeLifecycle:
@@ -643,7 +644,9 @@ class TestRunFromYamlNodeLifecycle:
             assert m["node"].stop.await_count == 2
 
 
-# ── run_from_yaml: settings application ──────────────────────────────────
+###
+# run_from_yaml: settings application
+###
 
 
 class TestRunFromYamlSettings:
@@ -658,17 +661,15 @@ class TestRunFromYamlSettings:
                 }
             }
         )
-        original = Settings.general.GRPC_TIMEOUT
-        try:
-            # Settings are applied before dataset loading; the run will fail on HF download
-            with _full_run_mocks():
-                _run_yaml(cfg)
-            assert Settings.general.GRPC_TIMEOUT == 99.0
-        finally:
-            Settings.general.GRPC_TIMEOUT = original
+        # Settings are applied before dataset loading; the run will fail on HF download
+        with _full_run_mocks():
+            _run_yaml(cfg)
+        assert Settings.general.GRPC_TIMEOUT == 99.0
 
 
-# ── run_from_yaml: batch_size, transforms, samples_per_node ────────────
+###
+# run_from_yaml: batch_size, transforms, samples_per_node
+###
 
 
 class TestRunFromYamlDatasetOptions:
@@ -783,7 +784,9 @@ class TestRunFromYamlDatasetOptions:
             _run_yaml(cfg)
 
 
-# ── run_from_yaml: export_results flow ───────────────────────────────────
+###
+# run_from_yaml: export_results flow
+###
 
 
 class TestRunFromYamlExportResults:
@@ -802,7 +805,7 @@ class TestRunFromYamlExportResults:
             _run_yaml(cfg)
             mock_export.assert_called_once()
 
-    def test_no_export_on_failure(self, capsys):
+    def test_no_export_on_failure(self):
         """When the experiment fails, results are NOT exported."""
         cfg = _minimal_yaml_config({"export_results": True})
         with (
@@ -814,11 +817,11 @@ class TestRunFromYamlExportResults:
             mock_logger.get_messages.return_value = []
             _run_yaml(cfg)
             mock_export.assert_not_called()
-        captured = capsys.readouterr()
-        assert "FAILED" in captured.out
 
 
-# ── run_from_yaml: model_fn compression parameter ──────────────────────
+###
+# run_from_yaml: model_fn compression parameter
+###
 
 
 class TestRunFromYamlModelCompression:

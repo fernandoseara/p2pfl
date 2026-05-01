@@ -27,25 +27,140 @@ import copy
 import numpy as np
 import pytest
 from datasets import DatasetDict, load_dataset
-from mocks import WeightBasedModelMock
 
 from p2pfl.examples.mnist.model.mlp_pytorch import MLP
+from p2pfl.learning.aggregators.aggregator import NoModelsToAggregateError
 from p2pfl.learning.aggregators.fedavg import FedAvg
 from p2pfl.learning.aggregators.fedmedian import FedMedian
 from p2pfl.learning.aggregators.fedopt import FedAdagrad, FedAdam, FedYogi
 from p2pfl.learning.aggregators.fedprox import FedProx
 from p2pfl.learning.aggregators.krum import Krum
+from p2pfl.learning.aggregators.pushsum import PushSum
 from p2pfl.learning.aggregators.scaffold import Scaffold
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.learning.frameworks.pytorch.lightning_model import LightningModel
 from p2pfl.management.logger import logger
-from p2pfl.settings import Settings
 from p2pfl.workflow.engine.experiment import Experiment
 
-###############################################
+from .mocks import WeightBasedModelMock
+
+###
+# PushSum Tests
+###
+
+
+def test_pushsum_weighted_aggregation():
+    """PushSum: weighted sum using mixing_weight (no normalization), push_sum_weight propagation."""
+    aggregator = PushSum()
+    aggregator.set_address("test")
+
+    # Model 1: mixing_weight=0.3, push_sum_weight=1.0, params=[1,2]
+    # Model 2: mixing_weight=0.5, push_sum_weight=2.0, params=[3,4]
+    # Eq. 5: accum = 0.3*[1,2] + 0.5*[3,4] = [0.3+1.5, 0.6+2.0] = [1.8, 2.6]
+    # Eq. 6: mu = 0.3*1.0 + 0.5*2.0 = 0.3 + 1.0 = 1.3
+    models = [
+        WeightBasedModelMock(
+            [np.array([1.0, 2.0])],
+            num_samples=10,
+            contributors=["n1"],
+            additional_info={"mixing_weight": 0.3, "push_sum_weight": 1.0},
+        ),
+        WeightBasedModelMock(
+            [np.array([3.0, 4.0])],
+            num_samples=20,
+            contributors=["n2"],
+            additional_info={"mixing_weight": 0.5, "push_sum_weight": 2.0},
+        ),
+    ]
+    result = aggregator.aggregate(models)
+
+    assert np.allclose(result.get_parameters()[0], np.array([1.8, 2.6]))
+    assert result.get_num_samples() == 30
+    assert set(result.get_contributors()) == {"n1", "n2"}
+    assert result.get_info("push_sum_weight") == pytest.approx(1.3)
+
+
+def test_pushsum_defaults_to_unit_weights():
+    """PushSum: missing info fields default to 1.0, behaving like plain sum."""
+    aggregator = PushSum()
+    aggregator.set_address("test")
+
+    # No mixing_weight or push_sum_weight set -> defaults to 1.0
+    # accum = 1.0*[2,4] + 1.0*[6,8] = [8,12]
+    # mu = 1.0*1.0 + 1.0*1.0 = 2.0
+    models = [
+        WeightBasedModelMock([np.array([2.0, 4.0])], num_samples=5, contributors=["a"]),
+        WeightBasedModelMock([np.array([6.0, 8.0])], num_samples=15, contributors=["b"]),
+    ]
+    result = aggregator.aggregate(models)
+
+    assert np.allclose(result.get_parameters()[0], np.array([8.0, 12.0]))
+    assert result.get_info("push_sum_weight") == pytest.approx(2.0)
+
+
+def test_pushsum_single_model():
+    """PushSum: single model with mixing_weight scales params correctly."""
+    aggregator = PushSum()
+    aggregator.set_address("test")
+
+    models = [
+        WeightBasedModelMock(
+            [np.array([10.0, 20.0])],
+            num_samples=42,
+            contributors=["solo"],
+            additional_info={"mixing_weight": 0.7, "push_sum_weight": 3.0},
+        ),
+    ]
+    result = aggregator.aggregate(models)
+
+    # accum = 0.7 * [10, 20] = [7, 14]
+    # mu = 0.7 * 3.0 = 2.1
+    assert np.allclose(result.get_parameters()[0], np.array([7.0, 14.0]))
+    assert result.get_info("push_sum_weight") == pytest.approx(2.1)
+    assert result.get_num_samples() == 42
+    assert result.get_contributors() == ["solo"]
+
+
+def test_pushsum_empty_models_raises():
+    """PushSum: aggregating empty list raises NoModelsToAggregateError."""
+    aggregator = PushSum()
+    aggregator.set_address("test")
+
+    with pytest.raises(NoModelsToAggregateError):
+        aggregator.aggregate([])
+
+
+def test_pushsum_multi_layer():
+    """PushSum: correctly handles models with multiple parameter layers."""
+    aggregator = PushSum()
+    aggregator.set_address("test")
+
+    models = [
+        WeightBasedModelMock(
+            [np.array([1.0]), np.array([10.0, 20.0])],
+            num_samples=5,
+            contributors=["n1"],
+            additional_info={"mixing_weight": 0.4, "push_sum_weight": 1.0},
+        ),
+        WeightBasedModelMock(
+            [np.array([3.0]), np.array([30.0, 40.0])],
+            num_samples=5,
+            contributors=["n2"],
+            additional_info={"mixing_weight": 0.6, "push_sum_weight": 1.0},
+        ),
+    ]
+    result = aggregator.aggregate(models)
+
+    # Layer 0: 0.4*1 + 0.6*3 = 0.4 + 1.8 = 2.2
+    # Layer 1: 0.4*[10,20] + 0.6*[30,40] = [4+18, 8+24] = [22, 32]
+    assert np.allclose(result.get_parameters()[0], np.array([2.2]))
+    assert np.allclose(result.get_parameters()[1], np.array([22.0, 32.0]))
+
+
+###
 # FedAvg Tests
-###############################################
+###
 
 
 def test_fedavg_aggregation():
@@ -73,9 +188,9 @@ def test_fedavg_aggregation():
     assert np.allclose(result.get_parameters()[0], np.array([1.0, 2.0]))
 
 
-###############################################
+###
 # FedMedian Tests
-###############################################
+###
 
 
 def test_fedmedian_aggregation():
@@ -113,9 +228,9 @@ def test_fedmedian_aggregation():
     assert np.allclose(result.get_parameters()[0], np.array([2.5]))
 
 
-###############################################
+###
 # Krum Tests
-###############################################
+###
 
 
 def test_krum_selects_closest_to_majority():
@@ -143,9 +258,9 @@ def test_krum_selects_closest_to_majority():
     assert set(result.get_contributors()) == {"n1", "n2", "byzantine"}
 
 
-###############################################
+###
 # FedProx Tests
-###############################################
+###
 
 
 def test_fedprox_aggregation():
@@ -196,9 +311,6 @@ async def test_fedprox_e2e_two_rounds():
     aggregator = FedProx(proximal_mu=0.1)
     aggregator.set_address("test_fedprox")
 
-    # Dont care about the seed
-    Settings.general.SEED = None
-
     node_name = "fedprox-test-node"
     with contextlib.suppress(Exception):
         logger.register_node(node_name)
@@ -230,9 +342,9 @@ async def test_fedprox_e2e_two_rounds():
     await learner.evaluate()
 
 
-###############################################
+###
 # FedOpt Tests (FedAdam, FedAdagrad, FedYogi)
-###############################################
+###
 
 
 @pytest.mark.parametrize("aggregator_cls", [FedAdam, FedAdagrad, FedYogi])
@@ -273,9 +385,9 @@ def test_fedopt_aggregation(aggregator_cls):
     assert len(aggregator.v_t) > 0
 
 
-###############################################
+###
 # Scaffold Tests
-###############################################
+###
 
 
 def test_scaffold_aggregator_requires_delta_info():

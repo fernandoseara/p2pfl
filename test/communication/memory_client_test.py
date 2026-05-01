@@ -9,9 +9,6 @@ from p2pfl.communication.protocols.protobuff.memory.client import MemoryClient
 from p2pfl.communication.protocols.protobuff.memory.singleton_dict import SingletonDict
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
 from p2pfl.communication.protocols.protobuff.server import ProtobuffServer
-from p2pfl.utils.utils import set_standalone_settings
-
-set_standalone_settings()
 
 
 def _make_response(error: str = "", response: str = "") -> node_pb2.ResponseMessage:
@@ -26,7 +23,9 @@ def _make_gossip_msg(cmd: str = "test_cmd") -> node_pb2.RootMessage:
     return msg
 
 
-# ========== connect() edge cases ==========
+###
+# connect() edge cases
+###
 
 
 class TestMemoryClientConnect:
@@ -87,7 +86,9 @@ class TestMemoryClientConnect:
             sd.pop("node_b", None)
 
 
-# ========== disconnect() edge cases ==========
+###
+# disconnect() edge cases
+###
 
 
 class TestMemoryClientDisconnect:
@@ -114,7 +115,9 @@ class TestMemoryClientDisconnect:
         assert client.stub is None
 
 
-# ========== send() edge cases ==========
+###
+# send() edge cases
+###
 
 
 class TestMemoryClientSend:

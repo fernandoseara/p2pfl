@@ -87,7 +87,6 @@ def test_set_transforms(mnist_dataset):
 
     # Define a simple transform that modifies the image
     def add_one_transform(examples):
-        print(examples)
         # Batch case
         examples["image"] = [np.array(img) + 1 for img in examples["image"]]
         return examples
@@ -133,6 +132,151 @@ def test_generate_partitions(mnist_dataset, strategy):
     # Check item
     item = partitions[0].get(0, train=True)
     __test_mnist_sample(item)
+
+
+def test_get_on_plain_dataset():
+    """Test get() on a plain Dataset (not DatasetDict) returns the item directly."""
+    raw = load_dataset("p2pfl/MNIST", split="train[:10]")
+    dataset = P2PFLDataset(raw)
+    item = dataset.get(0)
+    assert "image" in item
+    assert "label" in item
+
+
+def test_get_num_samples_plain_dataset():
+    """Test get_num_samples() on a plain Dataset returns its length."""
+    raw = load_dataset("p2pfl/MNIST", split="train[:15]")
+    dataset = P2PFLDataset(raw)
+    assert dataset.get_num_samples() == 15
+
+
+def test_get_num_samples_unsupported_type():
+    """get_num_samples() on something that's not Dataset/DatasetDict should raise."""
+    dataset = P2PFLDataset.__new__(P2PFLDataset)
+    dataset._data = "not a dataset"
+    dataset._train_split_name = "train"
+    dataset._test_split_name = "test"
+    with pytest.raises(TypeError, match="Unsupported data type"):
+        dataset.get_num_samples()
+
+
+def test_set_transforms_plain_dataset():
+    """set_transforms on a plain Dataset delegates to set_transform."""
+    raw = load_dataset("p2pfl/MNIST", split="train[:5]")
+    dataset = P2PFLDataset(raw)
+
+    def transform(examples):
+        examples["label"] = [lbl + 1 for lbl in examples["label"]]
+        return examples
+
+    dataset.set_transforms(transform)
+    item = dataset.get(0)
+    assert "label" in item
+
+
+def test_set_transforms_dict_per_split(mnist_dataset):
+    """set_transforms with a dict applies different transforms per split."""
+
+    def train_transform(examples):
+        examples["label"] = [lbl + 10 for lbl in examples["label"]]
+        return examples
+
+    def test_transform(examples):
+        examples["label"] = [lbl + 20 for lbl in examples["label"]]
+        return examples
+
+    transforms = {"train": train_transform, "test": test_transform}
+    mnist_dataset.set_transforms(transforms)
+    train_item = mnist_dataset.get(0, train=True)
+    test_item = mnist_dataset.get(0, train=False)
+    assert train_item["label"] is not None
+    assert test_item["label"] is not None
+
+
+def test_set_transforms_unsupported_raises():
+    """set_transforms on unsupported data type should raise."""
+    dataset = P2PFLDataset.__new__(P2PFLDataset)
+    dataset._data = "not a dataset"
+    dataset._train_split_name = "train"
+    dataset._test_split_name = "test"
+    with pytest.raises(ValueError, match="Unsupported data type"):
+        dataset.set_transforms(lambda x: x)
+
+
+def test_generate_train_test_split_already_exists(mnist_dataset):
+    """Splitting a DatasetDict that already has both splits should raise."""
+    with pytest.raises(ValueError, match="Train and test splits already exist"):
+        mnist_dataset.generate_train_test_split(test_size=0.2)
+
+
+def test_generate_train_test_split_unsupported_raises():
+    """generate_train_test_split on unsupported data type should raise."""
+    dataset = P2PFLDataset.__new__(P2PFLDataset)
+    dataset._data = "not a dataset"
+    dataset._train_split_name = "train"
+    dataset._test_split_name = "test"
+    with pytest.raises(ValueError, match="Unsupported data type"):
+        dataset.generate_train_test_split(test_size=0.2)
+
+
+def test_generate_train_test_split_from_dataset_dict_single_split():
+    """Splitting a DatasetDict with only a train split creates train+test."""
+    raw = load_dataset("p2pfl/MNIST", split="train[:50]")
+    dd = DatasetDict({"train": raw})
+    dataset = P2PFLDataset(dd)
+    dataset.generate_train_test_split(test_size=0.2, seed=42)
+    assert isinstance(dataset._data, DatasetDict)
+    assert "train" in dataset._data
+    assert "test" in dataset._data
+
+
+def test_from_pandas():
+    """Test creating P2PFLDataset from a pandas DataFrame."""
+    import pandas as pd
+
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]})
+    dataset = P2PFLDataset.from_pandas(df)
+    assert dataset.get_num_samples() == 3
+
+
+def test_from_generator():
+    """Test creating P2PFLDataset from a generator function."""
+
+    def gen():
+        for i in range(5):
+            yield {"value": i}
+
+    dataset = P2PFLDataset.from_generator(gen)
+    assert dataset.get_num_samples() == 5
+    item = dataset.get(0)
+    assert "value" in item
+
+
+def test_from_csv(tmp_path):
+    """Test creating P2PFLDataset from a CSV file."""
+    csv_file = tmp_path / "data.csv"
+    csv_file.write_text("a,b\n1,2\n3,4\n5,6\n")
+    dataset = P2PFLDataset.from_csv(str(csv_file))
+    assert dataset.get_num_samples() > 0
+
+
+def test_from_json(tmp_path):
+    """Test creating P2PFLDataset from a JSON file."""
+    json_file = tmp_path / "data.json"
+    json_file.write_text('[{"a": 1, "b": 2}, {"a": 3, "b": 4}]')
+    dataset = P2PFLDataset.from_json(str(json_file))
+    assert dataset.get_num_samples() > 0
+
+
+def test_from_parquet(tmp_path):
+    """Test creating P2PFLDataset from a Parquet file."""
+    import pandas as pd
+
+    parquet_file = tmp_path / "data.parquet"
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]})
+    df.to_parquet(str(parquet_file))
+    dataset = P2PFLDataset.from_parquet(str(parquet_file))
+    assert dataset.get_num_samples() > 0
 
 
 @pytest.mark.parametrize(

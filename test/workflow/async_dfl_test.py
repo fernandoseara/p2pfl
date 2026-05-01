@@ -236,9 +236,9 @@ class TestAsyncDFLContext:
         assert ctx.experiment.tau == 2
 
 
-# ---------------------------------------------------------------------------
+###
 # Helpers for stage-level tests
-# ---------------------------------------------------------------------------
+###
 
 
 def _make_ctx(
@@ -305,9 +305,9 @@ def _attach_stage(stage, ctx):
     return stage
 
 
-# ---------------------------------------------------------------------------
+###
 # _windowed_avg_loss
-# ---------------------------------------------------------------------------
+###
 
 
 class TestWindowedAvgLoss:
@@ -333,9 +333,9 @@ class TestWindowedAvgLoss:
         assert _windowed_avg_loss(losses, t_hat=3, tau=0) == 7.0
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage.run
-# ---------------------------------------------------------------------------
+###
 
 
 class TestTrainingRoundRun:
@@ -445,9 +445,9 @@ class TestTrainingRoundRun:
             mock_nu.assert_not_awaited()
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage._debias_model
-# ---------------------------------------------------------------------------
+###
 
 
 class TestDebiasModel:
@@ -483,9 +483,9 @@ class TestDebiasModel:
         stage._debias_model(ctx)  # should not raise
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage._broadcast_loss
-# ---------------------------------------------------------------------------
+###
 
 
 class TestBroadcastLoss:
@@ -526,9 +526,9 @@ class TestBroadcastLoss:
         await stage._broadcast_loss(ctx)  # should not raise
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage._compute_priorities
-# ---------------------------------------------------------------------------
+###
 
 
 class TestComputePriorities:
@@ -583,9 +583,9 @@ class TestComputePriorities:
         assert priority > 0
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage._network_update (integration of gossip + aggregate)
-# ---------------------------------------------------------------------------
+###
 
 
 class TestNetworkUpdate:
@@ -623,9 +623,9 @@ class TestNetworkUpdate:
         assert ctx.candidates == []
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage._gossip_model
-# ---------------------------------------------------------------------------
+###
 
 
 class TestGossipModel:
@@ -679,9 +679,9 @@ class TestGossipModel:
         await stage._gossip_model(ctx)  # should not raise
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage._send_push_sum_weight
-# ---------------------------------------------------------------------------
+###
 
 
 class TestSendPushSumWeight:
@@ -723,9 +723,9 @@ class TestSendPushSumWeight:
         await stage._send_push_sum_weight(ctx, "neighbor-1")  # should not raise
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage._aggregate
-# ---------------------------------------------------------------------------
+###
 
 
 class TestAggregate:
@@ -818,9 +818,9 @@ class TestAggregate:
         ctx.aggregator.aggregate.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
+###
 # TrainingRoundStage message handlers
-# ---------------------------------------------------------------------------
+###
 
 
 class TestTrainingRoundMessageHandlers:
@@ -1031,9 +1031,9 @@ class TestTrainingRoundMessageHandlers:
         assert result == "false"
 
 
-# ---------------------------------------------------------------------------
+###
 # SetupStage
-# ---------------------------------------------------------------------------
+###
 
 
 class TestSetupStage:

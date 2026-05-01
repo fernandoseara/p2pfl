@@ -12,9 +12,9 @@ from p2pfl.learning.frameworks.tensorflow.custom_models.asydfl_model import (
 from p2pfl.learning.frameworks.tensorflow.custom_models.custom_model_factory import KerasCustomModelFactory
 from p2pfl.learning.frameworks.tensorflow.keras_model import KerasModel
 
-# ---------------------------------------------------------------------------
+###
 # Helpers
-# ---------------------------------------------------------------------------
+###
 
 
 @tf.keras.utils.register_keras_serializable("p2pfl_test")
@@ -26,10 +26,11 @@ class TinyMLP(tf.keras.Model):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(2, activation="relu")
         self.out = tf.keras.layers.Dense(1)
-        self.loss = tf.keras.losses.MeanSquaredError()
-        self.optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
-        # Force build
         self(tf.zeros((1, 3)))
+        self.compile(
+            loss=tf.keras.losses.MeanSquaredError(),
+            optimizer=tf.keras.optimizers.SGD(learning_rate=0.01),
+        )
 
     def call(self, x, training=None):
         """Forward pass."""
@@ -82,9 +83,9 @@ class FixedAsyDFLKerasP2PFLModel(AsyDFLKerasP2PFLModel):
         return FixedAsyDFLKerasP2PFLModel(copied_model, push_sum_weight=push_sum_weight)
 
 
-# ===========================================================================
+###
 # P2PFLModelDecorator tests
-# ===========================================================================
+###
 
 
 class TestP2PFLModelDecorator:
@@ -127,9 +128,9 @@ class TestP2PFLModelDecorator:
         assert wrapper.contributors == ["node-a"]
 
 
-# ===========================================================================
+###
 # DeBiasedAsyDFLKerasModel tests
-# ===========================================================================
+###
 
 
 class TestDeBiasedAsyDFLKerasModel:
@@ -261,9 +262,9 @@ class TestDeBiasedAsyDFLKerasModel:
             np.testing.assert_allclose(b, a, atol=1e-5)
 
 
-# ===========================================================================
+###
 # AsyDFLKerasP2PFLModel tests (using fixed subclass)
-# ===========================================================================
+###
 
 
 class TestAsyDFLKerasP2PFLModel:
@@ -357,9 +358,9 @@ class TestAsyDFLKerasP2PFLModel:
         assert asy.get_num_samples() == 500
 
 
-# ===========================================================================
+###
 # KerasCustomModelFactory tests
-# ===========================================================================
+###
 
 
 class TestKerasCustomModelFactory:

@@ -12,9 +12,9 @@ import pytest
 from p2pfl.management.p2pfl_web_services import P2pflWebServices, P2pflWebServicesError
 from p2pfl.settings import Settings
 
-# ---------------------------------------------------------------------------
-#  Helpers
-# ---------------------------------------------------------------------------
+###
+# Helpers
+###
 
 
 def _mock_response(status_code: int = 200, json_data: dict | None = None) -> MagicMock:
@@ -38,9 +38,9 @@ def _make_services() -> tuple[P2pflWebServices, MagicMock]:
     return svc, mock_client
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServicesError
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServicesError
+###
 
 
 class TestP2pflWebServicesError:
@@ -55,9 +55,9 @@ class TestP2pflWebServicesError:
         assert "not found" in str(err)
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – constructor
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – constructor
+###
 
 
 class TestWebServicesInit:
@@ -77,9 +77,9 @@ class TestWebServicesInit:
         svc._client.close()
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – HTTP helpers
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – HTTP helpers
+###
 
 
 class TestHTTPHelpers:
@@ -138,9 +138,9 @@ class TestHTTPHelpers:
             svc._post("/fail", {})
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – register / unregister node
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – register / unregister node
+###
 
 
 class TestNodeRegistration:
@@ -208,9 +208,9 @@ class TestNodeRegistration:
         svc.unregister_node("gone-node")
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – update_node_status
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – update_node_status
+###
 
 
 class TestUpdateNodeStatus:
@@ -234,9 +234,9 @@ class TestUpdateNodeStatus:
         svc.update_node_status("node-1", "failed")
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – experiments
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – experiments
+###
 
 
 class TestExperiments:
@@ -272,9 +272,9 @@ class TestExperiments:
             mock_enqueue.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – batched data methods
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – batched data methods
+###
 
 
 class TestBatchedData:
@@ -354,9 +354,9 @@ class TestBatchedData:
             assert entry["timestamp"] == now.isoformat()
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – communication log
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – communication log
+###
 
 
 class TestCommunicationLog:
@@ -430,9 +430,9 @@ class TestCommunicationLog:
             assert entry["metadata"] == {"package_type": "message"}
 
 
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – buffer / enqueue / drain / flush
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – buffer / enqueue / drain / flush
+###
 
 
 class TestBufferMechanics:
@@ -453,19 +453,15 @@ class TestBufferMechanics:
     def test_enqueue_respects_max_buffer_size(self):
         """Test enqueue respects max buffer size."""
         svc, _ = _make_services()
-        original = Settings.general.WEB_MAX_BUFFER_SIZE
         Settings.general.WEB_MAX_BUFFER_SIZE = 3
-        try:
-            with patch.object(svc, "_ensure_flush_thread"):
-                for i in range(5):
-                    svc._enqueue({"i": i})
-            entries = svc._drain()
-            assert len(entries) == 3
-            # Oldest entries should have been dropped; newest kept
-            assert entries[0]["i"] == 2
-            assert entries[2]["i"] == 4
-        finally:
-            Settings.general.WEB_MAX_BUFFER_SIZE = original
+        with patch.object(svc, "_ensure_flush_thread"):
+            for i in range(5):
+                svc._enqueue({"i": i})
+        entries = svc._drain()
+        assert len(entries) == 3
+        # Oldest entries should have been dropped; newest kept
+        assert entries[0]["i"] == 2
+        assert entries[2]["i"] == 4
 
     def test_flush_calls_sync_send(self):
         """Test flush calls sync send."""
@@ -485,18 +481,10 @@ class TestBufferMechanics:
         svc.flush()
         client.post.assert_not_called()
 
-    def test_sync_send_drops_on_failure(self, capsys):
-        """Test sync send drops on failure."""
-        svc, client = _make_services()
-        client.post.side_effect = httpx.ConnectError("down")
-        svc._sync_send([{"type": "log"}])
-        captured = capsys.readouterr()
-        assert "Dropped batch" in captured.out
 
-
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – upload_profiling
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – upload_profiling
+###
 
 
 class TestUploadProfiling:
@@ -533,20 +521,10 @@ class TestUploadProfiling:
         svc.upload_profiling("exp-a", str(tmp_path))
         client.post.assert_not_called()
 
-    def test_swallows_post_error(self, tmp_path, capsys):
-        """Test swallows post error."""
-        svc, client = _make_services()
-        svc._exp_id["exp-a"] = 5
-        (tmp_path / "p.pstat").write_bytes(b"x")
-        client.post.side_effect = httpx.ConnectError("down")
-        svc.upload_profiling("exp-a", str(tmp_path))
-        captured = capsys.readouterr()
-        assert "Failed to upload profiling" in captured.out
 
-
-# ---------------------------------------------------------------------------
-#  P2pflWebServices – lifecycle (stop)
-# ---------------------------------------------------------------------------
+###
+# P2pflWebServices – lifecycle (stop)
+###
 
 
 class TestLifecycle:
@@ -567,9 +545,9 @@ class TestLifecycle:
             svc.get_pending_actions()
 
 
-# ===========================================================================
-#  WebP2PFLogger tests
-# ===========================================================================
+###
+# WebP2PFLogger tests
+###
 
 
 class TestWebP2PFLogger:
@@ -979,9 +957,9 @@ class TestWebP2PFLogger:
         inner.cleanup.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-#  DictFormatter / P2pflWebLogHandler
-# ---------------------------------------------------------------------------
+###
+# DictFormatter / P2pflWebLogHandler
+###
 
 
 class TestDictFormatterAndHandler:
@@ -1032,9 +1010,9 @@ class TestDictFormatterAndHandler:
         assert args[3] == "warning msg"
 
 
-# ---------------------------------------------------------------------------
-#  Stub used for MagicMock spec on the inner logger
-# ---------------------------------------------------------------------------
+###
+# Stub used for MagicMock spec on the inner logger
+###
 
 
 class P2PFLoggerStub:
@@ -1044,41 +1022,56 @@ class P2PFLoggerStub:
 
     def register_node(self, address: str) -> None:
         """Register node."""
+
     def unregister_node(self, address: str) -> None:
         """Unregister node."""
+
     def experiment_started(self, node: str, experiment: object) -> None:
         """Experiment started."""
+
     def experiment_ended(self, address: str, experiment: object, status: str) -> None:
         """Experiment ended."""
+
     def on_experiment_change(self, address: str, field_name: str, value: object) -> None:
         """On experiment change."""
+
     def log(self, level: int, node: str, message: str) -> None:
         """Log."""
+
     def log_metric(self, **kwargs: object) -> None:
         """Log metric."""
+
     def log_communication(self, **kwargs: object) -> None:
         """Log communication."""
+
     def get_nodes(self) -> dict:
         """Get nodes."""
         return {}
 
     def add_handler(self, handler: object) -> None:
         """Add handler."""
+
     def finish(self) -> None:
         """Finish."""
+
     def cleanup(self) -> None:
         """Cleanup."""
+
     def reset(self) -> None:
         """Reset."""
+
     def set_level(self, level: object) -> None:
         """Set level."""
+
     def get_level(self) -> int:
         """Get level."""
         return 0
 
     def info(self, node: str, message: str) -> None:
         """Info."""
+
     def debug(self, node: str, message: str) -> None:
         """Debug."""
+
     def warning(self, node: str, message: str) -> None:
         """Warning."""

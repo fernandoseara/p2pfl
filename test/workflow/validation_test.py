@@ -30,9 +30,9 @@ from p2pfl.workflow.validation import (
     validate_workflow,
 )
 
-# ---------------------------------------------------------------------------
+###
 # Helper stages for testing AST extraction
-# ---------------------------------------------------------------------------
+###
 
 
 class ReturnsStringStage(Stage[Any]):
@@ -62,7 +62,7 @@ class BareReturnStage(Stage[Any]):
 
     async def run(self) -> str | None:
         """Bare return."""
-        return
+        return None
 
 
 class TernaryReturnStage(Stage[Any]):
@@ -104,7 +104,7 @@ class NestedFunctionStage(Stage[Any]):
     async def run(self) -> str | None:
         """Return from outer function, not the nested one."""
 
-        def helper():
+        def helper() -> str:
             return "should_be_ignored"
 
         helper()
@@ -144,70 +144,70 @@ class NonTerminalStage(Stage[Any]):
         return "non_terminal"
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: AST return extraction
-# ---------------------------------------------------------------------------
+###
 
 
 class TestExtractReturnsFromRun:
     """Tests for _extract_returns_from_run AST extraction."""
 
-    def test_string_literal_return(self):
+    def test_string_literal_return(self) -> None:
         """Extracts string literal from a return statement."""
         stage = ReturnsStringStage()
         result = _extract_returns_from_run(stage)
         assert "next_stage" in result.targets
         assert not result.dynamic_returns
 
-    def test_none_return(self):
+    def test_none_return(self) -> None:
         """Extracts None from 'return None'."""
         stage = ReturnsNoneStage()
         result = _extract_returns_from_run(stage)
         assert None in result.targets
         assert not result.dynamic_returns
 
-    def test_bare_return(self):
+    def test_bare_return(self) -> None:
         """Extracts None from bare 'return' statement."""
         stage = BareReturnStage()
         result = _extract_returns_from_run(stage)
         assert None in result.targets
 
-    def test_ternary_expression(self):
+    def test_ternary_expression(self) -> None:
         """Extracts both branches of a ternary return."""
         stage = TernaryReturnStage()
         result = _extract_returns_from_run(stage)
         assert "stage_a" in result.targets
         assert "stage_b" in result.targets
 
-    def test_dynamic_return_flagged(self):
+    def test_dynamic_return_flagged(self) -> None:
         """Dynamic returns (variables) are recorded in dynamic_returns."""
         stage = DynamicReturnStage()
         result = _extract_returns_from_run(stage)
         assert len(result.dynamic_returns) > 0
         assert any("target" in d for d in result.dynamic_returns)
 
-    def test_non_string_constant(self):
+    def test_non_string_constant(self) -> None:
         """Non-string constants (e.g. int) are flagged as dynamic returns."""
         stage = NonStringConstantStage()
         result = _extract_returns_from_run(stage)
         assert len(result.dynamic_returns) > 0
         assert any("42" in d for d in result.dynamic_returns)
 
-    def test_nested_function_returns_ignored(self):
+    def test_nested_function_returns_ignored(self) -> None:
         """Returns from nested functions are not collected."""
         stage = NestedFunctionStage()
         result = _extract_returns_from_run(stage)
         assert "should_be_ignored" not in result.targets
         assert "actual_target" in result.targets
 
-    def test_multiple_return_branches(self):
+    def test_multiple_return_branches(self) -> None:
         """All return branches are extracted."""
         stage = MultiReturnStage()
         result = _extract_returns_from_run(stage)
         assert "branch_a" in result.targets
         assert "branch_b" in result.targets
 
-    def test_source_inspection_failure(self):
+    def test_source_inspection_failure(self) -> None:
         """Handles OSError/TypeError when getsource fails."""
         stage = ReturnsStringStage()
         with patch("p2pfl.workflow.validation.inspect.getsource", side_effect=OSError("no source")):
@@ -215,7 +215,7 @@ class TestExtractReturnsFromRun:
         assert len(result.dynamic_returns) == 1
         assert "<could not inspect source>" in result.dynamic_returns[0]
 
-    def test_ast_parse_failure(self):
+    def test_ast_parse_failure(self) -> None:
         """Handles SyntaxError when AST parsing fails."""
         stage = ReturnsStringStage()
         with patch("p2pfl.workflow.validation.inspect.getsource", return_value="def run(self)\n    pass"):
@@ -223,7 +223,7 @@ class TestExtractReturnsFromRun:
         assert len(result.dynamic_returns) == 1
         assert "<could not parse source>" in result.dynamic_returns[0]
 
-    def test_run_not_found_in_ast(self):
+    def test_run_not_found_in_ast(self) -> None:
         """Handles case when run() function not found in parsed AST."""
         stage = ReturnsStringStage()
         # Return valid Python that has no function named "run"
@@ -233,15 +233,15 @@ class TestExtractReturnsFromRun:
         assert "<run() not found in AST>" in result.dynamic_returns[0]
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: validate_workflow
-# ---------------------------------------------------------------------------
+###
 
 
 class TestValidateWorkflow:
     """Tests for validate_workflow graph validation."""
 
-    def test_valid_linear_workflow(self):
+    def test_valid_linear_workflow(self) -> None:
         """A simple valid linear workflow passes validation."""
         stage_map: dict[str, Stage[Any]] = {
             "start": ReturnsStringStage(),
@@ -266,7 +266,7 @@ class TestValidateWorkflow:
         result = validate_workflow(stage_map, "start")
         assert result.is_valid, f"Unexpected errors: {result.errors}"
 
-    def test_initial_stage_not_in_map(self):
+    def test_initial_stage_not_in_map(self) -> None:
         """Error when initial_stage is not in the stage map."""
         stage_map: dict[str, Stage[Any]] = {
             "start": ReturnsStringStage(),
@@ -275,7 +275,7 @@ class TestValidateWorkflow:
         assert not result.is_valid
         assert any("nonexistent" in e and "not in stage map" in e for e in result.errors)
 
-    def test_initial_stage_suggestion_hint(self):
+    def test_initial_stage_suggestion_hint(self) -> None:
         """Suggestion hint when initial_stage is close to an existing name."""
         stage_map: dict[str, Stage[Any]] = {
             "setup": TerminalStage(),
@@ -284,7 +284,7 @@ class TestValidateWorkflow:
         assert not result.is_valid
         assert any("Did you mean 'setup'" in e for e in result.errors)
 
-    def test_invalid_transition_target(self):
+    def test_invalid_transition_target(self) -> None:
         """Error when a stage returns a name that doesn't exist in the map."""
 
         class BadTransitionStage(Stage[Any]):
@@ -300,7 +300,7 @@ class TestValidateWorkflow:
         assert not result.is_valid
         assert any("nonexistent_stage" in e and "not in the stage map" in e for e in result.errors)
 
-    def test_invalid_transition_with_suggestion(self):
+    def test_invalid_transition_with_suggestion(self) -> None:
         """Suggestion hint when a return target is close to an existing stage name."""
 
         class TypoTransitionStage(Stage[Any]):
@@ -317,7 +317,7 @@ class TestValidateWorkflow:
         assert not result.is_valid
         assert any("Did you mean 'terminal'" in e for e in result.errors)
 
-    def test_unreachable_stage(self):
+    def test_unreachable_stage(self) -> None:
         """Warning when a stage is unreachable from initial_stage."""
 
         class IsolatedStage(Stage[Any]):
@@ -341,7 +341,7 @@ class TestValidateWorkflow:
         assert result.is_valid  # unreachable is a warning, not an error
         assert any("isolated" in w and "unreachable" in w for w in result.warnings)
 
-    def test_no_terminal_stage_error(self):
+    def test_no_terminal_stage_error(self) -> None:
         """Error when no stage can return None (workflow can't terminate)."""
         stage_map: dict[str, Stage[Any]] = {
             "non_terminal": NonTerminalStage(),
@@ -350,7 +350,7 @@ class TestValidateWorkflow:
         assert not result.is_valid
         assert any("cannot terminate" in e for e in result.errors)
 
-    def test_dynamic_return_warning(self):
+    def test_dynamic_return_warning(self) -> None:
         """Warning for stages with dynamic returns."""
         stage_map: dict[str, Stage[Any]] = {
             "dynamic_return": DynamicReturnStage(),
@@ -359,7 +359,7 @@ class TestValidateWorkflow:
         result = validate_workflow(stage_map, "dynamic_return")
         assert any("dynamic return" in w for w in result.warnings)
 
-    def test_cycle_does_not_cause_infinite_loop(self):
+    def test_cycle_does_not_cause_infinite_loop(self) -> None:
         """BFS reachability handles cycles without hanging."""
 
         class CycleAStage(Stage[Any]):
@@ -386,29 +386,29 @@ class TestValidateWorkflow:
         assert not any("unreachable" in w for w in result.warnings)
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: ValidationResult formatting
-# ---------------------------------------------------------------------------
+###
 
 
 class TestValidationResult:
     """Tests for ValidationResult string representation."""
 
-    def test_str_with_errors(self):
+    def test_str_with_errors(self) -> None:
         """String representation includes errors."""
         vr = ValidationResult(errors=["Something is wrong"])
         s = str(vr)
         assert "ERRORS:" in s
         assert "Something is wrong" in s
 
-    def test_str_with_warnings(self):
+    def test_str_with_warnings(self) -> None:
         """String representation includes warnings."""
         vr = ValidationResult(warnings=["Watch out"])
         s = str(vr)
         assert "WARNINGS:" in s
         assert "Watch out" in s
 
-    def test_str_with_errors_and_warnings(self):
+    def test_str_with_errors_and_warnings(self) -> None:
         """String representation includes both errors and warnings."""
         vr = ValidationResult(errors=["Bad"], warnings=["Meh"])
         s = str(vr)
@@ -417,54 +417,54 @@ class TestValidationResult:
         assert "WARNINGS:" in s
         assert "Meh" in s
 
-    def test_str_valid(self):
+    def test_str_valid(self) -> None:
         """String representation for a valid result."""
         vr = ValidationResult()
         s = str(vr)
         assert "Workflow graph is valid." in s
 
-    def test_is_valid_property(self):
+    def test_is_valid_property(self) -> None:
         """is_valid returns True when no errors."""
         assert ValidationResult().is_valid
         assert not ValidationResult(errors=["err"]).is_valid
 
-    def test_str_only_warnings_no_valid_message(self):
+    def test_str_only_warnings_no_valid_message(self) -> None:
         """When there are warnings but no errors, 'valid' message is not shown."""
         vr = ValidationResult(warnings=["something"])
         s = str(vr)
         assert "Workflow graph is valid." not in s
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: StageTransitions dataclass
-# ---------------------------------------------------------------------------
+###
 
 
 class TestStageTransitions:
     """Tests for StageTransitions dataclass."""
 
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         """Default fields are empty."""
         st = StageTransitions(stage_name="test")
         assert st.targets == set()
         assert st.dynamic_returns == []
 
-    def test_targets_include_none(self):
+    def test_targets_include_none(self) -> None:
         """None is a valid target (terminal)."""
         st = StageTransitions(stage_name="test", targets={None, "next"})
         assert None in st.targets
         assert "next" in st.targets
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: Edge cases
-# ---------------------------------------------------------------------------
+###
 
 
 class TestEdgeCases:
     """Edge case tests for validation."""
 
-    def test_single_terminal_stage(self):
+    def test_single_terminal_stage(self) -> None:
         """Workflow with a single stage that returns None is valid."""
         stage_map: dict[str, Stage[Any]] = {
             "only": TerminalStage(),
@@ -476,13 +476,13 @@ class TestEdgeCases:
         # correctly detect return None
         assert result.is_valid
 
-    def test_empty_stage_map_with_missing_initial(self):
+    def test_empty_stage_map_with_missing_initial(self) -> None:
         """Empty stage map produces error about missing initial stage."""
         result = validate_workflow({}, "start")
         assert not result.is_valid
         assert any("not in stage map" in e for e in result.errors)
 
-    def test_multiple_invalid_transitions(self):
+    def test_multiple_invalid_transitions(self) -> None:
         """Multiple stages with invalid transitions all produce errors."""
 
         class BadA(Stage[Any]):
@@ -506,7 +506,7 @@ class TestEdgeCases:
         target_errors = [e for e in result.errors if "not in the stage map" in e]
         assert len(target_errors) >= 2
 
-    def test_ternary_with_none_branch(self):
+    def test_ternary_with_none_branch(self) -> None:
         """Ternary that returns None in one branch is detected as terminal."""
 
         class TernaryNoneStage(Stage[Any]):

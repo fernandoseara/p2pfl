@@ -18,7 +18,6 @@
 """Node tests."""
 
 import asyncio  # noqa: E402, I001
-import contextlib  # noqa: E402
 import pytest  # noqa: E402
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset  # noqa: E402
 from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrategy  # noqa: E402
@@ -31,51 +30,24 @@ from p2pfl.settings import Settings
 from p2pfl.workflow.engine.workflow import WorkflowStatus
 from p2pfl.utils.utils import (  # noqa: E402
     check_equal_models,
-    set_standalone_settings,
     wait_convergence,
     wait_to_finish,
 )
 
-with contextlib.suppress(ImportError):
+try:
     from p2pfl.examples.mnist.model.mlp_tensorflow import model_build_fn as model_build_fn_tensorflow
+except ImportError:
+    model_build_fn_tensorflow = pytest.param(None, marks=pytest.mark.skip(reason="TensorFlow not installed"))  # type: ignore[assignment]
 
-
-with contextlib.suppress(ImportError):
+try:
     from p2pfl.examples.mnist.model.mlp_pytorch import model_build_fn as model_build_fn_pytorch
-
-set_standalone_settings()
-logger.set_level("DEBUG")
-
-
-@pytest.fixture
-def two_nodes():
-    """Create two nodes and start them. Yield the nodes. After the test, stop the nodes."""
-    data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
-    n1 = Node(model_build_fn_pytorch(), data)
-    n2 = Node(model_build_fn_pytorch(), data)
-    n1.start()
-    n2.start()
-
-    yield n1, n2
-
-    n1.stop()
-    n2.stop()
+except ImportError:
+    model_build_fn_pytorch = pytest.param(None, marks=pytest.mark.skip(reason="PyTorch not installed"))  # type: ignore[assignment]
 
 
-@pytest.fixture(autouse=True)
-def log_test_start_and_end(request):
-    """Log the start and end of each test."""
-    test_name = request.node.name  # Get the test name
-    logger.info("--PYTEST--", f"Start of test: {test_name}")  # use f-string
-
-    yield
-
-    logger.info("--PYTEST--", f"End of test: {test_name}")
-
-
-########################
-#    Tests Learning    #
-########################
+###
+# Tests Learning
+###
 
 
 # TODO: Add more frameworks and aggregators
@@ -170,76 +142,9 @@ async def test_convergence(x, model_build_fn):
             await n.stop()
 
 
-@pytest.mark.skip(reason="Interrupt-train flow not yet implemented")
-@pytest.mark.asyncio
-async def test_interrupt_train(two_nodes):
-    """Test interrupting training of a node."""
-    n1, n2 = two_nodes
-    await n1.connect(n2.address)
-    await wait_convergence([n1, n2], 1, only_direct=True)
-
-    await n1.set_start_learning(100, 100)
-
-    await asyncio.sleep(1)
-
-    await n1.set_stop_learning()
-
-    await wait_to_finish([n1, n2])
-
-    # Check if execution is incorrect
-    assert "RoundFinishedStage" not in n1.workflow.history
-    assert "RoundFinishedStage" not in n2.workflow.history
-
-
-##############################
-#    Fault Tolerace Tests    #
-##############################
-
-"""
--> Énfasis on the trainset inconsistency
-"""
-
-
-@pytest.mark.skip(reason="Fault-tolerance during learning not yet implemented")
-@pytest.mark.asyncio
-@pytest.mark.parametrize("n", [2, 4])
-async def test_node_down_on_learning(n):
-    """Test node down on learning."""
-    # Node Creation
-    nodes = []
-    data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
-    for _ in range(n):
-        node = Node(model_build_fn_pytorch(), data)
-        await node.start()
-        nodes.append(node)
-
-    # Node Connection
-    for i in range(len(nodes) - 1):
-        await nodes[i + 1].connect(nodes[i].address)
-        await asyncio.sleep(0.1)
-    await wait_convergence(nodes, n - 1, only_direct=False)
-
-    # Start Learning
-    await nodes[0].set_start_learning(rounds=2, epochs=0)
-
-    # Stopping node
-    await asyncio.sleep(1)
-    await nodes[-1].stop()
-
-    await wait_to_finish(nodes)
-
-    # Check if execution is incorrect
-    assert "RoundFinishedStage" not in nodes[-1].workflow.history
-    for node in nodes[:-1]:
-        assert "RoundFinishedStage" in node.workflow.history
-
-    for node in nodes[:-1]:
-        await node.stop()
-
-
-#####
+###
 # Training with other frameworks
-#####
+###
 
 
 @pytest.mark.asyncio

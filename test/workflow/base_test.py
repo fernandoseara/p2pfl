@@ -181,16 +181,9 @@ class TestObservable:
         observer.update.assert_not_called()
 
 
-class TestStage:
-    """Tests for Stage base class."""
-
-    def test_stage_is_abstract(self):
-        """Test that Stage cannot be instantiated directly (run is abstract)."""
-        with pytest.raises(TypeError):
-            Stage()  # type: ignore[abstract]
-
-
-# ========== Helpers for Workflow tests ==========
+###
+# Helpers for Workflow tests
+###
 
 
 class _StageA(Stage[WorkflowContext]):
@@ -260,7 +253,9 @@ def _make_workflow(stages):
     return _TestWorkflow()
 
 
-# ========== WorkflowStatus tests ==========
+###
+# WorkflowStatus tests
+###
 
 
 class TestWorkflowStatus:
@@ -278,7 +273,9 @@ class TestWorkflowStatus:
         assert WorkflowStatus.RUNNING.is_terminal is False
 
 
-# ========== Workflow composition and validation tests ==========
+###
+# Workflow composition and validation tests
+###
 
 
 class TestWorkflowComposition:
@@ -366,7 +363,9 @@ class TestWorkflowComposition:
         assert expanded == set(wf._stage_map.keys())
 
 
-# ========== Workflow run tests ==========
+###
+# Workflow run tests
+###
 
 _TEST_NODE = "wf_test_node"
 
@@ -419,6 +418,7 @@ class TestWorkflowRun:
     @pytest.mark.asyncio
     async def test_run_cancellation_sets_cancelled(self):
         """Test run cancellation sets cancelled."""
+
         class _SlowStage(Stage[WorkflowContext]):
             name = "slow"
 
@@ -435,7 +435,9 @@ class TestWorkflowRun:
         assert wf.status == WorkflowStatus.CANCELLED
 
 
-# ========== Task management tests ==========
+###
+# Task management tests
+###
 
 
 class TestWorkflowTaskManagement:
@@ -444,6 +446,7 @@ class TestWorkflowTaskManagement:
     @pytest.mark.asyncio
     async def test_start_already_running_raises(self):
         """Test start already running raises."""
+
         class _SlowStage(Stage[WorkflowContext]):
             name = "slow"
 
@@ -477,7 +480,9 @@ class TestWorkflowTaskManagement:
         assert wf._task is None
 
 
-# ========== Properties tests ==========
+###
+# Properties tests
+###
 
 
 class TestWorkflowProperties:

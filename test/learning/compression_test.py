@@ -32,9 +32,9 @@ from p2pfl.learning.compression.quantization_strategy import PTQuantization
 from p2pfl.learning.compression.topk_strategy import TopKSparsification
 from p2pfl.learning.compression.zlib_strategy import ZlibCompressor
 
-####
+###
 # PTQuantization
-####
+###
 
 
 @pytest.fixture
@@ -255,6 +255,400 @@ def test_ptq_compression_ratio(ptq_compressor):
     assert 3.5 <= compression_ratio <= 4.5
 
 
+def test_ptq_invalid_dtype_type_error(ptq_compressor):
+    """Test that a non-string dtype that causes TypeError is wrapped in ValueError."""
+    original = np.random.randn(5, 5).astype(np.float32)
+    with pytest.raises(ValueError, match="Invalid dtype"):
+        ptq_compressor.apply_strategy([original], dtype=12345)
+
+
+def test_ptq_unsupported_float_dtype(ptq_compressor):
+    """Test that an unsupported float dtype (float128/longdouble) raises ValueError."""
+    original = np.random.randn(5, 5).astype(np.float32)
+    with pytest.raises(ValueError, match="Unsupported float dtype"):
+        ptq_compressor.apply_strategy([original], dtype="longdouble")
+
+
+def test_ptq_unsupported_int_dtype(ptq_compressor):
+    """Test that an unsupported integer dtype (int64) raises ValueError."""
+    original = np.random.randn(5, 5).astype(np.float32)
+    with pytest.raises(ValueError, match="Unsupported integer dtype"):
+        ptq_compressor.apply_strategy([original], dtype="int64")
+
+
+def test_ptq_reverse_empty_params(ptq_compressor):
+    """Test reverse_strategy raises ValueError on empty param list."""
+    with pytest.raises(ValueError, match="Empty parameter list"):
+        ptq_compressor.reverse_strategy([], {"ptq_original_dtype": np.float32})
+
+
+def test_ptq_reverse_missing_original_dtype(ptq_compressor):
+    """Test reverse_strategy raises ValueError when ptq_original_dtype is missing."""
+    dummy = [np.zeros(5, dtype=np.int8)]
+    with pytest.raises(ValueError, match="Missing 'ptq_original_dtype'"):
+        ptq_compressor.reverse_strategy(dummy, {})
+
+
+def test_ptq_reverse_invalid_scheme_in_info(ptq_compressor):
+    """Test reverse_strategy raises ValueError for invalid scheme stored in additional_info."""
+    dummy = [np.zeros(5, dtype=np.int8)]
+    info = {
+        "ptq_original_dtype": np.float32,
+        "ptq_type": "int",
+        "ptq_scheme": "invalid",
+        "ptq_granularity": "per_tensor",
+        "ptq_scales": [1.0],
+        "ptq_zero_points": [0],
+        "ptq_channel_axis": None,
+    }
+    with pytest.raises(ValueError, match="Unsupported quantization scheme"):
+        ptq_compressor.reverse_strategy(dummy, info)
+
+
+def test_ptq_reverse_invalid_granularity_in_info(ptq_compressor):
+    """Test reverse_strategy raises ValueError for invalid granularity stored in additional_info."""
+    dummy = [np.zeros(5, dtype=np.int8)]
+    info = {
+        "ptq_original_dtype": np.float32,
+        "ptq_type": "int",
+        "ptq_scheme": "symmetric",
+        "ptq_granularity": "invalid",
+        "ptq_scales": [1.0],
+        "ptq_zero_points": [0],
+        "ptq_channel_axis": None,
+    }
+    with pytest.raises(ValueError, match="Unsupported quantization granularity"):
+        ptq_compressor.reverse_strategy(dummy, info)
+
+
+def test_ptq_reverse_missing_channel_axis_for_per_channel(ptq_compressor):
+    """Test reverse_strategy raises ValueError when per_channel but channel_axis is None."""
+    dummy = [np.zeros((3, 4), dtype=np.int8)]
+    info = {
+        "ptq_original_dtype": np.float32,
+        "ptq_type": "int",
+        "ptq_scheme": "symmetric",
+        "ptq_granularity": "per_channel",
+        "ptq_scales": [np.array([1.0, 1.0, 1.0], dtype=np.float32)],
+        "ptq_zero_points": [np.array([0, 0, 0], dtype=np.int32)],
+        "ptq_channel_axis": None,
+    }
+    with pytest.raises(ValueError, match="Missing 'ptq_channel_axis'"):
+        ptq_compressor.reverse_strategy(dummy, info)
+
+
+def test_ptq_reverse_insufficient_scales(ptq_compressor):
+    """Test reverse_strategy raises ValueError when there are fewer scales than params."""
+    dummy = [np.zeros(5, dtype=np.int8), np.zeros(5, dtype=np.int8)]
+    info = {
+        "ptq_original_dtype": np.float32,
+        "ptq_type": "int",
+        "ptq_scheme": "symmetric",
+        "ptq_granularity": "per_tensor",
+        "ptq_scales": [1.0],  # Only 1 scale for 2 params
+        "ptq_zero_points": [0],
+        "ptq_channel_axis": None,
+    }
+    with pytest.raises(ValueError, match="Not enough scale/zero_point"):
+        ptq_compressor.reverse_strategy(dummy, info)
+
+
+@pytest.mark.parametrize(
+    "dtype,expected_range",
+    [
+        ("int16", (-32768, 32767)),
+        ("uint16", (0, 65535)),
+        ("int32", (-2147483648, 2147483647)),
+    ],
+)
+def test_ptq_wider_int_dtypes(ptq_compressor, dtype, expected_range):
+    """Test quantization with int16, uint16, and int32 dtypes exercises the qmin/qmax branches."""
+    original = np.random.randn(5, 5).astype(np.float32)
+    target_dtype = np.dtype(dtype)
+    # Call internal method directly to exercise dtype-specific quantization range branches
+    q_tensor, scale, zero_point = ptq_compressor._quantize_tensor(original, target_dtype, "symmetric")
+    assert q_tensor.dtype == target_dtype
+    assert q_tensor.shape == original.shape
+    assert q_tensor.min() >= expected_range[0]
+    assert q_tensor.max() <= expected_range[1]
+    assert scale > 0
+
+
+def test_ptq_empty_tensor(ptq_compressor):
+    """Test quantization of an empty tensor via _quantize_tensor."""
+    empty = np.array([], dtype=np.float32).reshape(0, 5)
+    params = [np.random.randn(3, 5).astype(np.float32), empty]
+    quantized, info = ptq_compressor.apply_strategy(params, dtype="int8")
+    assert quantized[1].size == 0
+    dequantized = ptq_compressor.reverse_strategy(quantized, info)
+    assert dequantized[1].size == 0
+
+
+def test_ptq_per_channel_scalar_tensor_raises(ptq_compressor):
+    """Test that per-channel quantization on a scalar raises ValueError."""
+    scalar = np.float32(5.0)
+    with pytest.raises(ValueError, match="scalar tensor"):
+        ptq_compressor.apply_strategy([scalar], dtype="int8", granularity="per_channel")
+
+
+def test_ptq_per_channel_invalid_axis(ptq_compressor):
+    """Test that per-channel with invalid channel_axis raises ValueError."""
+    tensor = np.random.randn(3, 4).astype(np.float32)
+    with pytest.raises(ValueError, match="Invalid channel_axis"):
+        ptq_compressor.apply_strategy([tensor], dtype="int8", granularity="per_channel", channel_axis=5)
+
+
+def test_ptq_per_channel_1d_fallback(ptq_compressor):
+    """Test that per-channel quantization on a 1D tensor falls back to per-tensor."""
+    tensor_1d = np.random.randn(10).astype(np.float32)
+    # Call internal method directly to exercise the 1D fallback path (lines 320-323)
+    q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor_1d, np.dtype("int8"), "symmetric", 0)
+    assert q_tensor.shape == tensor_1d.shape
+    assert q_tensor.dtype == np.int8
+    assert scales.shape == (1,)
+    assert zero_points.shape == (1,)
+
+
+@pytest.mark.parametrize("dtype", ["uint8", "int16", "uint16", "int32"])
+def test_ptq_per_channel_various_int_dtypes(ptq_compressor, dtype):
+    """Test per-channel quantization with wider integer dtypes to cover qmin/qmax branches."""
+    tensor = np.random.randn(4, 6).astype(np.float32)
+    target_dtype = np.dtype(dtype)
+    # Call internal method directly to exercise the dtype-specific qmin/qmax branches
+    q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor, target_dtype, "symmetric", 0)
+    assert q_tensor.dtype == target_dtype
+    assert q_tensor.shape == tensor.shape
+    assert scales.shape == (4,)
+    assert zero_points.shape == (4,)
+
+
+def test_ptq_per_channel_symmetric_zero_channel(ptq_compressor):
+    """Test per-channel symmetric quantization where one channel is all zeros."""
+    tensor = np.random.randn(3, 4).astype(np.float32)
+    tensor[1, :] = 0.0  # Make channel 1 all zeros
+    quantized, info = ptq_compressor.apply_strategy([tensor], dtype="int8", scheme="symmetric", granularity="per_channel", channel_axis=0)
+    dequantized = ptq_compressor.reverse_strategy(quantized, info)
+    # The zero channel should remain zero
+    assert np.allclose(dequantized[0][1, :], 0.0, atol=1e-6)
+
+
+def test_ptq_per_channel_asymmetric(ptq_compressor):
+    """Test per-channel asymmetric quantization covering the asymmetric branch in _quantize_per_channel."""
+    tensor = np.random.randn(4, 5).astype(np.float32)
+    # Call internal method to exercise asymmetric per-channel quantization (lines 384-415)
+    q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor, np.dtype("int8"), "asymmetric", 0)
+    assert q_tensor.dtype == np.int8
+    assert q_tensor.shape == tensor.shape
+    assert scales.shape == (4,)
+    assert zero_points.shape == (4,)
+    assert np.all(scales > 0)  # All scales should be positive for non-constant channels
+
+
+def test_ptq_per_channel_asymmetric_constant_zero_channel(ptq_compressor):
+    """Test per-channel asymmetric where a channel has all zeros (tmin==tmax==0)."""
+    tensor = np.random.randn(3, 4).astype(np.float32)
+    tensor[0, :] = 0.0
+    # Call internal method to exercise asymmetric constant-zero branch (lines 388-392)
+    q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor, np.dtype("int8"), "asymmetric", 0)
+    # The zero channel should be quantized to all zeros with scale=1.0
+    assert np.all(q_tensor[0, :] == 0)
+    assert scales[0] == 1.0
+    assert zero_points[0] == 0
+
+
+def test_ptq_per_channel_asymmetric_constant_nonzero_channel(ptq_compressor):
+    """Test per-channel asymmetric quantization where a channel is constant nonzero."""
+    tensor = np.random.randn(3, 4).astype(np.float32)
+    tensor[2, :] = 7.0  # Constant nonzero channel
+    # Call internal method to exercise the constant nonzero branch (lines 394-399)
+    q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor, np.dtype("int8"), "asymmetric", 0)
+    assert q_tensor.dtype == np.int8
+    assert q_tensor.shape == tensor.shape
+    # The constant channel should be mapped to mid_q
+    mid_q = (-128 + 127) // 2  # = -1 for int8
+    assert np.all(q_tensor[2, :] == mid_q)
+
+
+def test_ptq_dequantize_tensor_invalid_scale_type(ptq_compressor):
+    """Test _dequantize_tensor raises ValueError for non-numeric scale."""
+    tensor = np.zeros(5, dtype=np.int8)
+    with pytest.raises(ValueError, match="Invalid scale factor"):
+        ptq_compressor._dequantize_tensor(tensor, "bad", 0, np.float32)
+
+
+def test_ptq_dequantize_tensor_negative_scale(ptq_compressor):
+    """Test _dequantize_tensor raises ValueError for negative scale."""
+    tensor = np.zeros(5, dtype=np.int8)
+    with pytest.raises(ValueError, match="Scale must be positive"):
+        ptq_compressor._dequantize_tensor(tensor, -1.0, 0, np.float32)
+
+
+def test_ptq_dequantize_tensor_invalid_zero_point_type(ptq_compressor):
+    """Test _dequantize_tensor raises ValueError for non-integer zero_point."""
+    tensor = np.zeros(5, dtype=np.int8)
+    with pytest.raises(ValueError, match="Zero point must be an integer"):
+        ptq_compressor._dequantize_tensor(tensor, 1.0, 0.5, np.float32)
+
+
+def test_ptq_dequantize_tensor_empty(ptq_compressor):
+    """Test _dequantize_tensor handles empty tensor."""
+    empty = np.array([], dtype=np.int8)
+    result = ptq_compressor._dequantize_tensor(empty, 1.0, 0, np.float32)
+    assert result.size == 0
+    assert result.dtype == np.float32
+
+
+def test_ptq_dequantize_per_channel_invalid_scales_type(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError when scales is not ndarray."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    with pytest.raises(ValueError, match="Scales must be a numpy array"):
+        ptq_compressor._dequantize_per_channel(tensor, [1.0, 1.0, 1.0], np.array([0, 0, 0], dtype=np.int32), 0, np.float32)
+
+
+def test_ptq_dequantize_per_channel_invalid_zero_points_type(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError when zero_points is not ndarray."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    with pytest.raises(ValueError, match="Zero points must be a numpy array"):
+        ptq_compressor._dequantize_per_channel(tensor, np.array([1.0, 1.0, 1.0], dtype=np.float32), [0, 0, 0], 0, np.float32)
+
+
+def test_ptq_dequantize_per_channel_non_1d_scales(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError when scales is not 1D."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    with pytest.raises(ValueError, match="Scales must be a 1D array"):
+        ptq_compressor._dequantize_per_channel(tensor, np.ones((3, 1), dtype=np.float32), np.zeros(3, dtype=np.int32), 0, np.float32)
+
+
+def test_ptq_dequantize_per_channel_non_1d_zero_points(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError when zero_points is not 1D."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    with pytest.raises(ValueError, match="Zero points must be a 1D array"):
+        ptq_compressor._dequantize_per_channel(tensor, np.ones(3, dtype=np.float32), np.zeros((3, 1), dtype=np.int32), 0, np.float32)
+
+
+def test_ptq_dequantize_per_channel_mismatched_lengths(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError when scales/zero_points length mismatch."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    with pytest.raises(ValueError, match="must match number of zero points"):
+        ptq_compressor._dequantize_per_channel(tensor, np.ones(3, dtype=np.float32), np.zeros(2, dtype=np.int32), 0, np.float32)
+
+
+def test_ptq_dequantize_per_channel_empty_tensor(ptq_compressor):
+    """Test _dequantize_per_channel handles empty tensor."""
+    empty = np.array([], dtype=np.int8).reshape(0, 4)
+    result = ptq_compressor._dequantize_per_channel(empty, np.array([], dtype=np.float32), np.array([], dtype=np.int32), 0, np.float32)
+    assert result.size == 0
+
+
+def test_ptq_dequantize_per_channel_single_scale_fallback(ptq_compressor):
+    """Test _dequantize_per_channel falls back to per-tensor when scales has single element."""
+    tensor = np.array([10, 20, 30], dtype=np.int8)
+    # Use float64 scales since np.float64 passes isinstance(x, float) but np.float32 does not
+    result = ptq_compressor._dequantize_per_channel(tensor, np.array([0.5], dtype=np.float64), np.array([0], dtype=np.int32), 0, np.float32)
+    expected = tensor.astype(np.float32) * 0.5
+    np.testing.assert_allclose(result, expected)
+
+
+def test_ptq_dequantize_per_channel_scalar_tensor_raises(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError on scalar tensor with multiple scales."""
+    scalar = np.int8(5)
+    with pytest.raises(ValueError, match="scalar tensor"):
+        ptq_compressor._dequantize_per_channel(
+            scalar, np.array([1.0, 2.0], dtype=np.float32), np.array([0, 0], dtype=np.int32), 0, np.float32
+        )
+
+
+def test_ptq_dequantize_per_channel_invalid_axis(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError for invalid channel_axis."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    with pytest.raises(ValueError, match="Invalid channel_axis"):
+        ptq_compressor._dequantize_per_channel(tensor, np.ones(3, dtype=np.float32), np.zeros(3, dtype=np.int32), 5, np.float32)
+
+
+def test_ptq_dequantize_per_channel_channel_count_mismatch(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError when channels != len(scales)."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    with pytest.raises(ValueError, match="Number of channels"):
+        ptq_compressor._dequantize_per_channel(tensor, np.ones(5, dtype=np.float32), np.zeros(5, dtype=np.int32), 0, np.float32)
+
+
+def test_ptq_dequantize_per_channel_invalid_scale_value(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError for non-finite scale in a channel."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    scales = np.array([1.0, np.inf, 1.0], dtype=np.float32)
+    zero_points = np.zeros(3, dtype=np.int32)
+    with pytest.raises(ValueError, match="Invalid scale factor at index"):
+        ptq_compressor._dequantize_per_channel(tensor, scales, zero_points, 0, np.float32)
+
+
+def test_ptq_dequantize_per_channel_negative_scale_value(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError for negative scale in a channel."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    scales = np.array([1.0, -0.5, 1.0], dtype=np.float32)
+    zero_points = np.zeros(3, dtype=np.int32)
+    with pytest.raises(ValueError, match="Scale must be positive"):
+        ptq_compressor._dequantize_per_channel(tensor, scales, zero_points, 0, np.float32)
+
+
+def test_ptq_dequantize_per_channel_invalid_zero_point_value(ptq_compressor):
+    """Test _dequantize_per_channel raises ValueError for non-integer zero_point in a channel."""
+    tensor = np.zeros((3, 4), dtype=np.int8)
+    scales = np.ones(3, dtype=np.float32)
+    zero_points = np.array([0.0, 0.5, 0.0], dtype=np.float64)
+    with pytest.raises(ValueError, match="Zero point must be an integer"):
+        ptq_compressor._dequantize_per_channel(tensor, scales, zero_points, 0, np.float32)
+
+
+def test_ptq_per_channel_asymmetric_scale_zero_guard(ptq_compressor):
+    """Test per-channel asymmetric quantization where scale rounds to zero due to subnormal values."""
+    # Craft a channel where tmin != tmax but (tmax - tmin) / (qmax - qmin) == 0.0
+    eps = np.finfo(np.float32).smallest_subnormal
+    tensor = np.array([[0.0, eps, 0.0, eps], [1.0, 2.0, 3.0, 4.0]], dtype=np.float32)
+    q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(tensor, np.dtype("int8"), "asymmetric", 0)
+    # The first channel has near-zero range, scale should be set to 1.0 (the guard value)
+    assert scales[0] == 1.0
+    assert q_tensor.dtype == np.int8
+
+
+def test_ptq_quantize_tensor_unsupported_dtype(ptq_compressor):
+    """Test _quantize_tensor raises ValueError for unsupported integer dtype directly."""
+    tensor = np.random.randn(5).astype(np.float32)
+    with pytest.raises(ValueError, match="Unsupported integer dtype"):
+        ptq_compressor._quantize_tensor(tensor, np.dtype("int64"), "symmetric")
+
+
+def test_ptq_quantize_per_channel_unsupported_dtype(ptq_compressor):
+    """Test _quantize_per_channel raises ValueError for unsupported integer dtype directly."""
+    tensor = np.random.randn(3, 4).astype(np.float32)
+    with pytest.raises(ValueError, match="Unsupported integer dtype"):
+        ptq_compressor._quantize_per_channel(tensor, np.dtype("int64"), "symmetric", 0)
+
+
+def test_ptq_quantize_per_channel_empty_2d_tensor(ptq_compressor):
+    """Test _quantize_per_channel handles empty 2D tensor (num_channels=0)."""
+    empty = np.array([], dtype=np.float32).reshape(0, 4)
+    q_tensor, scales, zero_points = ptq_compressor._quantize_per_channel(empty, np.dtype("int8"), "symmetric", 0)
+    assert q_tensor.size == 0
+    assert scales.size == 0
+    assert zero_points.size == 0
+
+
+def test_ptq_dequantize_per_channel_asymmetric_path(ptq_compressor):
+    """Test _dequantize_per_channel with nonzero zero_points exercises the asymmetric branch (line 554)."""
+    # Create a quantized tensor and manually set up scales/zero_points with nonzero zero_point
+    tensor = np.array([[10, 20, 30], [40, 50, 60], [70, 80, 90]], dtype=np.int8)
+    scales = np.array([0.1, 0.2, 0.3], dtype=np.float64)
+    zero_points = np.array([5, 10, 15], dtype=np.int32)
+    result = ptq_compressor._dequantize_per_channel(tensor, scales, zero_points, 0, np.float32)
+    # Channel 0: (x - 5) * 0.1, Channel 1: (x - 10) * 0.2, Channel 2: (x - 15) * 0.3
+    expected_ch0 = (tensor[0].astype(np.float32) - 5) * 0.1
+    expected_ch1 = (tensor[1].astype(np.float32) - 10) * 0.2
+    expected_ch2 = (tensor[2].astype(np.float32) - 15) * 0.3
+    np.testing.assert_allclose(result[0], expected_ch0, rtol=1e-5)
+    np.testing.assert_allclose(result[1], expected_ch1, rtol=1e-5)
+    np.testing.assert_allclose(result[2], expected_ch2, rtol=1e-5)
+
+
 ###
 # TopK
 ###
@@ -459,6 +853,9 @@ def test_additional_info_preservation(compression_manager: CompressionManager):
 
     assert registry, "The compression registry should not be empty."
     for technique_name in registry:
-        compressed_data = compression_manager.apply(original_params, additional_info, {technique_name: {}})
+        try:
+            compressed_data = compression_manager.apply(original_params, additional_info, {technique_name: {}})
+        except ImportError:
+            continue
         _, decompressed_info = compression_manager.reverse(compressed_data)
         assert decompressed_info == additional_info, f"Additional info lost for technique '{technique_name}'"

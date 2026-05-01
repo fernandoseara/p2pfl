@@ -18,24 +18,18 @@
 
 """Tests for Differential Privacy."""
 
-import contextlib
 import random
-from typing import Any
 
 import numpy as np
 import pytest
-from datasets import DatasetDict, load_dataset  # type: ignore
 
-from p2pfl.communication.protocols.protobuff.memory import MemoryCommunicationProtocol
 from p2pfl.learning.compression.dp_strategy import DifferentialPrivacyCompressor
-from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
-from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrategy
-from p2pfl.node import Node
 from p2pfl.settings import Settings
-from p2pfl.utils.utils import wait_to_finish
 
-with contextlib.suppress(ImportError):
+try:
     from p2pfl.examples.mnist.model.mlp_pytorch import model_build_fn as model_build_fn_torch
+except ImportError:
+    model_build_fn_torch = pytest.param(None, marks=pytest.mark.skip(reason="PyTorch not installed"))  # type: ignore[assignment]
 
 
 ###
@@ -50,11 +44,7 @@ def set_random_seed():
     random.seed(seed)
     np.random.seed(seed)
     Settings.general.SEED = seed
-
     yield
-
-    np.random.seed(None)
-    random.seed(None)
 
 
 @pytest.fixture
@@ -169,66 +159,3 @@ def test_dp_empty_params(dp_compressor):
         dp_compressor.apply_strategy(params=[], clip_norm=1.0, epsilon=4.0, delta=1e-5, noise_type="gaussian")
 
 
-@pytest.mark.asyncio
-@pytest.mark.e2e_train
-@pytest.mark.parametrize("build_model_fn", [model_build_fn_torch])
-async def test_learner_train(build_model_fn) -> None:
-    """Test DifferentialPrivacyCompressor convergence on a tiny dataset."""
-    # TODO: This test requires Node to be fully working with asyncio support.
-    # Currently gets stuck during training. Re-enable once Node is fixed.
-    raise NotImplementedError("DP training test disabled: Node async support not yet complete")
-
-    # Dataset
-    dataset = P2PFLDataset(
-        DatasetDict(
-            {
-                "train": load_dataset("p2pfl/MNIST", split="train[:100]"),
-                "test": load_dataset("p2pfl/MNIST", split="test[:10]"),
-            }
-        )
-    )
-
-    # Two equal-sized partitions (one per node)
-    partitions = dataset.generate_partitions(
-        2, RandomIIDPartitionStrategy(), seed=Settings.general.SEED if Settings.general.SEED is not None else 42
-    )
-
-    # DP Compressor
-    dp_config = {
-        "dp": {
-            "clip_norm": 1.0,
-            "epsilon": 10.0,  # increased epsilon for stability
-            "delta": 1e-5,
-            "noise_type": "gaussian",
-        }
-    }
-
-    # Create the model
-    model1 = build_model_fn(compression=dp_config)
-    model2 = model1.build_copy(compression=dp_config)
-
-    n1 = Node(model1, partitions[0], protocol=MemoryCommunicationProtocol())
-    n2 = Node(model2, partitions[1], protocol=MemoryCommunicationProtocol())
-    await n1.start()
-    await n2.start()
-
-    await n2.connect(n1.address)
-
-    try:
-        await n1.set_start_learning(rounds=3, epochs=4)
-        await wait_to_finish([n1, n2], timeout=280)
-
-        # Test
-        result = await n1.learner.evaluate()
-        metrics: dict[str, float] = {k: v for k, v in result.items() if "loss" not in k and isinstance(v, int | float)}
-        compile_metrics: dict | Any = result.get("compile_metrics", {})
-        if isinstance(compile_metrics, dict):
-            metrics.update({k: v for k, v in compile_metrics.items() if isinstance(v, int | float)})
-    finally:
-        await n1.stop()
-        await n2.stop()
-
-    assert metrics, "No evaluation metrics returned"
-    assert all(np.isfinite(list(metrics.values()))), f"Non-finite values: {metrics}"
-
-    assert any(v > 0.4 for v in metrics.values()), f"Expected at least one metric > 0.4, got {metrics}"

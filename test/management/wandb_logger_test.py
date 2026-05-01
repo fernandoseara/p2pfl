@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import logging
 import types
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import p2pfl.management.logger.decorators.wandb_logger as wl_mod
 from p2pfl.management.logger.decorators.wandb_logger import WandbLogger
 from p2pfl.workflow.engine.experiment import Experiment
 
-# ---------------------------------------------------------------------------
+###
 # Helpers
-# ---------------------------------------------------------------------------
+###
 
 
 def _make_mock_wandb() -> types.ModuleType:
@@ -29,8 +30,8 @@ def _make_mock_run() -> MagicMock:
     return MagicMock(name="wandb_run")
 
 
-def _make_experiment(**overrides) -> Experiment:
-    kw = {"exp_name": "test_exp", "total_rounds": 3}
+def _make_experiment(**overrides: Any) -> Experiment:
+    kw: dict[str, Any] = {"exp_name": "test_exp", "total_rounds": 3}
     kw.update(overrides)
     return Experiment(**kw)
 
@@ -88,9 +89,9 @@ def _build_logger(
     return logger, base, mock_wandb
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: connect()
-# ---------------------------------------------------------------------------
+###
 
 
 class TestConnect:
@@ -198,9 +199,9 @@ class TestConnect:
         assert _base_logged_at(base, logging.DEBUG)
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: experiment_started()
-# ---------------------------------------------------------------------------
+###
 
 
 class TestExperimentStarted:
@@ -345,9 +346,9 @@ class TestExperimentStarted:
             assert key not in kw
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: on_experiment_change()
-# ---------------------------------------------------------------------------
+###
 
 
 class TestOnExperimentChange:
@@ -401,9 +402,9 @@ class TestOnExperimentChange:
         base.on_experiment_change.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: log_metric()
-# ---------------------------------------------------------------------------
+###
 
 
 class TestLogMetric:
@@ -449,9 +450,9 @@ class TestLogMetric:
         base.log_metric.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
+###
 # Tests: finish()
-# ---------------------------------------------------------------------------
+###
 
 
 class TestFinish:

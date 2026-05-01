@@ -19,19 +19,22 @@
 """Pytest configuration for p2pfl tests."""
 
 import contextlib
+import copy
 import os
 import sys
 
 # Disable loading ~/.p2pfl_env during tests to prevent interference
 os.environ["P2PFL_TESTING"] = "1"
 
-#
+###
 # MacOS Problem FIXES
-#
+###
 
 if sys.platform == "darwin":
     os.environ.setdefault("no_proxy", "*")
     os.environ.setdefault("NO_PROXY", "*")
+    # Prevent OpenMP segfault when torch and xgboost are loaded together
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 with contextlib.suppress(ImportError):
     import torch  # noqa: F401
@@ -42,6 +45,25 @@ with contextlib.suppress(ImportError):
 import pytest  # noqa: E402, F401
 
 from p2pfl.management.logger import logger  # noqa: F401, E402
+from p2pfl.utils.utils import set_standalone_settings  # noqa: E402
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _standalone_settings():
+    """Apply standalone settings once for the entire test session."""
+    set_standalone_settings()
+
+
+@pytest.fixture(autouse=True)
+def _settings_snapshot():
+    """Snapshot and restore Settings after every test to prevent cross-test pollution."""
+    from p2pfl.settings import Settings
+
+    sections = ("general", "heartbeat", "gossip", "ssl", "training")
+    snap = {n: copy.deepcopy(getattr(Settings, n)) for n in sections}
+    yield
+    for n, obj in snap.items():
+        setattr(Settings, n, obj)
 
 
 def pytest_configure(config):

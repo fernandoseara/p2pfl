@@ -33,9 +33,6 @@ from p2pfl.communication.commands.command import Command
 from p2pfl.communication.protocols.protobuff.memory import MemoryCommunicationProtocol
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
 from p2pfl.settings import Settings
-from p2pfl.utils.utils import set_standalone_settings
-
-set_standalone_settings()
 
 
 class TrackingCommand(Command):
@@ -55,9 +52,9 @@ class TrackingCommand(Command):
         self.received.append((source, args))
 
 
-# =============================================================================
+###
 # Server-level buffer tests (Phase 1)
-# =============================================================================
+###
 
 
 class TestMessageBuffer:
@@ -206,9 +203,9 @@ class TestMessageBuffer:
             await proto.stop()
 
 
-# =============================================================================
+###
 # End-to-end: line topology with deferred replay (Phase 2)
-# =============================================================================
+###
 
 
 class TestMessageBufferingE2E:
@@ -264,7 +261,6 @@ class TestMessageBufferingE2E:
         register_workflow("test_hello_wf", HelloWorkflow)
 
         # Use fast gossip for the test
-        old_period = Settings.gossip.PERIOD
         Settings.gossip.PERIOD = 1
         Settings.training.SYNCHRONIZATION_TIMEOUT = 15
 
@@ -301,6 +297,5 @@ class TestMessageBufferingE2E:
                 assert not node.state.is_learning, f"{node.address} is still learning"
                 assert node.state.is_terminal or node.state == node.state.IDLE, f"{node.address} state: {node.state}"
         finally:
-            Settings.gossip.PERIOD = old_period
             for n in nodes:
                 await n.stop()

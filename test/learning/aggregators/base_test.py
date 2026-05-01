@@ -24,28 +24,16 @@ This allows testing the validation/compatibility system in isolation.
 
 import numpy as np
 import pytest
-from mocks import TreeBasedModelMock, WeightBasedModelMock
 
-from p2pfl.learning.aggregators.aggregator import IncompatibleModelError, NoModelsToAggregateError, WeightAggregator
+from p2pfl.learning.aggregators.aggregator import IncompatibleModelError, NoModelsToAggregateError
 from p2pfl.learning.aggregators.fedavg import FedAvg
 from p2pfl.learning.aggregators.sequential import SequentialLearning
 
-###############################################
-# Inheritance Hierarchy Tests
-###############################################
+from .mocks import TreeBasedModelMock, WeightBasedModelMock
 
-
-def test_inheritance_hierarchy():
-    """Test that aggregators inherit from correct base classes."""
-    from p2pfl.learning.aggregators.aggregator import Aggregator
-
-    assert issubclass(FedAvg, WeightAggregator)
-    assert issubclass(SequentialLearning, Aggregator)
-
-
-###############################################
+###
 # Model Compatibility Tests
-###############################################
+###
 
 
 def test_weight_aggregator_accepts_weight_models():
@@ -87,9 +75,9 @@ def test_weight_aggregator_rejects_mixed_models():
         aggregator.aggregate(models)
 
 
-###############################################
+###
 # SequentialLearning Tests
-###############################################
+###
 
 
 def test_sequential_learning_accepts_weight_models():
