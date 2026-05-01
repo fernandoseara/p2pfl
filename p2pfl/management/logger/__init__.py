@@ -31,4 +31,4 @@ __all__ = ["logger", "P2PFLogger", "AsyncLogger", "FileLogger", "SingletonLogger
 logger: P2PFLogger
 
 # This is only executed once, when the module is first imported
-logger = SingletonLogger(WandbLogger(WebP2PFLogger(FileLogger(AsyncLogger(P2PFLogger(disable_locks=False))))))
+logger = SingletonLogger(AsyncLogger(WandbLogger(WebP2PFLogger(FileLogger(P2PFLogger(disable_locks=False))))))
