@@ -91,6 +91,20 @@ A big thank you to the community for your interest in P2PFL! We appreciate your 
 
 [![Star History Chart](https://api.star-history.com/svg?repos=p2pfl/p2pfl&type=Date)](https://star-history.com/#p2pfl/p2pfl&Date)
 
+## 📝 Citation
+
+If you find P2PFL helpful in your research, please cite it as:
+
+```bibtex
+@misc{p2pfl,
+  author = {Pedro Guijas Bravo},
+  title = {p2pfl: Federated Learning over P2P networks},
+  year = {2022},
+  publisher = {GitHub},
+  url = {https://github.com/p2pfl/p2pfl}
+}
+```
+
 ## 📜 License
 
 [GNU General Public License, Version 3.0](https://www.gnu.org/licenses/gpl-3.0.en.html)
