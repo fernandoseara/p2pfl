@@ -17,7 +17,6 @@
 #
 """Launch from YAMLs."""
 
-import importlib
 import logging
 import os
 import time
@@ -29,24 +28,12 @@ import yaml
 from p2pfl.learning.aggregators.aggregator import Aggregator
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks.p2pfl_model import P2PFLModel
+from p2pfl.management.launch_from_yaml.utils import export_experiment_data, load_by_package_and_name, resize_partitions
 from p2pfl.management.logger import logger
 from p2pfl.node import Node
 from p2pfl.settings import Settings
 from p2pfl.utils.topologies import TopologyFactory
 from p2pfl.utils.utils import wait_convergence, wait_to_finish
-
-
-def load_by_package_and_name(package_name, class_name) -> Any:
-    """
-    Load a class by package and name.
-
-    Args:
-        package_name: The package name.
-        class_name: The class name.
-
-    """
-    module = importlib.import_module(package_name)
-    return getattr(module, class_name)
 
 
 async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
@@ -68,7 +55,6 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     custom_settings = config.get("settings", {})
     if custom_settings:
         Settings.set_from_dict(custom_settings)
-        # Refresh (already initialized)
         logger.set_level(Settings.general.LOG_LEVEL)
 
     # Get Amount of Nodes
@@ -89,7 +75,6 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     if profiling_enabled:
         import yappi  # type: ignore
 
-        # Start profiler
         yappi.start()
 
     start_time = None
@@ -109,7 +94,7 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     ###########
 
     experiment_config = config.get("experiment", {})
-    dataset_config = experiment_config.get("dataset", {})  # Get dataset config
+    dataset_config = experiment_config.get("dataset", {})
     if not dataset_config:
         raise ValueError("Missing 'dataset' configuration in YAML file.")
     data_source = dataset_config.get("source")
@@ -132,13 +117,10 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     elif data_source == "pandas":
         dataset = P2PFLDataset.from_pandas(dataset_name)
     elif data_source == "custom":
-        # Get custom dataset configuration
         package = dataset_config.get("package")
         dataset_class = dataset_config.get("class")
         if not package or not dataset_class:
             raise ValueError("Missing package or class for custom dataset")
-
-        # Load custom dataset class
         dataset_class = load_by_package_and_name(package, dataset_class)
         dataset = dataset_class(**dataset_config.get("params", {}))
 
@@ -161,12 +143,15 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     reduction_factor = partitioning_config.get("reduction_factor", 1)
     partitions = dataset.generate_partitions(
         n * reduction_factor if reduced_dataset else n,
-        load_by_package_and_name(
-            partition_package,
-            partition_class_name,
-        ),
+        load_by_package_and_name(partition_package, partition_class_name),
         **partitioning_config.get("params", {}),
     )
+
+    # Resize partitions for scalability tests
+    samples_per_node = partitioning_config.get("samples_per_node", None)
+    if samples_per_node is not None:
+        test_samples_per_node = partitioning_config.get("test_samples_per_node", None)
+        partitions = resize_partitions(partitions, samples_per_node, test_samples_per_node)
 
     # Transforms (apply AFTER partitioning)
     transforms_config = dataset_config.get("transforms", None)
@@ -175,11 +160,7 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
         transform_function = transforms_config.get("function")
         if not transforms_package or not transform_function:
             raise ValueError("Missing 'transforms' configuration in YAML file.")
-        transform_class = load_by_package_and_name(
-            transforms_package,
-            transform_function,
-        )
-        # Apply transforms to each partition
+        transform_class = load_by_package_and_name(transforms_package, transform_function)
         for partition in partitions:
             partition.set_transforms(transform_class(**transforms_config.get("params", {})))
 
@@ -194,10 +175,7 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     model_build_fn = model_config.get("model_build_fn")
     if not model_package or not model_build_fn:
         raise ValueError("Missing 'model' configuration in YAML file.")
-    model_class = load_by_package_and_name(
-        model_package,
-        model_build_fn,
-    )
+    model_class = load_by_package_and_name(model_package, model_build_fn)
 
     def model_fn() -> P2PFLModel:
         params = model_config.get("params", {})
@@ -215,10 +193,7 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     aggregator_class_name = aggregator.get("aggregator")
     if not aggregator_package or not aggregator_class_name:
         raise ValueError("Missing 'aggregator' configuration in YAML file.")
-    aggregator_class = load_by_package_and_name(
-        aggregator_package,
-        aggregator_class_name,
-    )
+    aggregator_class = load_by_package_and_name(aggregator_package, aggregator_class_name)
 
     def aggregator_fn() -> Aggregator:
         return aggregator_class(**aggregator.get("params", {}))
@@ -235,16 +210,15 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
     # Network #
     ###########
 
+    experiment_failed = False
+
     # Create nodes
     nodes: list[Node] = []
     protocol_package = network_config.get("package")
     protocol_class_name = network_config.get("protocol")
     if not protocol_package or not protocol_class_name:
         raise ValueError("Missing 'protocol' configuration in YAML file.")
-    protocol = load_by_package_and_name(
-        protocol_package,
-        protocol_class_name,
-    )
+    protocol = load_by_package_and_name(protocol_package, protocol_class_name)
     for i in range(n):
         node = Node(
             model_fn(),
@@ -267,7 +241,7 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
             )
         adjacency_matrix = TopologyFactory.generate_matrix(topology, len(nodes))
         await TopologyFactory.connect_nodes(adjacency_matrix, nodes)
-        await wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=False)  # type: ignore
+        await wait_convergence(nodes, n - 1, only_direct=False, wait=60, debug=True)  # type: ignore
 
         # Additional connections
         additional_connections = network_config.get("additional_connections")
@@ -286,26 +260,53 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
         await nodes[0].set_start_learning(rounds=r, epochs=e, trainset_size=trainset_size, workflow=workflow_name)
 
         # Wait and check
-        # Get wait_timeout from experiment config (in minutes), default to 60 minutes (1 hour)
         wait_timeout = experiment_config.get("wait_timeout", 60)
         await wait_to_finish(nodes, timeout=wait_timeout * 60, debug=debug)
 
-    except Exception as e:
-        raise e
+    except (Exception, KeyboardInterrupt) as e:
+        if isinstance(e, KeyboardInterrupt):
+            print("\nInterrupted.")
+        else:
+            experiment_failed = True
+            print(f"\nExperiment failed: {e}")
     finally:
+        # Collect data BEFORE stopping nodes (stop clears workflow)
+        export_results = config.get("export_results", False)
+        all_timings: list[dict[str, Any]] = []
+        messages: list[Any] = []
+        if export_results:
+            for node in nodes:
+                if node.workflow and hasattr(node.workflow, "stage_timings"):
+                    all_timings.extend(node.workflow.stage_timings)
+            messages = logger.get_messages()
+
         # Stop Nodes
         for node in nodes:
             await node.stop()
-        # Profiling
+
+        # Execution time
         if start_time:
             print(f"Execution time: {time.time() - start_time} seconds")
+
+        # Yappi profiling (optional)
         if profiling_enabled:
-            # Stop profiler
+            import yappi
+
             yappi.stop()
-            # Save stats
             profile_dir = os.path.join(profiling_output_dir, str(uuid.uuid4()))
             os.makedirs(profile_dir, exist_ok=True)
             for thread in yappi.get_thread_stats():
                 yappi.get_func_stats(ctx_id=thread.id).save(f"{profile_dir}/{thread.name}-{thread.id}.pstat", type="pstat")
-            # Print where the stats were saved
             print(f"Profile stats saved in {profile_dir}")
+
+        # Export experiment data (opt-in)
+        if export_results:
+            exp_name = experiment_config.get("name", "experiment")
+            output_dir = config.get("output_dir", "results")
+            exp_dir = os.path.join(output_dir, exp_name)
+
+            if experiment_failed:
+                print(f"Experiment '{exp_name}' FAILED — results not saved.")
+            else:
+                export_experiment_data(exp_dir, all_timings, messages, logger.get_global_logs())
+                print(f"Experiment data saved in {exp_dir}")

@@ -198,6 +198,7 @@ class Node:
 
         logger.info(self.address, "🚀 Starting node.")
         logger.register_node(self.address)
+
         await self.communication_protocol.start()
         self._running = True
 

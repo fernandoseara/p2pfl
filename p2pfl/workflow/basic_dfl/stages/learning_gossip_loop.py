@@ -222,7 +222,9 @@ class LearningGossipLoopStage(Stage[BasicDFLContext]):
         """Check if we have contributions from all trainers in the train set."""
         return set(ctx.train_set).issubset(self._get_all_contributors(ctx))
 
-    async def _broadcast_coverage(self, ctx: BasicDFLContext, coverage: set[str] | frozenset[str], targets: list[str] | None = None) -> None:
+    async def _broadcast_coverage(
+        self, ctx: BasicDFLContext, coverage: set[str] | frozenset[str], targets: list[str] | None = None
+    ) -> None:
         """Broadcast current contributor coverage to peers so they stop sending redundant models."""
         targets = targets if targets is not None else [n for n in ctx.train_set if n != ctx.address]
         msg = ctx.cp.build_msg("models_aggregated", list(coverage), round=ctx.experiment.round)

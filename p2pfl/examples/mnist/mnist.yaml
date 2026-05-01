@@ -1,4 +1,5 @@
 description: "Example of using P2PFL with the MNIST dataset, a collection of handwritten digits commonly used for training image processing systems."
+export_results: true
 
 # Remote loggers configuration (optional)
 remote_loggers:
@@ -70,6 +71,8 @@ settings:
   general:
     log_level: "DEBUG" # Logging verbosity: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
     grpc_timeout: 2
+    log_communication: True
+    msg_buffer_size: 10000
 
   SSL:
     use_ssl: false
@@ -79,21 +82,22 @@ settings:
     SERVER_KEY: None
     CLIENT_KEY: None
   heartbeat:
-    period: 2
-    timeout: 10
+    period: 30
+    timeout: 90
     wait_convergence: 4
     exclude_beat_logs: true
   gossip:
-    period: 1
+    period: 0.1
     ttl: 10
-    messages_per_period: 200
-    amount_last_messages_saved: 1000
+    messages_per_period: 1000
+    amount_last_messages_saved: 100000
     models_period: 1
-    models_per_round: 4
+    models_per_round: 1
     exit_on_x_equal_rounds: 50
   training:
     vote_timeout: 60
     aggregation_timeout: 300
+    synchronization_timeout: 120
 
 # Profiling configuration
 profiling:

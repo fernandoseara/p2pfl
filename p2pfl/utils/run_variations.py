@@ -158,9 +158,10 @@ def run_single_experiment(config: dict[str, Any], results_dir: Path) -> None:
     start_time = time.time()
 
     try:
-        # Run the experiment
-        # We need to modify run_from_yaml to accept a config dict
-        # For now, we'll save a temporary YAML file
+        config["output_dir"] = str(results_dir.parent)
+        config.setdefault("experiment", {})["name"] = results_dir.name
+
+        # Save a temporary YAML file for run_from_yaml
         temp_yaml_path = results_dir / "temp_config.yaml"
         with open(temp_yaml_path, "w") as f:
             yaml.dump(config, f, default_flow_style=False)
