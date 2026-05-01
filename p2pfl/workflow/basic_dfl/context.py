@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -54,3 +55,7 @@ class BasicDFLContext(WorkflowContext):
     peers: dict[str, BasicPeerState] = field(default_factory=dict)
     train_set: list[str] = field(default_factory=list)
     needs_full_model: bool = False
+
+    # Shared events across learning sub-stages
+    models_complete: asyncio.Event = field(default_factory=asyncio.Event)
+    full_model_ready: asyncio.Event = field(default_factory=asyncio.Event)

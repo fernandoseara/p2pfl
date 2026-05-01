@@ -35,11 +35,13 @@ class RoundInitStage(Stage[BasicDFLContext]):
     def __init__(self) -> None:
         """Initialize round-init stage events."""
         self._all_rounds_synced = asyncio.Event()
+        self._init_model_accepted = False
 
     async def run(self) -> str | None:
         """Initialize round, gossip full model, wait for peers."""
         ctx = self.ctx
         self._all_rounds_synced.clear()
+        self._init_model_accepted = False
 
         experiment = ctx.experiment
         address = ctx.address
@@ -89,8 +91,11 @@ class RoundInitStage(Stage[BasicDFLContext]):
 
     def _get_full_gossiping_candidates(self, ctx: BasicDFLContext) -> list[str]:
         fixed_round = ctx.experiment.round
+        train_set = set(ctx.train_set)
         candidates = [
-            n for n in ctx.cp.get_neighbors(only_direct=False) if (peer := ctx.peers.get(n)) is not None and peer.round_number < fixed_round
+            n
+            for n in ctx.cp.get_neighbors(only_direct=False)
+            if (peer := ctx.peers.get(n)) is not None and peer.round_number < fixed_round and n not in train_set
         ]
         logger.debug(ctx.address, f"Candidates to gossip to: {candidates}")
         return candidates
@@ -120,16 +125,28 @@ class RoundInitStage(Stage[BasicDFLContext]):
     #    Message handlers
     ###
 
-    @on_message("peer_round_updated", during={"setup", "round_init", "learning", "voting"})
+    @on_message("peer_round_updated", during={"setup", "round_init", "learning_.*", "voting"})
     async def handle_peer_round_updated(self, source: str, round: int, *args) -> None:
         """Handle a peer_round_updated message."""
         await self._save_peer_round_updated(self.ctx, source, round)
 
-    @on_message("pre_send_model_init", during={"setup", "round_init", "learning", "voting"})
+    @on_message("pre_send_model_init", during={"setup", "round_init", "learning_.*", "voting"})
     async def handle_pre_send_model_init(self, source: str, round: int, *args) -> str:
         """Handle a pre_send_model_init request for full model gossiping."""
         if not args:
             return "false"
+
+        # Only accept if this node actually needs a full model (non-trainer in learning_wait_model).
+        # This prevents wasted weight transfers to nodes that have already advanced.
+        if not self.ctx.needs_full_model:
+            return "false"
+
+        # First-accepted-wins: once we accept one sender, reject all others.
+        # This prevents N concurrent trainers from all getting accepted and
+        # sending the same expensive weight transfer to us.
+        if self._init_model_accepted:
+            return "false"
+
         weight_command = args[0]
         contributors = list(args[1:]) if len(args) > 1 else []
 
@@ -145,5 +162,6 @@ class RoundInitStage(Stage[BasicDFLContext]):
             local_round=self.ctx.experiment.round,
             existing_contributors=existing,
         )
+        if accepted:
+            self._init_model_accepted = True
         return "true" if accepted else "false"
-

@@ -59,6 +59,45 @@ class ModelGate:
         self._address = address
         self._pre_send_command = pre_send_command
 
+    async def check_acceptance(
+        self,
+        neighbor: str,
+        weight_command: str,
+        contributors: list[str],
+        round_num: int,
+    ) -> bool:
+        """
+        Ask the neighbor whether it would accept a model (lightweight, no payload).
+
+        Args:
+            neighbor: Target peer address.
+            weight_command: The weight command name (e.g. ``"add_model"``, ``"partial_model"``).
+            contributors: List of contributor addresses for dedup checking.
+            round_num: Current round number.
+
+        Returns:
+            True if the neighbor accepts, False if declined or failed.
+
+        """
+        try:
+            pre_send_msg = self._cp.build_msg(
+                self._pre_send_command,
+                [weight_command] + contributors,
+                round=round_num,
+                direct=True,
+            )
+            response = await self._cp.send(neighbor, pre_send_msg, temporal_connection=True)
+            if response == "false":
+                logger.debug(self._address, f"⏭️ Skipping model send to {neighbor} - recipient declined")
+                return False
+            if response != "true":
+                logger.warning(self._address, f"⚠️ Unexpected gate response from {neighbor}: '{response}' (peer not ready?)")
+                return False
+            return True
+        except Exception as e:
+            logger.warning(self._address, f"⚠️ Failed to negotiate with {neighbor}: {e}")
+            return False
+
     async def send_if_accepted(
         self,
         neighbor: str,
@@ -81,20 +120,9 @@ class ModelGate:
             True if the model was sent, False if declined or failed.
 
         """
+        if not await self.check_acceptance(neighbor, weight_command, contributors, round_num):
+            return False
         try:
-            pre_send_msg = self._cp.build_msg(
-                self._pre_send_command,
-                [weight_command] + contributors,
-                round=round_num,
-                direct=True,
-            )
-            response = await self._cp.send(neighbor, pre_send_msg, temporal_connection=True)
-            if response == "false":
-                logger.debug(self._address, f"⏭️ Skipping model send to {neighbor} - recipient declined")
-                return False
-            if response != "true":
-                logger.warning(self._address, f"⚠️ Unexpected gate response from {neighbor}: '{response}' (peer not ready?)")
-                return False
             logger.debug(self._address, f"🗣️ Sending model to {neighbor}")
             await self._cp.send(neighbor, payload, temporal_connection=True)
             logger.debug(self._address, f"✅ Sent model to {neighbor}")
@@ -110,6 +138,7 @@ def should_accept_model(
     round: int,
     local_round: int,
     existing_contributors: set[str],
+    coverage_without_source: set[str] | None = None,
 ) -> bool:
     """
     Decide whether to accept an incoming model transfer.
@@ -124,6 +153,12 @@ def should_accept_model(
         round: The sender's round number.
         local_round: This node's current round number.
         existing_contributors: Set of contributor addresses already held locally.
+        coverage_without_source: If provided, the contributor coverage excluding
+            the source peer's current model.  Used to simulate the slot-swap
+            that ``_save_aggregation`` performs: accept only when replacing the
+            source slot with the offered model would strictly increase total
+            coverage.  This prevents transmitting heavy payloads that would be
+            rejected on arrival.
 
     Returns:
         True if the model should be accepted.
@@ -132,5 +167,9 @@ def should_accept_model(
     if weight_command == "add_model":
         return round > local_round
     elif weight_command == "partial_model":
+        if coverage_without_source is not None:
+            # Simulate slot swap: coverage_after = coverage_without_source | offered
+            new_coverage = coverage_without_source | set(contributors)
+            return len(new_coverage) > len(existing_contributors)
         return bool(set(contributors) - existing_contributors)
     return False

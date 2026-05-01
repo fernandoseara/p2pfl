@@ -18,14 +18,22 @@
 
 from p2pfl.workflow.shared.finish import FinishStage
 
-from .learning import LearningStage
+from .learning_aggregate import LearningAggregateStage
+from .learning_evaluate import LearningEvaluateStage
+from .learning_gossip_loop import LearningGossipLoopStage
+from .learning_train import LearningTrainStage
+from .learning_wait_model import LearningWaitModelStage
 from .round_init import RoundInitStage
 from .setup import SetupStage
 from .voting import VotingStage
 
 __all__ = [
     "FinishStage",
-    "LearningStage",
+    "LearningAggregateStage",
+    "LearningEvaluateStage",
+    "LearningGossipLoopStage",
+    "LearningTrainStage",
+    "LearningWaitModelStage",
     "RoundInitStage",
     "SetupStage",
     "VotingStage",

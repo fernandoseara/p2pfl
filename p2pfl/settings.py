@@ -95,8 +95,8 @@ class Gossip:
     """Amount of equal rounds to exit gossiping. Careful, a low value can cause an early stop of gossiping."""
     MODE_EXPECTATION_TIMEOUT: float = 60.0
     """Timeout (seconds) to wait for a model to be received."""
-    MODELS_GOSSIP_LOOP: bool = True
-    """Use loop-based gossip with retries and partial aggregation (True) or single-pass gossip (False)."""
+    MODEL_GATE_TIMEOUT: float = 30.0
+    """Timeout (seconds) for model gate pre-send entries to expire if the model never arrives."""
 
 
 @dataclass

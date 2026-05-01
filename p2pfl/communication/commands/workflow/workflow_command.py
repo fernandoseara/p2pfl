@@ -25,10 +25,24 @@ and calls ``execute()`` with the appropriate arguments.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from p2pfl.communication.commands.command import Command
 from p2pfl.management.logger import logger
+
+
+def _stage_matches_during(stage_name: str | None, during: frozenset[str]) -> bool:
+    """Check if ``stage_name`` matches any entry in ``during``, supporting regex patterns (e.g. ``"learning_.*"``)."""
+    if stage_name is None:
+        return False
+    for pattern in during:
+        if pattern == stage_name:
+            return True
+        if re.fullmatch(pattern, stage_name):
+            return True
+    return False
+
 
 if TYPE_CHECKING:
     from p2pfl.node import Node
@@ -96,7 +110,7 @@ class WorkflowCommand(Command):
 
         # Filter handlers whose `during` scope matches the current stage
         entries = workflow._handlers.get(self._message_name, [])
-        handlers = [cb for cb, entry in entries if entry.during is None or workflow.current_stage_name in entry.during]
+        handlers = [cb for cb, entry in entries if entry.during is None or _stage_matches_during(workflow.current_stage_name, entry.during)]
 
         # No handler active for the current stage — log and drop
         if not handlers:

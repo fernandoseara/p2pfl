@@ -23,6 +23,8 @@ import contextlib
 import enum
 import inspect
 import random
+import re
+import time
 from abc import abstractmethod
 from collections.abc import Callable
 from difflib import get_close_matches
@@ -78,7 +80,7 @@ class Workflow(Generic[TContext]):
             context_class = BasicDFLContext
 
             def get_stages(self) -> list[Stage[BasicDFLContext]]:
-                return [SetupStage(), VotingStage(), LearningStage(), FinishStage()]
+                return [SetupStage(), VotingStage(), TrainStage(), FinishStage()]
     """
 
     context_class: type[TContext]
@@ -99,6 +101,7 @@ class Workflow(Generic[TContext]):
         self._stage_map: dict[str, Stage[TContext]] = {}
         self._current_stage: Stage[TContext] | None = None
         self._handlers: dict[str, list[tuple[Callable[..., Any], MessageEntry]]] = {}
+        self.stage_timings: list[dict[str, Any]] = []
 
     ############################
     #    Abstract interface    #
@@ -178,11 +181,25 @@ class Workflow(Generic[TContext]):
                         )
                     self._register_handler(bound, msg_name, entry)
 
+    def _expand_during(self, during: frozenset[str] | None) -> set[str]:
+        """Expand a ``during`` set by resolving regex patterns against registered stage names."""
+        if during is None:
+            return set(self._stage_map.keys())
+        expanded: set[str] = set()
+        for pattern in during:
+            if pattern in self._stage_map:
+                expanded.add(pattern)
+            else:
+                expanded.update(s for s in self._stage_map if re.fullmatch(pattern, s))
+        return expanded
+
     def _register_handler(self, callback: Callable[..., Any], msg_name: str, entry: MessageEntry) -> None:
         """Register a handler, checking for collisions with overlapping ``during`` sets."""
         if msg_name in self._handlers:
             for existing_cb, existing_entry in self._handlers[msg_name]:
-                if existing_entry.during is None or entry.during is None or existing_entry.during & entry.during:
+                existing_expanded = self._expand_during(existing_entry.during)
+                new_expanded = self._expand_during(entry.during)
+                if existing_expanded & new_expanded:
                     existing_owner = type(getattr(existing_cb, "__self__", existing_cb)).__name__
                     new_owner = type(getattr(callback, "__self__", callback)).__name__
                     raise ValueError(
@@ -196,18 +213,29 @@ class Workflow(Generic[TContext]):
             self._handlers[msg_name] = [(callback, entry)]
 
     def _validate_during_names(self) -> None:
-        """Check that all ``during`` stage names in handlers reference existing stages."""
+        """
+        Check that all ``during`` stage names in handlers reference existing stages.
+
+        Supports regex patterns in ``during`` (e.g. ``"learning_.*"``).
+        A pattern is valid if it matches at least one registered stage name.
+        """
         available_stages = sorted(self._stage_map.keys())
         errors: list[str] = []
         for msg_name, entries in self._handlers.items():
             for _, entry in entries:
                 if entry.during is not None:
-                    for bad in sorted(entry.during - self._stage_map.keys()):
-                        suggestions = get_close_matches(bad, self._stage_map.keys(), n=1)
+                    for pattern in sorted(entry.during):
+                        # Exact match
+                        if pattern in self._stage_map:
+                            continue
+                        # Regex match — valid if at least one stage matches
+                        if any(re.fullmatch(pattern, s) for s in self._stage_map):
+                            continue
+                        suggestions = get_close_matches(pattern, self._stage_map.keys(), n=1)
                         hint = f" Did you mean '{suggestions[0]}'?" if suggestions else ""
                         errors.append(
-                            f"Handler '{msg_name}' has `during={{'{bad}'}}` but '{bad}' "
-                            f"is not a valid stage. Available: {', '.join(available_stages)}.{hint}"
+                            f"Handler '{msg_name}' has `during={{'{pattern}'}}` but '{pattern}' "
+                            f"does not match any stage. Available: {', '.join(available_stages)}.{hint}"
                         )
         if errors:
             raise ValueError("\n".join(errors))
@@ -292,22 +320,45 @@ class Workflow(Generic[TContext]):
 
     async def _run(self, ctx: TContext) -> None:
         """Run the workflow as a sequential stage loop."""
+        self.stage_timings = []
+
         # Setup stage
         stage = self._stage_map[self.initial_stage]
         self._current_stage = stage
         ctx.experiment.current_stage = self.initial_stage
-        logger.debug(ctx.address, f"Entering stage: {self.initial_stage}")
+        t0 = time.perf_counter()
         stage_name: str | None = await stage.run()
+        dt = time.perf_counter() - t0
+        self.stage_timings.append(
+            {
+                "node": ctx.address,
+                "stage": self.initial_stage,
+                "round": ctx.experiment.round,
+                "duration": dt,
+                "start": t0,
+            }
+        )
 
         self.validate_experiment(ctx)
 
         # Remaining stages
         while stage_name is not None:
+            current_name = stage_name
             stage = self._stage_map[stage_name]
             self._current_stage = stage
             ctx.experiment.current_stage = stage_name
-            logger.debug(ctx.address, f"Entering stage: {stage_name}")
+            t0 = time.perf_counter()
             stage_name = await stage.run()
+            dt = time.perf_counter() - t0
+            self.stage_timings.append(
+                {
+                    "node": ctx.address,
+                    "stage": current_name,
+                    "round": ctx.experiment.round,
+                    "duration": dt,
+                    "start": t0,
+                }
+            )
         self._current_stage = None
 
     def validate_experiment(self, ctx: TContext) -> None:

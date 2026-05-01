@@ -26,7 +26,6 @@ from p2pfl.settings import Settings
 from p2pfl.workflow.basic_dfl.context import BasicDFLContext
 from p2pfl.workflow.engine.message import on_message
 from p2pfl.workflow.engine.stage import Stage
-from p2pfl.workflow.shared.utils import wait_with_timeout
 
 
 class VotingStage(Stage[BasicDFLContext]):
@@ -48,19 +47,25 @@ class VotingStage(Stage[BasicDFLContext]):
         await self._cast_votes(ctx)
 
         # Wait for all votes with timeout
-        await wait_with_timeout(
-            self._votes_complete,
-            Settings.training.VOTE_TIMEOUT,
-            address,
-            "Voting timed out, proceeding with available votes.",
-        )
+        try:
+            await asyncio.wait_for(self._votes_complete.wait(), timeout=Settings.training.VOTE_TIMEOUT)
+            all_votes_received = True
+        except TimeoutError:
+            all_votes_received = False
+            missing = [addr for addr, p in ctx.peers.items() if not p.votes]
+            voted = len(ctx.peers) - len(missing)
+            logger.warning(
+                address,
+                f"Voting timed out after {Settings.training.VOTE_TIMEOUT}s with {voted}/{len(ctx.peers)} votes. "
+                f"Missing votes from: {missing}",
+            )
 
         # Aggregate votes
         logger.info(address, "🗳️ Voting finished.")
-        self._aggregate_votes(ctx)
+        self._aggregate_votes(ctx, all_votes_received=all_votes_received)
 
         ctx.needs_full_model = ctx.address not in ctx.train_set
-        return "learning"
+        return "learning_evaluate"
 
     ###
     #    Voting logic
@@ -96,7 +101,7 @@ class VotingStage(Stage[BasicDFLContext]):
     #    Vote aggregation
     ###
 
-    def _aggregate_votes(self, ctx: BasicDFLContext) -> None:
+    def _aggregate_votes(self, ctx: BasicDFLContext, *, all_votes_received: bool = True) -> None:
         address = ctx.address
         experiment = ctx.experiment
 
@@ -123,10 +128,11 @@ class VotingStage(Stage[BasicDFLContext]):
         if not ctx.train_set:
             logger.warning(address, "⚠️ Train set empty after filtering, falling back to self.")
             ctx.train_set = [address]
-        logger.info(
-            address,
-            f"Train set of {len(ctx.train_set)} nodes: {ctx.train_set}",
-        )
+        logger.info(address, f"🚂 Train set of {len(ctx.train_set)} nodes.")
+        if not all_votes_received:
+            logger.warning(address, f"⚠️ Train set (from partial votes): {ctx.train_set}")
+        else:
+            logger.debug(address, f"Train set: {ctx.train_set}")
 
     ###
     #    Callbacks
@@ -153,7 +159,7 @@ class VotingStage(Stage[BasicDFLContext]):
     #    Message handler
     ###
 
-    @on_message("vote_train_set", during={"voting", "round_init", "learning"})
+    @on_message("vote_train_set", during={"voting", "round_init", "learning_.*"})
     async def handle_vote_train_set(self, source: str, round: int, *args) -> None:
         """Handle a vote_train_set message by parsing vote pairs and forwarding."""
         if len(args) % 2 != 0:

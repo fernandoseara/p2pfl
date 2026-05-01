@@ -21,7 +21,11 @@ from __future__ import annotations
 from p2pfl.workflow.basic_dfl.context import BasicDFLContext
 from p2pfl.workflow.basic_dfl.stages import (
     FinishStage,
-    LearningStage,
+    LearningAggregateStage,
+    LearningEvaluateStage,
+    LearningGossipLoopStage,
+    LearningTrainStage,
+    LearningWaitModelStage,
     RoundInitStage,
     SetupStage,
     VotingStage,
@@ -34,14 +38,27 @@ class BasicDFL(Workflow[BasicDFLContext]):
     """
     BasicDFL: synchronous decentralized federated learning.
 
-    Flow: setup -> round_init -> voting -> learning -> round_init -> ... -> finish
+    Flow: setup -> round_init -> voting -> learning_evaluate
+          -> learning_train -> learning_gossip_loop -> learning_aggregate -> round_init -> ...
+          -> learning_wait_model -> round_init -> ...  (non-trainers)
+          -> finish
     """
 
     context_class = BasicDFLContext
 
     def get_stages(self) -> list[Stage[BasicDFLContext]]:
         """Return the stages for BasicDFL."""
-        return [SetupStage(), RoundInitStage(), VotingStage(), LearningStage(), FinishStage()]
+        return [
+            SetupStage(),
+            RoundInitStage(),
+            VotingStage(),
+            LearningEvaluateStage(),
+            LearningTrainStage(),
+            LearningWaitModelStage(),
+            LearningGossipLoopStage(),
+            LearningAggregateStage(),
+            FinishStage(),
+        ]
 
     def validate_experiment(self, ctx: BasicDFLContext) -> None:
         """Resolve dynamic defaults and validate BasicDFL experiment params."""
