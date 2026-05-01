@@ -1,0 +1,41 @@
+description: "Minimal MNIST example — relies on Settings defaults where possible"
+
+network:
+  package: "p2pfl.communication.protocols.protobuff.memory"
+  protocol: "MemoryCommunicationProtocol"
+  nodes: 2
+  topology: "ring"
+
+experiment:
+  name: "mnist_minimal"
+  rounds: 5
+  epochs: 1
+  trainset_size: 2
+  seed: 42
+  workflow: basic
+
+  dataset:
+    source: "huggingface"
+    name: "p2pfl/MNIST"
+    batch_size: 128
+    partitioning:
+      package: "p2pfl.learning.dataset.partition_strategies"
+      strategy: "RandomIIDPartitionStrategy"
+      params: {}
+
+  model:
+    package: "p2pfl.examples.mnist.model.mlp_pytorch"
+    model_build_fn: "model_build_fn"
+    params: {}
+
+  aggregator:
+    package: "p2pfl.learning.aggregators.fedavg"
+    aggregator: "FedAvg"
+    params: {}
+
+settings:
+  general:
+    log_level: "INFO"
+    disable_ray: True
+  SSL:
+    use_ssl: false
