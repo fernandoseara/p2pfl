@@ -32,7 +32,17 @@ import pytest
 from p2pfl.communication.commands.command import Command
 from p2pfl.communication.protocols.protobuff.memory import MemoryCommunicationProtocol
 from p2pfl.communication.protocols.protobuff.proto import node_pb2
+from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
+from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrategy
+from p2pfl.node import Node
 from p2pfl.settings import Settings
+from p2pfl.utils.topologies import TopologyFactory, TopologyType
+from p2pfl.utils.utils import wait_convergence, wait_to_finish
+from p2pfl.workflow.engine.context import WorkflowContext
+from p2pfl.workflow.engine.message import on_message
+from p2pfl.workflow.engine.stage import Stage
+from p2pfl.workflow.engine.workflow import Workflow
+from p2pfl.workflow.factory import register_workflow
 
 
 class TrackingCommand(Command):
@@ -221,17 +231,6 @@ class TestMessageBufferingE2E:
         hello before start_learning reaches them. The buffer + replay-after-RUNNING
         fix ensures no messages are lost.
         """
-        from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
-        from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrategy
-        from p2pfl.node import Node
-        from p2pfl.utils.topologies import TopologyFactory, TopologyType
-        from p2pfl.utils.utils import wait_convergence, wait_to_finish
-        from p2pfl.workflow.engine.context import WorkflowContext
-        from p2pfl.workflow.engine.message import on_message
-        from p2pfl.workflow.engine.stage import Stage
-        from p2pfl.workflow.engine.workflow import Workflow
-        from p2pfl.workflow.factory import register_workflow
-
         # Minimal workflow: broadcast hello, wait for all peers
         class HelloStage(Stage[WorkflowContext]):
             async def run(self) -> str | None:

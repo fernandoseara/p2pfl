@@ -23,9 +23,18 @@ import numpy as np
 import pytest
 
 from p2pfl.learning.frameworks import Framework
+from p2pfl.node_state import NodeState
 from p2pfl.utils.node_component import NodeComponent, allow_no_addr_check
 from p2pfl.utils.seed import set_seed
 from p2pfl.utils.topologies import TopologyFactory, TopologyType
+from p2pfl.utils.utils import (
+    NodeLearningError,
+    _print_connectivity_matrix,
+    check_equal_models,
+    full_connection,
+    wait_convergence,
+    wait_to_finish,
+)
 
 ###
 # Topology Tests
@@ -269,8 +278,6 @@ class TestWaitConvergence:
     @pytest.mark.asyncio
     async def test_wait_convergence_immediate(self):
         """Nodes already have enough neighbors -- converges immediately."""
-        from p2pfl.utils.utils import wait_convergence
-
         n1 = MagicMock()
         n1.get_neighbors.return_value = ["b", "c"]
         n1.address = "a"
@@ -282,8 +289,6 @@ class TestWaitConvergence:
     @pytest.mark.asyncio
     async def test_wait_convergence_timeout_raises(self):
         """wait_convergence raises AssertionError on timeout."""
-        from p2pfl.utils.utils import wait_convergence
-
         node = MagicMock()
         node.get_neighbors.return_value = []
         node.address = "a"
@@ -293,8 +298,6 @@ class TestWaitConvergence:
     @pytest.mark.asyncio
     async def test_wait_convergence_with_debug(self):
         """wait_convergence with debug=True prints connectivity matrix."""
-        from p2pfl.utils.utils import wait_convergence
-
         n1 = MagicMock()
         n1.get_neighbors.return_value = ["b"]
         n1.address = "a"
@@ -309,8 +312,6 @@ class TestPrintConnectivityMatrix:
 
     def test_print_connectivity_matrix_final(self):
         """Test _print_connectivity_matrix with final=True."""
-        from p2pfl.utils.utils import _print_connectivity_matrix
-
         n1 = MagicMock()
         n1.get_neighbors.return_value = ["b"]
         n1.address = "a"
@@ -322,8 +323,6 @@ class TestPrintConnectivityMatrix:
 
     def test_print_connectivity_matrix_not_final(self):
         """Test _print_connectivity_matrix with final=False."""
-        from p2pfl.utils.utils import _print_connectivity_matrix
-
         n1 = MagicMock()
         n1.get_neighbors.return_value = ["b"]
         n1.address = "a"
@@ -334,8 +333,6 @@ class TestPrintConnectivityMatrix:
 
     def test_print_connectivity_matrix_long_address(self):
         """Test truncation of long addresses."""
-        from p2pfl.utils.utils import _print_connectivity_matrix
-
         n1 = MagicMock()
         n1.get_neighbors.return_value = []
         n1.address = "a" * 30  # Long address, triggers truncation
@@ -343,8 +340,6 @@ class TestPrintConnectivityMatrix:
 
     def test_print_connectivity_matrix_non_uniform(self):
         """Test non-uniform topology reporting."""
-        from p2pfl.utils.utils import _print_connectivity_matrix
-
         n1 = MagicMock()
         n1.get_neighbors.return_value = ["b", "c"]
         n1.address = "a"
@@ -363,8 +358,6 @@ class TestFullConnection:
     @pytest.mark.asyncio
     async def test_full_connection(self):
         """full_connection connects node to all other nodes."""
-        from p2pfl.utils.utils import full_connection
-
         main = MagicMock()
         main.connect = AsyncMock()
         main.address = "main"
@@ -382,8 +375,6 @@ class TestNodeLearningError:
 
     def test_error_message(self):
         """Error message includes all failed node addresses."""
-        from p2pfl.utils.utils import NodeLearningError
-
         err = NodeLearningError([("node1", ValueError("bad")), ("node2", RuntimeError("crash"))])
         assert "node1" in str(err)
         assert "node2" in str(err)
@@ -405,18 +396,12 @@ class TestWaitToFinish:
     @pytest.mark.asyncio
     async def test_wait_to_finish_all_finished(self):
         """wait_to_finish returns when all nodes are in terminal state."""
-        from p2pfl.node_state import NodeState
-        from p2pfl.utils.utils import wait_to_finish
-
         n1 = _FakeNode("n1", NodeState.FINISHED)
         await wait_to_finish([n1], timeout=5)
 
     @pytest.mark.asyncio
     async def test_wait_to_finish_timeout(self):
         """wait_to_finish raises TimeoutError if nodes don't finish."""
-        from p2pfl.node_state import NodeState
-        from p2pfl.utils.utils import wait_to_finish
-
         wf = MagicMock()
         wf.status.value = "running"
         wf.current_stage_name = "train"
@@ -427,9 +412,6 @@ class TestWaitToFinish:
     @pytest.mark.asyncio
     async def test_wait_to_finish_failed_raises(self):
         """wait_to_finish raises NodeLearningError when a node failed."""
-        from p2pfl.node_state import NodeState
-        from p2pfl.utils.utils import NodeLearningError, wait_to_finish
-
         wf = MagicMock()
         wf.error = RuntimeError("training crash")
         n1 = _FakeNode("n1", NodeState.FAILED, workflow=wf)
@@ -439,9 +421,6 @@ class TestWaitToFinish:
     @pytest.mark.asyncio
     async def test_wait_to_finish_failed_no_raise(self):
         """wait_to_finish with raise_on_error=False does not raise."""
-        from p2pfl.node_state import NodeState
-        from p2pfl.utils.utils import wait_to_finish
-
         wf = MagicMock()
         wf.error = RuntimeError("crash")
         n1 = _FakeNode("n1", NodeState.FAILED, workflow=wf)
@@ -453,8 +432,6 @@ class TestCheckEqualModels:
 
     def test_check_equal_models_same(self):
         """check_equal_models passes for identical model parameters."""
-        from p2pfl.utils.utils import check_equal_models
-
         params = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
         n1 = MagicMock()
         n1.model.get_parameters.return_value = [p.copy() for p in params]
@@ -464,8 +441,6 @@ class TestCheckEqualModels:
 
     def test_check_equal_models_none_params_raises(self):
         """check_equal_models raises ValueError when first node has None params."""
-        from p2pfl.utils.utils import check_equal_models
-
         n1 = MagicMock()
         n1.model.get_parameters.return_value = None
         n2 = MagicMock()

@@ -27,6 +27,7 @@ from datasets import DatasetDict, load_dataset  # type: ignore
 from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
 from p2pfl.learning.frameworks import Framework
 from p2pfl.learning.frameworks.exceptions import ModelNotMatchingError
+from p2pfl.learning.frameworks.learner import LearnerDecorator
 from p2pfl.learning.frameworks.learner_factory import LearnerFactory
 from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
@@ -381,7 +382,6 @@ class TestLearnerDecorator:
     """Tests for the LearnerDecorator delegation."""
 
     def _make_decorated(self):
-        from p2pfl.learning.frameworks.learner import LearnerDecorator
         from p2pfl.learning.frameworks.pytorch.lightning_learner import LightningLearner
 
         inner = LightningLearner()

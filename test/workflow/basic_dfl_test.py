@@ -24,10 +24,21 @@ import pytest
 
 from p2pfl.learning.frameworks.exceptions import DecodingParamsError, ModelNotMatchingError
 from p2pfl.workflow.basic_dfl.context import BasicDFLContext, BasicPeerState
-from p2pfl.workflow.basic_dfl.stages.learning_wait_model import LearningWaitModelStage
+from p2pfl.workflow.basic_dfl.stages import (
+    FinishStage,
+    LearningAggregateStage,
+    LearningEvaluateStage,
+    LearningGossipLoopStage,
+    LearningTrainStage,
+    LearningWaitModelStage,
+    RoundInitStage,
+    SetupStage,
+    VotingStage,
+)
 from p2pfl.workflow.basic_dfl.workflow import BasicDFL
 from p2pfl.workflow.engine.experiment import Experiment
 from p2pfl.workflow.engine.workflow import WorkflowStatus
+from p2pfl.workflow.factory import create_workflow
 from p2pfl.workflow.validation import validate
 
 
@@ -85,8 +96,6 @@ class TestBasicWorkflowCreation:
 
     def test_factory_creates_basic(self):
         """Test that factory creates BasicDFL for BASIC type."""
-        from p2pfl.workflow.factory import create_workflow
-
         wf = create_workflow("basic")
         assert isinstance(wf, BasicDFL)
 
@@ -113,18 +122,6 @@ class TestBasicStageMap:
 
     def test_stage_map_types(self):
         """Test that each stage is the correct type."""
-        from p2pfl.workflow.basic_dfl.stages import (
-            FinishStage,
-            LearningAggregateStage,
-            LearningEvaluateStage,
-            LearningGossipLoopStage,
-            LearningTrainStage,
-            LearningWaitModelStage,
-            RoundInitStage,
-            SetupStage,
-            VotingStage,
-        )
-
         wf = BasicDFL()
         stages = {s.name: s for s in wf.get_stages()}
 

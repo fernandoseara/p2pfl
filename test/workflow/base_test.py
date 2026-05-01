@@ -23,6 +23,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from p2pfl.management.logger import logger
 from p2pfl.workflow.engine.context import WorkflowContext
 from p2pfl.workflow.engine.experiment import Experiment
 from p2pfl.workflow.engine.message import on_message
@@ -387,8 +388,6 @@ def _run_kwargs(experiment=None):
 @pytest.fixture(autouse=True, scope="module")
 def _register_test_node():
     """Register and unregister a test node in the logger for workflow tests."""
-    from p2pfl.management.logger import logger
-
     logger.register_node(_TEST_NODE)
     yield
     logger.unregister_node(_TEST_NODE)

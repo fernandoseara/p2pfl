@@ -25,15 +25,17 @@ import pytest
 
 from p2pfl.communication.protocols.protobuff.memory import MemoryCommunicationProtocol
 from p2pfl.exceptions import LearnerRunningException, NodeRunningException
+from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
+from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrategy
 from p2pfl.node import Node
-from p2pfl.node_state import NodeState
+from p2pfl.node_state import NodeState, NodeStatus
+from p2pfl.workflow.engine.experiment import Experiment
+from p2pfl.workflow.engine.workflow import WorkflowStatus
 
 
 def _make_node():
     """Create a Node with a real PyTorch model but memory protocol (fast)."""
     from p2pfl.examples.mnist.model.mlp_pytorch import model_build_fn
-    from p2pfl.learning.dataset.p2pfl_dataset import P2PFLDataset
-    from p2pfl.learning.dataset.partition_strategies import RandomIIDPartitionStrategy
 
     data = P2PFLDataset.from_huggingface("p2pfl/MNIST")
     partitions = data.generate_partitions(100, RandomIIDPartitionStrategy)
@@ -98,8 +100,6 @@ class TestNodeProperties:
         # Simulate learning state
         mock_wf = MagicMock()
         mock_wf.status.is_terminal = False
-        from p2pfl.workflow.engine.workflow import WorkflowStatus
-
         mock_wf.status = WorkflowStatus.RUNNING
         node.workflow = mock_wf
         with pytest.raises(LearnerRunningException):
@@ -113,8 +113,6 @@ class TestNodeProperties:
         node = _make_node()
         await node.start()
         mock_wf = MagicMock()
-        from p2pfl.workflow.engine.workflow import WorkflowStatus
-
         mock_wf.status = WorkflowStatus.RUNNING
         node.workflow = mock_wf
         with pytest.raises(LearnerRunningException):
@@ -141,8 +139,6 @@ class TestNodeProperties:
         node = _make_node()
         await node.start()
         mock_wf = MagicMock()
-        from p2pfl.workflow.engine.workflow import WorkflowStatus
-
         mock_wf.status = WorkflowStatus.FAILED
         mock_wf.error = RuntimeError("boom")
         mock_wf.current_stage_name = "voting"
@@ -193,8 +189,6 @@ class TestNodeLearning:
         mock_wf.get_messages.return_value = {"msg1": MagicMock()}
         node.workflow = mock_wf
         # Calling _start_learning_workflow should clean up the old one
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment.create(exp_name="test", total_rounds=1, epochs_per_round=1)
         # It will create a new workflow, but fail because no neighbors — that's fine,
         # we just want to verify the old workflow was cleaned up
@@ -231,8 +225,6 @@ class TestNodeLearning:
         await node.start()
         mock_wf = MagicMock()
         mock_wf.stop = AsyncMock(side_effect=RuntimeError("workflow stop failed"))
-        from p2pfl.workflow.engine.workflow import WorkflowStatus
-
         mock_wf.status = WorkflowStatus.RUNNING
         mock_wf.get_messages.return_value = {}
         node.workflow = mock_wf
@@ -257,8 +249,6 @@ class TestNodeState:
 
     def test_from_workflow_status(self):
         """Test from workflow status."""
-        from p2pfl.workflow.engine.workflow import WorkflowStatus
-
         assert NodeState.from_workflow_status(WorkflowStatus.RUNNING) == NodeState.LEARNING
         assert NodeState.from_workflow_status(WorkflowStatus.FINISHED) == NodeState.FINISHED
         assert NodeState.from_workflow_status(WorkflowStatus.FAILED) == NodeState.FAILED
@@ -267,8 +257,6 @@ class TestNodeState:
 
     def test_node_status_str(self):
         """Test node status str."""
-        from p2pfl.node_state import NodeStatus
-
         s = NodeStatus(
             address="127.0.0.1:8000",
             state=NodeState.FAILED,
@@ -286,8 +274,6 @@ class TestNodeState:
 
     def test_node_status_str_minimal(self):
         """Test node status str minimal."""
-        from p2pfl.node_state import NodeStatus
-
         s = NodeStatus(
             address="node1",
             state=NodeState.IDLE,

@@ -26,6 +26,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
+import p2pfl.management.node_monitor as nm
 from p2pfl.management.cli import app
 from p2pfl.management.message_storage import MessageStorage
 from p2pfl.management.metric_storage import GlobalMetricStorage, LocalMetricStorage
@@ -35,6 +36,7 @@ from p2pfl.management.node_monitor import (
     _get_geolocation,
     collect_node_metadata,
 )
+from p2pfl.settings import Settings
 
 runner = CliRunner()
 
@@ -277,8 +279,6 @@ class TestNodeMetadata:
 
     def setup_method(self):
         """Reset cached metadata before each test."""
-        import p2pfl.management.node_monitor as nm
-
         nm._cached_metadata = None
 
     def test_collect_metadata_and_cache(self):
@@ -295,8 +295,6 @@ class TestNodeMetadata:
 
     def test_geolocation_disabled(self):
         """Geolocation returns None when disabled."""
-        from p2pfl.settings import Settings
-
         Settings.general.WEB_GEOLOCATION = False
         assert _get_geolocation() is None
 
@@ -431,8 +429,6 @@ class TestNodeMetadata:
 
     def test_geolocation_enabled_success(self):
         """Geolocation returns data when enabled and request succeeds."""
-        from p2pfl.settings import Settings
-
         geo_data = {
             "country": "Spain",
             "regionName": "Galicia",
@@ -456,8 +452,6 @@ class TestNodeMetadata:
 
     def test_geolocation_enabled_http_error(self):
         """Geolocation returns None on HTTP error."""
-        from p2pfl.settings import Settings
-
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         mock_httpx = MagicMock()
@@ -470,8 +464,6 @@ class TestNodeMetadata:
 
     def test_geolocation_enabled_exception(self):
         """Geolocation returns None on connection exception."""
-        from p2pfl.settings import Settings
-
         mock_httpx = MagicMock()
         mock_httpx.get.side_effect = ConnectionError("no network")
 

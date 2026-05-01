@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import datetime
+import logging
 from datetime import timezone
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
+from p2pfl.management.logger.decorators.web_logger import DictFormatter, P2pflWebLogHandler, WebP2PFLogger
 from p2pfl.management.p2pfl_web_services import P2pflWebServices, P2pflWebServicesError
 from p2pfl.settings import Settings
+from p2pfl.workflow.engine.experiment import Experiment
 
 ###
 # Helpers
@@ -562,8 +566,6 @@ class TestWebP2PFLogger:
 
     def _make_logger(self, *, connected: bool = True):
         """Create a WebP2PFLogger with a mocked inner logger and optionally a mocked web services."""
-        from p2pfl.management.logger.decorators.web_logger import WebP2PFLogger
-
         inner = MagicMock(spec=P2PFLoggerStub)
         inner.node_monitor = MagicMock()
         inner.node_monitor.add_callback = MagicMock()
@@ -577,8 +579,6 @@ class TestWebP2PFLogger:
         logger._node_callbacks = {}
         logger._pending_futures = []
 
-        import concurrent.futures
-
         logger._lifecycle_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
         if connected:
@@ -590,8 +590,6 @@ class TestWebP2PFLogger:
 
     def test_connect_creates_services_from_args(self, monkeypatch):
         """Test connect creates services from args."""
-        from p2pfl.management.logger.decorators.web_logger import WebP2PFLogger
-
         inner = MagicMock(spec=P2PFLoggerStub)
         inner.node_monitor = MagicMock()
 
@@ -602,8 +600,6 @@ class TestWebP2PFLogger:
         logger._ended_experiments = set()
         logger._node_callbacks = {}
         logger._pending_futures = []
-
-        import concurrent.futures
 
         logger._lifecycle_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
@@ -672,8 +668,6 @@ class TestWebP2PFLogger:
         """Test experiment started creates experiment on web."""
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
 
         logger.experiment_started("node-1", exp)
@@ -687,8 +681,6 @@ class TestWebP2PFLogger:
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
         ws.create_experiment.side_effect = Exception("network error")
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
 
         # Should not raise
@@ -698,8 +690,6 @@ class TestWebP2PFLogger:
     def test_experiment_started_no_web_only_delegates(self):
         """Test experiment started no web only delegates."""
         logger, inner = self._make_logger(connected=False)
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=3)
         logger.experiment_started("node-1", exp)
         inner.experiment_started.assert_called_once()
@@ -710,8 +700,6 @@ class TestWebP2PFLogger:
         """Test experiment ended updates and flushes."""
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
 
         logger.experiment_ended("node-1", exp, "finished")
@@ -725,8 +713,6 @@ class TestWebP2PFLogger:
         """Test experiment ended sets failed state."""
         logger, _ = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
 
         logger.experiment_ended("node-1", exp, "failed")
@@ -736,8 +722,6 @@ class TestWebP2PFLogger:
         """Test experiment ended sets cancelled state."""
         logger, _ = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
 
         logger.experiment_ended("node-1", exp, "cancelled")
@@ -747,8 +731,6 @@ class TestWebP2PFLogger:
         """Test experiment ended deduplicates."""
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
 
         logger.experiment_ended("node-1", exp, "finished")
@@ -764,8 +746,6 @@ class TestWebP2PFLogger:
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
         ws.update_experiment.side_effect = Exception("boom")
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
 
         logger.experiment_ended("node-1", exp, "finished")
@@ -777,8 +757,6 @@ class TestWebP2PFLogger:
         """Test on experiment change forwards to web."""
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
         inner.get_nodes.return_value = {"node-1": {"Experiment": exp}}
 
@@ -817,8 +795,6 @@ class TestWebP2PFLogger:
         """Test log metric local."""
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
         inner.get_nodes.return_value = {"node-1": {"Experiment": exp, "round": 2}}
 
@@ -831,8 +807,6 @@ class TestWebP2PFLogger:
         """Test log metric global."""
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
         inner.get_nodes.return_value = {"node-1": {"Experiment": exp, "round": 3}}
 
@@ -844,8 +818,6 @@ class TestWebP2PFLogger:
         """Test log metric uses stored round when none."""
         logger, inner = self._make_logger(connected=True)
         ws = logger._p2pfl_web_services
-        from p2pfl.workflow.engine.experiment import Experiment
-
         exp = Experiment(exp_name="exp-1", total_rounds=5)
         inner.get_nodes.return_value = {"node-1": {"Experiment": exp, "round": 7}}
 
@@ -967,10 +939,6 @@ class TestDictFormatterAndHandler:
 
     def test_dict_formatter_extracts_fields(self):
         """Test dict formatter extracts fields."""
-        import logging
-
-        from p2pfl.management.logger.decorators.web_logger import DictFormatter
-
         formatter = DictFormatter()
         record = logging.LogRecord("p2pfl", logging.INFO, "", 0, "test message", (), None)
         record.node = "node-1"  # type: ignore[attr-defined]
@@ -982,10 +950,6 @@ class TestDictFormatterAndHandler:
 
     def test_dict_formatter_raises_without_node(self):
         """Test dict formatter raises without node."""
-        import logging
-
-        from p2pfl.management.logger.decorators.web_logger import DictFormatter
-
         formatter = DictFormatter()
         record = logging.LogRecord("p2pfl", logging.INFO, "", 0, "msg", (), None)
         with pytest.raises(ValueError, match="node"):
@@ -993,10 +957,6 @@ class TestDictFormatterAndHandler:
 
     def test_log_handler_sends_to_web_services(self):
         """Test log handler sends to web services."""
-        import logging
-
-        from p2pfl.management.logger.decorators.web_logger import P2pflWebLogHandler
-
         mock_ws = MagicMock(spec=P2pflWebServices)
         handler = P2pflWebLogHandler(mock_ws)
         record = logging.LogRecord("p2pfl", logging.WARNING, "", 0, "warning msg", (), None)

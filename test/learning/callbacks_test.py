@@ -123,8 +123,6 @@ def test_fedprox_callback_get_name():
 def test_fedprox_callback_first_round_skips_proximal():
     """Test that FedProxCallback skips proximal term on first round."""
     pytest.importorskip("lightning", reason="PyTorch Lightning not available")
-    from unittest.mock import MagicMock
-
     from p2pfl.learning.frameworks.pytorch.callbacks.fedprox_callback import FedProxCallback
 
     callback = FedProxCallback()
@@ -142,8 +140,6 @@ def test_fedprox_callback_first_round_skips_proximal():
 def test_fedprox_callback_second_round_requires_info():
     """Test that FedProxCallback requires proximal_mu after first round."""
     pytest.importorskip("lightning", reason="PyTorch Lightning not available")
-    from unittest.mock import MagicMock
-
     from p2pfl.learning.frameworks.pytorch.callbacks.fedprox_callback import FedProxCallback
 
     callback = FedProxCallback()
@@ -162,8 +158,6 @@ def test_fedprox_callback_second_round_with_info():
     """Test that FedProxCallback works correctly with proximal_mu set."""
     pytest.importorskip("torch", reason="PyTorch not available")
     pytest.importorskip("lightning", reason="PyTorch Lightning not available")
-    from unittest.mock import MagicMock
-
     import torch
 
     from p2pfl.learning.frameworks.pytorch.callbacks.fedprox_callback import FedProxCallback
