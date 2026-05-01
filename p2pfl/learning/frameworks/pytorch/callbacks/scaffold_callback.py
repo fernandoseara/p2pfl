@@ -22,7 +22,6 @@ import copy
 from typing import Any
 
 import lightning as pl
-import numpy as np
 import torch
 from lightning.pytorch.callbacks import Callback
 
@@ -141,10 +140,3 @@ class SCAFFOLDCallback(Callback, P2PFLCallback):
 
     def _get_parameters(self, pl_module: pl.LightningModule) -> list[torch.Tensor]:
         return [param.cpu() for _, param in pl_module.state_dict().items()]
-
-    def _set_parameters(self, pl_module: pl.LightningModule, parameters: list[np.ndarray]) -> None:
-        """Set model parameters from a list of numpy arrays."""
-        state_dict = pl_module.state_dict()
-        for (name, _), param in zip(state_dict.items(), parameters, strict=False):
-            state_dict[name] = torch.from_numpy(param).to(pl_module.device)
-        pl_module.load_state_dict(state_dict)

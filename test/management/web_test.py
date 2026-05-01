@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from p2pfl.management.logger.decorators.web_logger import DictFormatter, P2pflWebLogHandler, WebP2PFLogger
-from p2pfl.management.p2pfl_web_services import P2pflWebServices, P2pflWebServicesError
+from p2pfl.management.p2pfl_web_services import P2pflWebServices
 from p2pfl.settings import Settings
 from p2pfl.workflow.engine.experiment import Experiment
 
@@ -40,23 +40,6 @@ def _make_services() -> tuple[P2pflWebServices, MagicMock]:
     mock_client = MagicMock(spec=httpx.Client)
     svc._client = mock_client
     return svc, mock_client
-
-
-###
-# P2pflWebServicesError
-###
-
-
-class TestP2pflWebServicesError:
-    """P2pfl Web Services Error tests."""
-
-    def test_stores_code_and_message(self):
-        """Test stores code and message."""
-        err = P2pflWebServicesError(404, "not found")
-        assert err.code == 404
-        assert err.message == "not found"
-        assert "404" in str(err)
-        assert "not found" in str(err)
 
 
 ###
@@ -541,12 +524,6 @@ class TestLifecycle:
             svc.stop()
             mock_flush.assert_called_once()
         client.close.assert_called_once()
-
-    def test_get_pending_actions_not_implemented(self):
-        """Test get pending actions not implemented."""
-        svc, _ = _make_services()
-        with pytest.raises(NotImplementedError):
-            svc.get_pending_actions()
 
 
 ###

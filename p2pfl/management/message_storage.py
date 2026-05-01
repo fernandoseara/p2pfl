@@ -23,9 +23,6 @@ from typing import Any
 
 # Define the storage structure types
 MessageEntryType = dict[str, Any]  # Individual message entry with details
-NodeMessagesType = dict[str, list[MessageEntryType]]  # Messages by node
-DirectionMessagesType = dict[str, NodeMessagesType]  # Messages by direction (sent/received)
-MessageResultType = list[MessageEntryType]  # Return type for filtered messages
 
 
 class MessageStorage:

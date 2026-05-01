@@ -28,10 +28,6 @@ from p2pfl.node import Node
 from p2pfl.node_state import NodeState
 from p2pfl.settings import Settings
 
-"""
-Module to define constants for the p2pfl system.
-"""
-
 ###################
 # Global Settings #
 ###################
@@ -50,7 +46,6 @@ def set_standalone_settings() -> None:
     Settings.general.GRPC_TIMEOUT = 10
     Settings.heartbeat.PERIOD = 1
     Settings.heartbeat.TIMEOUT = 10
-    Settings.heartbeat.WAIT_CONVERGENCE = 2
     Settings.heartbeat.EXCLUDE_BEAT_LOGS = True
     Settings.gossip.PERIOD = 0
     Settings.gossip.TTL = 51
@@ -202,6 +197,34 @@ async def full_connection(node: Node, nodes: list[Node]) -> None:
         await node.connect(n.address)
 
 
+def check_equal_models(nodes: list[Node]) -> None:
+    """
+    Check that all nodes have the same model.
+
+    Args:
+        nodes: List of nodes.
+
+    Raises:
+        AssertionError: If the condition is not met.
+
+    """
+    model_params: list[np.ndarray] | None = None
+    first = True
+    for node in nodes:
+        if first:
+            model_params = node.model.get_parameters()
+            first = False
+        else:
+            if model_params is None:
+                raise ValueError("Model parameters are None")
+            for i, layer in enumerate(model_params):
+                assert np.allclose(
+                    layer,
+                    node.model.get_parameters()[i],
+                    atol=1e-1,
+                )
+
+
 class NodeLearningError(Exception):
     """Exception raised when one or more nodes fail during learning."""
 
@@ -266,32 +289,3 @@ async def wait_to_finish(nodes: list[Node], timeout=3600, debug=False, raise_on_
                 failed.append((n.address, n.workflow.error))
         if failed:
             raise NodeLearningError(failed)
-
-
-def check_equal_models(nodes: list[Node]) -> None:
-    """
-    Check that all nodes have the same model.
-
-    Args:
-        nodes: List of nodes.
-
-    Raises:
-        AssertionError: If the condition is not met.
-
-    """
-    model_params: list[np.ndarray] | None = None
-    first = True
-    for node in nodes:
-        if first:
-            model_params = node.model.get_parameters()
-            first = False
-        else:
-            # compare layers with a tolerance
-            if model_params is None:
-                raise ValueError("Model parameters are None")
-            for i, layer in enumerate(model_params):
-                assert np.allclose(
-                    layer,
-                    node.model.get_parameters()[i],
-                    atol=1e-1,
-                )

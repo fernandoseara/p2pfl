@@ -103,56 +103,6 @@ class RandomIIDPartitionStrategy(DataPartitionStrategy):
         ]
 
 
-class LabelSkewedPartitionStrategy(DataPartitionStrategy):
-    """
-    Partitions the dataset by grouping samples with the same label, resulting in a non-IID distribution.
-
-    This is generally considered the "worst-case" scenario for federated learning.
-    """
-
-    # CUANDO SE HAGA LA OTRA (NO-IID GENERALIZARLA)
-
-    @staticmethod
-    def generate_partitions(
-        train_data: Dataset,
-        test_data: Dataset,
-        num_partitions: int,
-        label_tag: str = "label",
-        **kwargs,
-    ) -> tuple[list[list[int]], list[list[int]]]:
-        """
-        Generate partitions of the dataset by grouping samples with the same label.
-
-        Args:
-            train_data: The training Dataset object to partition.
-            test_data: The test Dataset object to partition.
-            num_partitions: The number of partitions to create.
-            label_tag: The name of the column containing the labels.
-            **kwargs: Additional keyword arguments that may be required by specific strategies.
-
-        Returns:
-            A tuple containing two lists of lists:
-                - The first list contains lists of indices for the training data partitions.
-                - The second list contains lists of indices for the test data partitions.
-
-        """
-        raise NotImplementedError("LabelSkewedPartitionStrategy is not implemented yet. TEST!")
-        train_partitions = []
-        test_partitions = []
-
-        # Partition the training data
-        sorted_train_indices = train_data.sort("label")
-        random.Random(Settings.general.SEED).shuffle(sorted_train_indices)  # Shuffle within label groups
-        train_partitions = [sorted_train_indices[i::num_partitions].tolist() for i in range(num_partitions)]
-
-        # Partition the test data
-        sorted_test_indices = test_data.sort("label").indices
-        random.Random(Settings.general.SEED).shuffle(sorted_test_indices)  # Shuffle within label groups
-        test_partitions = [sorted_test_indices[i::num_partitions].tolist() for i in range(num_partitions)]
-
-        return train_partitions, test_partitions
-
-
 class DirichletPartitionStrategy(DataPartitionStrategy):
     """
     Data partition strategy based on the Dirichlet distribution.
@@ -423,9 +373,3 @@ class DirichletPartitionStrategy(DataPartitionStrategy):
             raise ValueError("The number of partitions needs to be greater than zero.")
         if int(num_partitions) != num_partitions:
             raise ValueError("The number of partitions needs to be an integer")
-
-
-class PercentageBasedNonIIDPartitionStrategy(DataPartitionStrategy):
-    """Not implemented yet."""
-
-    pass

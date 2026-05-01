@@ -78,10 +78,6 @@ class AddressRequiredMeta(ABCMeta):
             instance.address = ""
         return instance
 
-    def set_address(cls, instance: Any, address: str) -> None:
-        """Set the address of the instance."""
-        instance.address = address
-
 
 class NodeComponent(metaclass=AddressRequiredMeta):
     """

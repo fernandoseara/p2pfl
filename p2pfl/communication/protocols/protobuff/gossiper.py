@@ -208,7 +208,7 @@ class Gossiper(NodeComponent):
             # Generate and send model partial aggregations
             for client in clients:
                 # Get Model
-                model, command_name, round_num, model_hashes = model_fn(client.nei_addr)
+                model, _, _, _ = model_fn(client.nei_addr)
                 if model is None:
                     continue
 

@@ -201,16 +201,6 @@ class P2PFLModel(ABC):
         """
         raise NotImplementedError
 
-    def clone_model(self) -> Any:
-        """
-        Clone the model.
-
-        Returns:
-            The cloned model.
-
-        """
-        raise NotImplementedError("Clone method not implemented for this model.")
-
 
 class WeightBasedModel(P2PFLModel):
     """

@@ -157,7 +157,3 @@ class SCAFFOLDCallback(callbacks.Callback, P2PFLCallback):
 
         self.additional_info["delta_y_i"] = delta_y_i
         self.additional_info["delta_c_i"] = delta_c_i
-
-    def set_additional_info(self, info: dict[str, Any]) -> None:
-        """Set additional information required for SCAFFOLD."""
-        self.additional_info = info

@@ -34,23 +34,6 @@ import websockets
 from p2pfl.settings import Settings
 
 
-class P2pflWebServicesError(Exception):
-    """
-    P2PFL Web Services Error.
-
-    Args:
-        code: Error code.
-        message: Error message.
-
-    """
-
-    def __init__(self, code: int, message: str) -> None:
-        """Initialize the error."""
-        self.code = code
-        self.message = message
-        super().__init__(f"Error {code}: {message}")
-
-
 class P2pflWebServices:
     """
     Class that manages the communication with the p2pfl web services.
@@ -498,7 +481,3 @@ class P2pflWebServices:
             )
         except Exception as e:
             print(f"[P2PFL Web Services] Failed to upload profiling data: {e}")
-
-    def get_pending_actions(self) -> list[dict]:
-        """Get pending actions from the web services."""
-        raise NotImplementedError

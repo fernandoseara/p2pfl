@@ -108,7 +108,7 @@ class XGBoostLearner(Learner):
         try:
             previous_booster = self.get_model().get_model().get_booster()
             model.fit(X_train, y_train, eval_set=eval_set, verbose=False, xgb_model=previous_booster)
-        except (NotFittedError, Exception):
+        except Exception:
             model.fit(X_train, y_train, eval_set=eval_set, verbose=False)
 
         self.get_model().set_contribution([self.address], self.get_data().get_num_samples(train=True))
@@ -137,10 +137,6 @@ class XGBoostLearner(Learner):
 
         """
         raise NotImplementedError("Interrupting XGBoost sklearn fit is not supported")
-
-    # def set_model(self, model: Union[P2PFLModel, list[np.ndarray], bytes]) -> None:
-    #
-    #     self.__model = model
 
     @allow_no_addr_check
     async def evaluate(self) -> dict[str, float]:

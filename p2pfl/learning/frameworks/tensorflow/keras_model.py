@@ -121,16 +121,6 @@ class KerasModel(WeightBasedModel):
         """
         return self.model
 
-    def clone_model(self) -> tf.keras.Model:
-        """
-        Clone the model.
-
-        Returns:
-            The cloned model.
-
-        """
-        return self.model.__class__.from_config(self.model.get_config())
-
     def build_copy(self, **kwargs) -> "KerasModel":
         """
         Create a copy of the model with the same configuration.

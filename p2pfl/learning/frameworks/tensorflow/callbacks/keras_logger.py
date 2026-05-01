@@ -47,11 +47,6 @@ class FederatedLogger(tf.keras.callbacks.Callback, P2PFLCallback):
 
     def on_epoch_end(self, epoch, logs=None):
         """Log metrics at the end of each epoch."""
-        """
-        if logs is not None:
-            for k, v in logs.items():
-                P2PLogger.log_metric(self.self_name, k, v, self.step)
-        """
         pass
 
     def on_train_batch_end(self, batch, logs=None):

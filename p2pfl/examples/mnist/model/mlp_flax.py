@@ -22,8 +22,6 @@ from flax import linen as nn
 
 from p2pfl.learning.frameworks.flax.flax_model import FlaxModel
 
-# from p2pfl.learning.frameworks.flax.flax_model import FlaxModel
-
 ####
 # Example MLP in Flax
 ####
