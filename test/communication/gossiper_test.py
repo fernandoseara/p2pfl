@@ -147,15 +147,17 @@ async def test_gossip_weights_stops_on_early_stopping():
     g = _make_gossiper()
     g._neighbors.get_all.return_value = {}
 
+    model_fn = MagicMock(return_value=(None, "cmd", 0, []))
+
     await g.gossip_weights(
         early_stopping_fn=lambda: True,
         get_candidates_fn=lambda: ["n1"],
         status_fn=lambda: "status",
-        model_fn=lambda addr: (None, "cmd", 0, []),
+        model_fn=model_fn,
         period=0.01,
         temporal_connection=False,
     )
-    # Should return without error; no sends expected
+    model_fn.assert_not_called()
 
 
 @pytest.mark.asyncio

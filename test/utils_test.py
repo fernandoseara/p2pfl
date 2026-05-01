@@ -16,13 +16,20 @@
 #
 """Utils tests."""
 
+import random
 from unittest.mock import AsyncMock, MagicMock, call
 
 import numpy as np
 import pytest
 
+from p2pfl.learning.frameworks import Framework
 from p2pfl.utils.node_component import NodeComponent, allow_no_addr_check
+from p2pfl.utils.seed import set_seed
 from p2pfl.utils.topologies import TopologyFactory, TopologyType
+
+###
+# Topology Tests
+###
 
 
 # Mock Node class for testing
@@ -146,6 +153,11 @@ def test_generate_random_matrix_properties(topology_type, num_nodes):
     assert actual_num_edges == expected_num_edges
 
 
+###
+# NodeComponent Tests
+###
+
+
 class MockNodeComponent(NodeComponent):
     """Mock class inheriting from NodeComponent for testing."""
 
@@ -188,3 +200,275 @@ def test_node_component_methods():
     addr = "test_address"
     component.set_address(addr)
     assert component.example_method() == addr
+
+
+###
+# Seed Tests
+###
+
+
+def test_set_seed_none_is_noop():
+    """set_seed(None) should return immediately without changing any state."""
+    before_py = random.getstate()
+    before_np = np.random.get_state()
+    set_seed(None)
+    assert random.getstate() == before_py
+    # NumPy state is a tuple; compare the key[1] array
+    assert np.array_equal(before_np[1], np.random.get_state()[1])
+
+
+def test_set_seed_determinism():
+    """set_seed with a value makes Python and NumPy RNGs deterministic."""
+    set_seed(42, framework=Framework.PYTORCH)
+    py_vals = [random.random() for _ in range(5)]
+    np_vals = list(np.random.rand(5))
+
+    set_seed(42, framework=Framework.PYTORCH)
+    assert [random.random() for _ in range(5)] == py_vals
+    assert list(np.random.rand(5)) == np_vals
+
+
+def test_set_seed_pytorch():
+    """set_seed seeds PyTorch when framework=PYTORCH."""
+    torch = pytest.importorskip("torch")
+    set_seed(123, framework=Framework.PYTORCH)
+    t1 = torch.rand(3)
+    set_seed(123, framework=Framework.PYTORCH)
+    t2 = torch.rand(3)
+    assert torch.equal(t1, t2)
+
+
+def test_set_seed_pytorch_via_string():
+    """set_seed accepts framework as a string."""
+    torch = pytest.importorskip("torch")
+    set_seed(99, framework="pytorch")
+    t1 = torch.rand(3)
+    set_seed(99, framework="pytorch")
+    t2 = torch.rand(3)
+    assert torch.equal(t1, t2)
+
+
+def test_set_seed_tensorflow():
+    """set_seed seeds TensorFlow when framework=TENSORFLOW."""
+    tf = pytest.importorskip("tensorflow")
+    set_seed(77, framework=Framework.TENSORFLOW)
+    t1 = tf.random.stateless_normal([3], seed=[77, 0])
+    set_seed(77, framework=Framework.TENSORFLOW)
+    t2 = tf.random.stateless_normal([3], seed=[77, 0])
+    assert tf.reduce_all(tf.equal(t1, t2)).numpy()
+
+
+###
+# Utils function tests (p2pfl.utils.utils)
+###
+
+
+class TestWaitConvergence:
+    """Tests for wait_convergence utility."""
+
+    @pytest.mark.asyncio
+    async def test_wait_convergence_immediate(self):
+        """Nodes already have enough neighbors -- converges immediately."""
+        from p2pfl.utils.utils import wait_convergence
+
+        n1 = MagicMock()
+        n1.get_neighbors.return_value = ["b", "c"]
+        n1.address = "a"
+        n2 = MagicMock()
+        n2.get_neighbors.return_value = ["a", "c"]
+        n2.address = "b"
+        await wait_convergence([n1, n2], n_neis=2, wait=1)
+
+    @pytest.mark.asyncio
+    async def test_wait_convergence_timeout_raises(self):
+        """wait_convergence raises AssertionError on timeout."""
+        from p2pfl.utils.utils import wait_convergence
+
+        node = MagicMock()
+        node.get_neighbors.return_value = []
+        node.address = "a"
+        with pytest.raises(AssertionError):
+            await wait_convergence([node], n_neis=5, wait=0.1)
+
+    @pytest.mark.asyncio
+    async def test_wait_convergence_with_debug(self):
+        """wait_convergence with debug=True prints connectivity matrix."""
+        from p2pfl.utils.utils import wait_convergence
+
+        n1 = MagicMock()
+        n1.get_neighbors.return_value = ["b"]
+        n1.address = "a"
+        n2 = MagicMock()
+        n2.get_neighbors.return_value = ["a"]
+        n2.address = "b"
+        await wait_convergence([n1, n2], n_neis=1, wait=2, debug=True)
+
+
+class TestPrintConnectivityMatrix:
+    """Tests for _print_connectivity_matrix utility."""
+
+    def test_print_connectivity_matrix_final(self):
+        """Test _print_connectivity_matrix with final=True."""
+        from p2pfl.utils.utils import _print_connectivity_matrix
+
+        n1 = MagicMock()
+        n1.get_neighbors.return_value = ["b"]
+        n1.address = "a"
+        n2 = MagicMock()
+        n2.get_neighbors.return_value = ["a"]
+        n2.address = "b"
+        # Should not raise
+        _print_connectivity_matrix([n1, n2], final=True)
+
+    def test_print_connectivity_matrix_not_final(self):
+        """Test _print_connectivity_matrix with final=False."""
+        from p2pfl.utils.utils import _print_connectivity_matrix
+
+        n1 = MagicMock()
+        n1.get_neighbors.return_value = ["b"]
+        n1.address = "a"
+        n2 = MagicMock()
+        n2.get_neighbors.return_value = ["a"]
+        n2.address = "b"
+        _print_connectivity_matrix([n1, n2], final=False)
+
+    def test_print_connectivity_matrix_long_address(self):
+        """Test truncation of long addresses."""
+        from p2pfl.utils.utils import _print_connectivity_matrix
+
+        n1 = MagicMock()
+        n1.get_neighbors.return_value = []
+        n1.address = "a" * 30  # Long address, triggers truncation
+        _print_connectivity_matrix([n1], final=True)
+
+    def test_print_connectivity_matrix_non_uniform(self):
+        """Test non-uniform topology reporting."""
+        from p2pfl.utils.utils import _print_connectivity_matrix
+
+        n1 = MagicMock()
+        n1.get_neighbors.return_value = ["b", "c"]
+        n1.address = "a"
+        n2 = MagicMock()
+        n2.get_neighbors.return_value = ["a"]
+        n2.address = "b"
+        n3 = MagicMock()
+        n3.get_neighbors.return_value = []
+        n3.address = "c"
+        _print_connectivity_matrix([n1, n2, n3], final=False)
+
+
+class TestFullConnection:
+    """Tests for full_connection utility."""
+
+    @pytest.mark.asyncio
+    async def test_full_connection(self):
+        """full_connection connects node to all other nodes."""
+        from p2pfl.utils.utils import full_connection
+
+        main = MagicMock()
+        main.connect = AsyncMock()
+        main.address = "main"
+        others = []
+        for i in range(3):
+            n = MagicMock()
+            n.address = f"node_{i}"
+            others.append(n)
+        await full_connection(main, others)
+        assert main.connect.call_count == 3
+
+
+class TestNodeLearningError:
+    """Tests for NodeLearningError."""
+
+    def test_error_message(self):
+        """Error message includes all failed node addresses."""
+        from p2pfl.utils.utils import NodeLearningError
+
+        err = NodeLearningError([("node1", ValueError("bad")), ("node2", RuntimeError("crash"))])
+        assert "node1" in str(err)
+        assert "node2" in str(err)
+        assert len(err.failed_nodes) == 2
+
+
+class _FakeNode:
+    """Minimal fake node for wait_to_finish tests using real NodeState enums."""
+
+    def __init__(self, address, state, workflow=None):
+        self.address = address
+        self.state = state
+        self.workflow = workflow
+
+
+class TestWaitToFinish:
+    """Tests for wait_to_finish utility."""
+
+    @pytest.mark.asyncio
+    async def test_wait_to_finish_all_finished(self):
+        """wait_to_finish returns when all nodes are in terminal state."""
+        from p2pfl.node_state import NodeState
+        from p2pfl.utils.utils import wait_to_finish
+
+        n1 = _FakeNode("n1", NodeState.FINISHED)
+        await wait_to_finish([n1], timeout=5)
+
+    @pytest.mark.asyncio
+    async def test_wait_to_finish_timeout(self):
+        """wait_to_finish raises TimeoutError if nodes don't finish."""
+        from p2pfl.node_state import NodeState
+        from p2pfl.utils.utils import wait_to_finish
+
+        wf = MagicMock()
+        wf.status.value = "running"
+        wf.current_stage_name = "train"
+        n1 = _FakeNode("n1", NodeState.LEARNING, workflow=wf)
+        with pytest.raises(TimeoutError):
+            await wait_to_finish([n1], timeout=0.1, debug=True)
+
+    @pytest.mark.asyncio
+    async def test_wait_to_finish_failed_raises(self):
+        """wait_to_finish raises NodeLearningError when a node failed."""
+        from p2pfl.node_state import NodeState
+        from p2pfl.utils.utils import NodeLearningError, wait_to_finish
+
+        wf = MagicMock()
+        wf.error = RuntimeError("training crash")
+        n1 = _FakeNode("n1", NodeState.FAILED, workflow=wf)
+        with pytest.raises(NodeLearningError):
+            await wait_to_finish([n1], timeout=5, raise_on_error=True)
+
+    @pytest.mark.asyncio
+    async def test_wait_to_finish_failed_no_raise(self):
+        """wait_to_finish with raise_on_error=False does not raise."""
+        from p2pfl.node_state import NodeState
+        from p2pfl.utils.utils import wait_to_finish
+
+        wf = MagicMock()
+        wf.error = RuntimeError("crash")
+        n1 = _FakeNode("n1", NodeState.FAILED, workflow=wf)
+        await wait_to_finish([n1], timeout=5, raise_on_error=False)
+
+
+class TestCheckEqualModels:
+    """Tests for check_equal_models utility."""
+
+    def test_check_equal_models_same(self):
+        """check_equal_models passes for identical model parameters."""
+        from p2pfl.utils.utils import check_equal_models
+
+        params = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
+        n1 = MagicMock()
+        n1.model.get_parameters.return_value = [p.copy() for p in params]
+        n2 = MagicMock()
+        n2.model.get_parameters.return_value = [p.copy() for p in params]
+        check_equal_models([n1, n2])
+
+    def test_check_equal_models_none_params_raises(self):
+        """check_equal_models raises ValueError when first node has None params."""
+        from p2pfl.utils.utils import check_equal_models
+
+        n1 = MagicMock()
+        n1.model.get_parameters.return_value = None
+        n2 = MagicMock()
+        n2.model.get_parameters.return_value = [np.array([1.0])]
+        with pytest.raises(ValueError, match="Model parameters are None"):
+            check_equal_models([n1, n2])

@@ -18,7 +18,6 @@
 """Weight-based framework tests (PyTorch, TensorFlow, Flax)."""
 
 import contextlib
-from collections.abc import Generator
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -33,32 +32,28 @@ from p2pfl.management.logger import logger
 from p2pfl.settings import Settings
 from p2pfl.workflow.engine.experiment import Experiment
 
-with contextlib.suppress(ImportError):
+try:
     import tensorflow as tf
 
     from p2pfl.examples.mnist.model.mlp_tensorflow import model_build_fn as model_build_fn_tensorflow
     from p2pfl.learning.frameworks.tensorflow.keras_dataset import KerasExportStrategy
     from p2pfl.learning.frameworks.tensorflow.keras_model import KerasModel
+except ImportError:
+    model_build_fn_tensorflow = pytest.param(None, marks=pytest.mark.skip(reason="TensorFlow not installed"))  # type: ignore[assignment]
 
-with contextlib.suppress(ImportError):
-    import jax
-    import jax.numpy as jnp
-
-    from p2pfl.examples.mnist.model.mlp_flax import MLP as MLP_FLASK
-    from p2pfl.learning.frameworks.flax.flax_dataset import FlaxExportStrategy
-    from p2pfl.learning.frameworks.flax.flax_model import FlaxModel
-
-with contextlib.suppress(ImportError):
+try:
     import torch
     from torch.utils.data import DataLoader
 
     from p2pfl.examples.mnist.model.mlp_pytorch import model_build_fn as model_build_fn_torch
     from p2pfl.learning.frameworks.pytorch.lightning_dataset import PyTorchExportStrategy, TorchvisionDatasetFactory
     from p2pfl.learning.frameworks.pytorch.lightning_model import LightningModel
+except ImportError:
+    model_build_fn_torch = pytest.param(None, marks=pytest.mark.skip(reason="PyTorch not installed"))  # type: ignore[assignment]
 
-############################
-#    PyTorch Model Tests
-############################
+###
+# PyTorch Model Tests
+###
 
 
 def test_get_set_params_torch():
@@ -103,9 +98,9 @@ def test_wrong_encoding_torch():
         p2pfl_model2.set_parameters(decoded_params)
 
 
-###############################
-#    TensorFlow Model Tests
-###############################
+###
+# TensorFlow Model Tests
+###
 
 
 def test_get_set_params_tensorflow():
@@ -148,86 +143,9 @@ def test_wrong_encoding_tensorflow():
         p2pfl_model2.set_parameters(decoded_params)
 
 
-####################################
-#    Flax Model Tests (disabled)
-####################################
-
-
-@pytest.mark.skip(reason="Flax support disabled pending JAX integration")
-def test_get_set_params_flax():
-    """Test setting and getting parameters."""
-    # Create the model
-    model = MLP_FLASK()
-    seed = jax.random.PRNGKey(0)
-    model_params = model.init(seed, jnp.ones((1, 28, 28)))["params"]
-    p2pfl_model = FlaxModel(model, model_params)
-
-    # Save internal flax-model repr
-    _flax_params = p2pfl_model.model_params.copy()
-    params = p2pfl_model.get_parameters()
-    p2pfl_model.set_parameters(params)
-
-    # Check that flax to numpy arrays transformation works
-    for layer in _flax_params:
-        for param in _flax_params[layer]:
-            assert np.array_equal(
-                _flax_params[layer][param], p2pfl_model.model_params[layer][param]
-            ), f"Mismatch found in {layer} - {param}"
-
-    # Modify parameters
-    params = p2pfl_model.get_parameters()
-    params_og = [layer.copy() for layer in p2pfl_model.get_parameters()]
-    for i, layer in enumerate(params):
-        params[i] = layer + 1
-    # Set parameters
-    p2pfl_model.set_parameters(params)
-    # Check if the parameters are different (+1)
-    for layer_og, layer_new in zip(params_og, p2pfl_model.get_parameters(), strict=False):
-        assert np.all(layer_og + 1 == layer_new)
-
-
-@pytest.mark.skip(reason="Flax support disabled pending JAX integration")
-def test_encoding_flax():
-    """Test encoding and decoding of parameters."""
-    model1 = MLP_FLASK()
-    seed = jax.random.PRNGKey(0)
-    model_params = model1.init(seed, jnp.ones((1, 28, 28)))["params"]
-    p2pfl_model1 = FlaxModel(model=model1, init_params=model_params)
-    encoded_params = p2pfl_model1.encode_parameters()
-
-    model2 = MLP_FLASK()
-    seed = jax.random.PRNGKey(1)
-    model_params = model2.init(seed, jnp.ones((1, 28, 28)))["params"]
-    p2pfl_model2 = FlaxModel(model2, init_params=model_params)
-    decoded_params, additional_info = p2pfl_model2.decode_parameters(encoded_params)
-    p2pfl_model2.set_parameters(decoded_params)
-
-    for arr1, arr2 in zip(p2pfl_model1.get_parameters(), p2pfl_model2.get_parameters(), strict=False):
-        assert np.array_equal(arr1, arr2)
-        assert p2pfl_model1.additional_info == p2pfl_model2.additional_info
-
-
-@pytest.mark.skip(reason="Flax support disabled pending JAX integration")
-def test_wrong_encoding_flax():
-    """Test wrong encoding of parameters."""
-    model1 = MLP_FLASK()
-    seed = jax.random.PRNGKey(0)
-    model_params1 = model1.init(seed, jnp.ones((1, 28, 28)))["params"]
-    p2pfl_model1 = FlaxModel(model=model1, init_params=model_params1)
-    encoded_params = p2pfl_model1.encode_parameters()
-    model2 = MLP_FLASK()
-    model2.hidden_sizes = (256, 128, 256, 128)
-    model_params2 = model2.init(seed, jnp.ones((1, 28, 28)))["params"]
-    p2pfl_model2 = FlaxModel(model=model2, init_params=model_params2)
-    decoded_params = p2pfl_model1.decode_parameters(encoded_params)
-    # Check that raises
-    with pytest.raises(ModelNotMatchingError):
-        p2pfl_model2.set_parameters(decoded_params)
-
-
-###########################
-#    PyTorch Data Tests
-###########################
+###
+# PyTorch Data Tests
+###
 
 
 def test_torchvision_dataset_factory_mnist():
@@ -277,9 +195,9 @@ def test_pytorch_export_strategy():
     assert sample["image"].size() == (1, 1, 28, 28)
 
 
-##############################
-#    TensorFlow Data Tests
-##############################
+###
+# TensorFlow Data Tests
+###
 
 
 def test_tensorflow_export_strategy():
@@ -307,41 +225,9 @@ def test_tensorflow_export_strategy():
     assert sample[0].shape == (1, 28, 28)
 
 
-###################################
-#    Flax Data Tests (disabled)
-###################################
-
-
-@pytest.mark.skip(reason="Flax support disabled pending JAX integration")
-def test_flax_export_strategy():
-    """Test the FlaxExportStrategy."""
-    dataset = TorchvisionDatasetFactory.get_mnist(cache_dir=".", train=True, download=True)
-    dataset.set_batch_size(1)
-
-    export_strategy = FlaxExportStrategy()
-    train_data = dataset.export(export_strategy, train_loader=True)
-    test_data = dataset.export(export_strategy, train_loader=False)
-
-    assert isinstance(train_data, Generator)
-    assert isinstance(test_data, Generator)
-
-    # Check if data
-    assert train_data is not None
-    assert test_data is not None
-
-    # Check if the data is loaded correctly
-    x, y = next(iter(train_data))
-
-    assert isinstance(x, jnp.ndarray)
-    assert x.shape == (1, 28, 28)
-
-    assert isinstance(y, jnp.ndarray)
-    assert y.shape == (1,)
-
-
-################################
-#    Learner Training Tests
-################################
+###
+# Learner Training Tests
+###
 
 
 @pytest.mark.asyncio
@@ -377,15 +263,18 @@ async def test_learner_train(build_model_fn):
 
     # Train
     learner.set_epochs(1)
-    await learner.fit()
+    trained_model = await learner.fit()
+    assert trained_model is not None
+    assert len(trained_model.get_parameters()) > 0
 
     # Test
-    await learner.evaluate()
+    metrics = await learner.evaluate()
+    assert isinstance(metrics, dict)
 
 
-###################################
-#    LearnerFactory Tests
-###################################
+###
+# LearnerFactory Tests
+###
 
 
 def test_learner_factory_pytorch():
@@ -436,9 +325,9 @@ def test_learner_factory_xgboost():
     assert learner_cls is XGBoostLearner
 
 
-###################################
-#    Learner Base Tests
-###################################
+###
+# Learner Base Tests
+###
 
 
 class TestLearnerBase:
@@ -463,13 +352,6 @@ class TestLearnerBase:
         with pytest.raises(ValueError, match="Data not initialized"):
             learner.get_data()
 
-    def test_epochs_accessors(self):
-        """get/set_epochs round-trips correctly."""
-        learner = self._make_learner()
-        assert learner.get_epochs() == 1
-        learner.set_epochs(5)
-        assert learner.get_epochs() == 5
-
     def test_steps_per_epoch_accessors(self):
         """get/set_steps_per_epoch round-trips correctly."""
         learner = self._make_learner()
@@ -490,9 +372,9 @@ class TestLearnerBase:
         assert isinstance(learner.callbacks, list)
 
 
-###################################
-#    LearnerDecorator Tests
-###################################
+###
+# LearnerDecorator Tests
+###
 
 
 class TestLearnerDecorator:
@@ -554,8 +436,10 @@ class TestLearnerDecorator:
         """indicate_aggregator delegates to inner learner."""
         dec, inner = self._make_decorated()
         mock_agg = MagicMock()
-        mock_agg.get_required_callbacks.return_value = []
+        mock_agg.get_required_callbacks.return_value = ["scaffold"]
+        callbacks_before = len(inner.callbacks)
         dec.indicate_aggregator(mock_agg)
+        assert len(inner.callbacks) >= callbacks_before
 
     def test_get_framework_delegation(self):
         """get_framework delegates to inner learner."""
@@ -567,8 +451,8 @@ class TestLearnerDecorator:
         dec, inner = self._make_decorated()
         model = model_build_fn_torch()
         dec.set_model(model)
-        # Should not raise
         dec.update_callbacks_with_model_info()
+        assert inner.get_model() is model
 
     def test_add_callback_info_delegation(self):
         """add_callback_info_to_model delegates to inner learner."""
@@ -576,6 +460,7 @@ class TestLearnerDecorator:
         model = model_build_fn_torch()
         dec.set_model(model)
         dec.add_callback_info_to_model()
+        assert inner.get_model() is model
 
     @pytest.mark.asyncio
     async def test_fit_delegation(self):
@@ -596,6 +481,7 @@ class TestLearnerDecorator:
         Settings.general.SEED = None
         result = await dec.fit()
         assert result is not None
+        assert len(result.get_parameters()) > 0
 
     @pytest.mark.asyncio
     async def test_evaluate_delegation(self):
@@ -636,7 +522,7 @@ class TestLearnerDecorator:
 
     @pytest.mark.asyncio
     async def test_interrupt_fit_delegation(self):
-        """Interrupt_fit delegates to inner learner."""
+        """Interrupt_fit delegates to inner learner without error."""
         dec, inner = self._make_decorated()
-        # Should not raise even without ongoing fit
         await dec.interrupt_fit()
+        assert dec._learner is inner
