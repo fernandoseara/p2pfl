@@ -18,8 +18,6 @@
 
 """XGBoost Callback Logger for P2PFL."""
 
-from typing import Any
-
 import xgboost as xgb
 
 from p2pfl.management.logger import logger as P2PLogger
@@ -34,9 +32,6 @@ class XGBoostLogger(xgb.callback.TrainingCallback):
     Args:
         addr (str): Address or node identifier for logging.
 
-    Attributes:
-        _addr (str): The node address used for logging identification.
-
     """
 
     def __init__(self, addr: str) -> None:
@@ -48,16 +43,6 @@ class XGBoostLogger(xgb.callback.TrainingCallback):
 
         """
         self._addr = addr
-
-    def before_training(self, model: xgb.core.Booster) -> None:
-        """
-        Execute before training starts.
-
-        Args:
-            model (xgb.core.Booster): The XGBoost booster model.
-
-        """
-        P2PLogger.info(self._addr, "Starting XGBoost training...")
 
     def after_iteration(
         self,
@@ -81,41 +66,6 @@ class XGBoostLogger(xgb.callback.TrainingCallback):
         for data_name, metrics in evals_log.items():
             for metric_name, history in metrics.items():
                 value = history[-1]
-                # e.g., 'validation-error'
                 full_name = f"{data_name}-{metric_name}"
                 P2PLogger.log_metric(self._addr, full_name, value, step=epoch)
         return False
-
-    def after_training(self, model: xgb.core.Booster) -> None:
-        """
-        Execute after training is finished.
-
-        Args:
-            model (xgb.core.Booster): The XGBoost booster model.
-
-        """
-        P2PLogger.info(self._addr, "XGBoost training completed.")
-
-    def log_hyperparams(self, params: dict[str, Any]) -> None:
-        """
-        Log hyperparameters before training.
-
-        Args:
-            params (dict[str, Any]): Dictionary of hyperparameters to log.
-
-        """
-        pass
-
-    def save(self) -> None:
-        """Save logger state (no-op for XGBoostLogger)."""
-        pass
-
-    def finalize(self, status: str) -> None:
-        """
-        Finalize logging with status.
-
-        Args:
-            status (str): The final status of training (e.g., 'success' or 'failure').
-
-        """
-        P2PLogger.info(self._addr, f"Training finalized with status: {status}")
