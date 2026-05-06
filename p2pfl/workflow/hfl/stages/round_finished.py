@@ -39,7 +39,7 @@ class HFLRoundFinishedStage(Stage[HFLContext]):
             peer.reset_round()
 
         # Advance round
-        ctx.experiment.increase_round(address)
+        ctx.experiment.round += 1
         logger.info(address, f"Round {ctx.experiment.round} finished.")
 
         # Check if more rounds remain

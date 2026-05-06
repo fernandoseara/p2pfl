@@ -58,7 +58,8 @@ class HFL(Workflow[HFLContext]):
                    edge_sync_root -> edge_distribute -> round_finished -> loop
     Flow (root):   setup -> root_aggregate -> root_distribute -> round_finished -> loop
 
-    HFL-specific parameters are passed via ``experiment.data``:
+    HFL-specific parameters are injected as dynamic attributes on ``Experiment``
+    (via ``Experiment.create(**kwargs)`` — unknown kwargs become ``setattr``):
         - ``role``: ``"worker"``, ``"edge"``, or ``"root"`` (required)
         - ``edge_addr``: edge address for workers (required for workers)
         - ``worker_addrs``: list of worker addresses (required for edges)
@@ -92,9 +93,7 @@ class HFL(Workflow[HFLContext]):
         generator: random.Random,
         experiment: Experiment,
     ) -> HFLContext:
-        """Build HFL context, extracting role and topology from experiment.data."""
-        data = experiment.data
-        role = data.get("role", "worker")
+        """Build HFL context, reading role and topology as dynamic Experiment attrs."""
         return HFLContext(
             address=address,
             learner=learner,
@@ -102,12 +101,12 @@ class HFL(Workflow[HFLContext]):
             cp=cp,
             generator=generator,
             experiment=experiment,
-            role=role,
-            edge_addr=data.get("edge_addr"),
-            worker_addrs=data.get("worker_addrs", []),
-            root_addr=data.get("root_addr"),
-            child_edge_addrs=data.get("child_edge_addrs", []),
-            edge_trains=data.get("edge_trains", True),
+            role=getattr(experiment, "role", "worker"),
+            edge_addr=getattr(experiment, "edge_addr", None),
+            worker_addrs=getattr(experiment, "worker_addrs", []),
+            root_addr=getattr(experiment, "root_addr", None),
+            child_edge_addrs=getattr(experiment, "child_edge_addrs", []),
+            edge_trains=getattr(experiment, "edge_trains", True),
         )
 
     def validate_experiment(self, ctx: HFLContext) -> None:
