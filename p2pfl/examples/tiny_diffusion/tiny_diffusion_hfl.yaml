@@ -1,0 +1,81 @@
+description: "HFL with Tiny Diffusion on 2D distributions: 1 root, 2 edges, 1 worker each (5 nodes)."
+
+# Network setup
+network:
+  package: "p2pfl.communication.protocols.protobuff.memory"
+  protocol: "MemoryCommunicationProtocol"
+  topology: "hierarchical"
+  hierarchy:
+    edge_trains: false
+    clusters:
+      - workers: 1       # Cluster 0
+      - workers: 1       # Cluster 1
+
+# Experiment settings
+experiment:
+  name: "hfl_tiny_diffusion"
+  rounds: 20
+  epochs: 10
+  seed: 42
+  workflow: hfl
+  wait_timeout: 30
+
+  # Synthetic 2D dataset
+  dataset:
+    source: "custom"
+    package: "p2pfl.examples.tiny_diffusion.dataset"
+    class: "make_2d_dataset"
+    name: "tiny_diffusion_2d"
+    batch_size: 64
+    params:
+      n_samples_per_dist: 5000
+      noise: 0.05
+      seed: 42
+    partitioning:
+      package: "p2pfl.learning.dataset.partition_strategies"
+      strategy: "DirichletPartitionStrategy"
+      params:
+        alpha: 0.1           # Strong non-IID: each partition dominated by one distribution
+
+  # Diffusion model
+  model:
+    package: "p2pfl.examples.tiny_diffusion.model.diffusion_pytorch"
+    model_build_fn: "model_build_fn"
+    params:
+      point_dim: 2
+      hidden_dim: 128
+      n_layers: 4
+      time_emb_dim: 64
+      timesteps: 100
+      lr: 0.001
+
+  # Aggregation
+  aggregator:
+    package: "p2pfl.learning.aggregators.fedavg"
+    aggregator: "FedAvg"
+    params: {}
+
+# Results export
+results:
+  output_dir: "results/hfl_tiny_diffusion"
+
+# Settings
+settings:
+  general:
+    log_level: "INFO"
+    disable_ray: True
+  heartbeat:
+    period: 2
+    timeout: 60
+    wait_convergence: 4
+    exclude_beat_logs: true
+  gossip:
+    period: 1
+    ttl: 10
+    messages_per_period: 200
+    amount_last_messages_saved: 1000
+    models_period: 1
+    models_per_round: 4
+    exit_on_x_equal_rounds: 50
+  training:
+    aggregation_timeout: 300
