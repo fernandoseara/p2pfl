@@ -133,8 +133,8 @@ def _plot_metrics(global_logs: dict, run_dir: str) -> None:
 
 
 def _plot_diffusion_samples(model: object, run_dir: str) -> None:
-    """Generate and plot samples if the model has a `sample()` method (diffusion models)."""
-    if not hasattr(model, "sample"):
+    """Generate per-class samples for a conditional diffusion model and plot them next to the real distributions."""
+    if not hasattr(model, "sample") or not hasattr(model, "num_classes"):
         return
 
     import matplotlib
@@ -143,55 +143,40 @@ def _plot_diffusion_samples(model: object, run_dir: str) -> None:
     import numpy as np
     import torch
 
-    model.eval()
-    with torch.no_grad():
-        generated = model.sample(n_samples=2000).cpu().numpy()
-
-    # Try to load real distributions for comparison
     try:
         from p2pfl.examples.tiny_diffusion.dataset import DISTRIBUTIONS, _normalize
-
-        colors = {0: "#e74c3c", 1: "#3498db", 2: "#2ecc71", 3: "#f39c12"}
-        names = {0: "Moons", 1: "Circles", 2: "Spiral", 3: "Cross"}
-        rng = np.random.RandomState(42)
-        real = {}
-        for label, (_name, gen_fn) in DISTRIBUTIONS.items():
-            real[label] = _normalize(gen_fn(1000, 0.05, rng))
     except ImportError:
-        real = None
+        return
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    colors = {0: "#e74c3c", 1: "#3498db", 2: "#2ecc71", 3: "#f39c12"}
+    names = {0: "Moons", 1: "Circles", 2: "Spiral", 3: "Cross"}
+    n_per_class = 1000
+    rng = np.random.RandomState(42)
 
-    # Panel 1: Real distributions
-    if real:
-        for label, pts in real.items():
-            axes[0].scatter(pts[:, 0], pts[:, 1], s=4, alpha=0.5, c=colors[label], label=names[label])
-        axes[0].legend(markerscale=4, fontsize=10)
-    axes[0].set_title("Real distributions", fontsize=14)
-    axes[0].set_xlim(-1.5, 1.5)
-    axes[0].set_ylim(-1.5, 1.5)
-    axes[0].set_aspect("equal")
-    axes[0].grid(True, alpha=0.3)
+    real = {label: _normalize(gen_fn(n_per_class, 0.05, rng)) for label, (_name, gen_fn) in DISTRIBUTIONS.items()}
 
-    # Panel 2: Generated samples
-    axes[1].scatter(generated[:, 0], generated[:, 1], s=4, alpha=0.5, c="#8e44ad")
-    axes[1].set_title("Generated samples (n=2000)", fontsize=14)
-    axes[1].set_xlim(-1.5, 1.5)
-    axes[1].set_ylim(-1.5, 1.5)
-    axes[1].set_aspect("equal")
-    axes[1].grid(True, alpha=0.3)
+    model.eval()
+    generated = {}
+    with torch.no_grad():
+        for label in range(model.num_classes):
+            generated[label] = model.sample(n_samples=n_per_class, label=label).cpu().numpy()
 
-    # Panel 3: Overlay
-    if real:
-        for label, pts in real.items():
-            axes[2].scatter(pts[:, 0], pts[:, 1], s=4, alpha=0.2, c=colors[label])
-    axes[2].scatter(generated[:, 0], generated[:, 1], s=4, alpha=0.4, c="#8e44ad", label="Generated")
-    axes[2].set_title("Overlay (real + generated)", fontsize=14)
-    axes[2].set_xlim(-1.5, 1.5)
-    axes[2].set_ylim(-1.5, 1.5)
-    axes[2].set_aspect("equal")
-    axes[2].legend(markerscale=4, fontsize=10)
-    axes[2].grid(True, alpha=0.3)
+    n_classes = model.num_classes
+    fig, axes = plt.subplots(2, n_classes, figsize=(4 * n_classes, 8))
+
+    for label in range(n_classes):
+        # Top row: real
+        axes[0, label].scatter(real[label][:, 0], real[label][:, 1], s=4, alpha=0.5, c=colors.get(label, "#444"))
+        axes[0, label].set_title(f"Real — {names.get(label, label)}", fontsize=12)
+        # Bottom row: generated
+        axes[1, label].scatter(generated[label][:, 0], generated[label][:, 1], s=4, alpha=0.5, c=colors.get(label, "#444"))
+        axes[1, label].set_title(f"Generated — {names.get(label, label)}", fontsize=12)
+
+    for ax in axes.flat:
+        ax.set_xlim(-1.5, 1.5)
+        ax.set_ylim(-1.5, 1.5)
+        ax.set_aspect("equal")
+        ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
     plt.savefig(os.path.join(run_dir, "generated_samples.png"), dpi=150, bbox_inches="tight")

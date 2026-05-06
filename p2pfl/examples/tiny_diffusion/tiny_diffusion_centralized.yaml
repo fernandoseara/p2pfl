@@ -1,28 +1,23 @@
-description: "HFL with Tiny Diffusion on 2D distributions: 1 root, 4 edges, 1 worker each (9 nodes). Each cluster learns a different shape (moons, circles, spiral, cross)."
+description: "Centralized baseline: 1 node, full dataset, 10 rounds x 30 epochs = 300 effective epochs. Diagnostic test to verify model can learn the 4 distributions."
 
-# Network setup
+# Network setup: single node, no peers
 network:
   package: "p2pfl.communication.protocols.protobuff.memory"
   protocol: "MemoryCommunicationProtocol"
-  topology: "hierarchical"
-  hierarchy:
-    edge_trains: false
-    clusters:
-      - workers: 1       # Cluster 0 (moons)
-      - workers: 1       # Cluster 1 (circles)
-      - workers: 1       # Cluster 2 (spiral)
-      - workers: 1       # Cluster 3 (cross)
+  nodes: 1
+  topology: "full"
 
 # Experiment settings
 experiment:
-  name: "hfl_tiny_diffusion"
-  rounds: 20
-  epochs: 20
+  name: "centralized_tiny_diffusion"
+  rounds: 10
+  epochs: 30
+  trainset_size: 1
   seed: 42
-  workflow: hfl
+  workflow: basic
   wait_timeout: 30
 
-  # Synthetic 2D dataset
+  # Synthetic 2D dataset (full, no partitioning needed)
   dataset:
     source: "custom"
     package: "p2pfl.examples.tiny_diffusion.dataset"
@@ -36,7 +31,7 @@ experiment:
     partitioning:
       package: "p2pfl.learning.dataset.partition_strategies"
       strategy: "RandomIIDPartitionStrategy"
-      params: {}             # IID: every worker sees a uniform sample of all 4 distributions
+      params: {}
 
   # Conditional diffusion model (Fourier inputs, residual blocks, class embedding)
   model:
@@ -54,7 +49,7 @@ experiment:
       timesteps: 1000
       lr: 0.001
 
-  # Aggregation
+  # Aggregation (no-op with 1 node)
   aggregator:
     package: "p2pfl.learning.aggregators.fedavg"
     aggregator: "FedAvg"
@@ -62,7 +57,7 @@ experiment:
 
 # Results export
 results:
-  output_dir: "results/hfl_tiny_diffusion"
+  output_dir: "results/centralized_tiny_diffusion"
 
 # Settings
 settings:
