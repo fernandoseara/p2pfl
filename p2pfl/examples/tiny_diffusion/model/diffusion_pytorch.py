@@ -160,6 +160,61 @@ class TinyDiffusion(L.LightningModule):
                 x += beta.sqrt() * torch.randn_like(x)
         return x
 
+    @torch.no_grad()
+    def evaluate_distribution_metrics(self, n_samples_per_class: int = 500, seed: int = 42) -> dict[str, float]:
+        """Generate per-class samples and compute Sliced W2 + MMD vs. real distributions."""
+        import numpy as np
+
+        from p2pfl.examples.tiny_diffusion.dataset import DISTRIBUTIONS, _normalize
+        from p2pfl.examples.tiny_diffusion.metrics import gaussian_mmd, sliced_wasserstein_2
+
+        rng = np.random.RandomState(seed)
+        results: dict[str, float] = {}
+        for label, (name, gen_fn) in DISTRIBUTIONS.items():
+            real = _normalize(gen_fn(n_samples_per_class, 0.05, rng))
+            generated = self.sample(n_samples=n_samples_per_class, label=label).cpu().numpy()
+            results[f"w2_{name}"] = sliced_wasserstein_2(real, generated, n_projections=64, seed=seed)
+            results[f"mmd_{name}"] = gaussian_mmd(real, generated, sigma=0.1)
+        return results
+
+    @torch.no_grad()
+    def save_round_samples(self, round_num: int, run_dir: str, n_samples_per_class: int = 500) -> None:
+        """Save a per-class sample plot for the current round under run_dir/samples/."""
+        import os
+
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        from p2pfl.examples.tiny_diffusion.dataset import DISTRIBUTIONS, _normalize
+
+        out_dir = os.path.join(run_dir, "samples")
+        os.makedirs(out_dir, exist_ok=True)
+
+        colors = {0: "#e74c3c", 1: "#3498db", 2: "#2ecc71", 3: "#f39c12"}
+        rng = np.random.RandomState(42)
+        n_classes = self.num_classes
+
+        fig, axes = plt.subplots(2, n_classes, figsize=(4 * n_classes, 8))
+        for label, (name, gen_fn) in DISTRIBUTIONS.items():
+            real = _normalize(gen_fn(n_samples_per_class, 0.05, rng))
+            generated = self.sample(n_samples=n_samples_per_class, label=label).cpu().numpy()
+            axes[0, label].scatter(real[:, 0], real[:, 1], s=4, alpha=0.5, c=colors.get(label, "#444"))
+            axes[0, label].set_title(f"Real — {name}", fontsize=12)
+            axes[1, label].scatter(generated[:, 0], generated[:, 1], s=4, alpha=0.5, c=colors.get(label, "#444"))
+            axes[1, label].set_title(f"Generated — {name} (round {round_num})", fontsize=12)
+
+        for ax in axes.flat:
+            ax.set_xlim(-1.5, 1.5)
+            ax.set_ylim(-1.5, 1.5)
+            ax.set_aspect("equal")
+            ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"round_{round_num:04d}.png"), dpi=100, bbox_inches="tight")
+        plt.close(fig)
+
 
 def model_build_fn(*args, **kwargs) -> LightningModel:
     """Export the model build function."""

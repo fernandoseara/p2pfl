@@ -24,24 +24,26 @@ from datetime import datetime
 from p2pfl.management.logger import logger
 
 
-def export_experiment_csv(nodes: list, output_dir: str = "results") -> str:
+def export_experiment_csv(nodes: list, output_dir: str = "results", run_dir: str | None = None) -> str:
     """
-    Export experiment metrics, communication logs, and model checkpoints to a timestamped directory.
+    Export experiment metrics, communication logs, and model checkpoints to a run directory.
 
-    Creates a timestamped subdirectory with:
+    Writes:
         - ``metrics.csv``: global metrics (accuracy, loss, etc.) per node and round.
         - ``communication.csv``: all messages sent/received with byte sizes.
         - ``model.pt`` / ``model/``: the global model checkpoint (from the first node).
 
     Args:
         nodes: List of Node instances that participated in the experiment.
-        output_dir: Base directory. A timestamped subdirectory is created inside.
+        output_dir: Base directory; a timestamped subdir is created when ``run_dir`` is None.
+        run_dir: If provided, write directly into this directory (used to share with per-round artifacts).
 
     Returns:
-        The path to the created run directory.
+        The path to the run directory.
 
     """
-    run_dir = os.path.join(output_dir, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    if run_dir is None:
+        run_dir = os.path.join(output_dir, datetime.now().strftime("%Y%m%d_%H%M%S"))
     os.makedirs(run_dir, exist_ok=True)
 
     if not nodes:

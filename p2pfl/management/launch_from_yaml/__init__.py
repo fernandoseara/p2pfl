@@ -262,6 +262,18 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
         await node.start()
         nodes.append(node)
 
+    # Pre-create the per-run results directory if results export is enabled.
+    # This lets per-round artifacts (sample plots, etc.) be saved into the same
+    # directory that the final csv_exporter will populate.
+    results_config = config.get("results")
+    run_dir: str | None = None
+    if results_config is not None:
+        from datetime import datetime as _datetime
+
+        results_dir = results_config.get("output_dir", "results")
+        run_dir = os.path.join(results_dir, _datetime.now().strftime("%Y%m%d_%H%M%S"))
+        os.makedirs(run_dir, exist_ok=True)
+
     try:
         # Start Learning
         r = experiment_config.get("rounds")
@@ -269,8 +281,13 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
         if r < 1:
             raise ValueError("Skipping training, amount of round is less than 1")
 
+        save_samples_every = experiment_config.get("save_samples_every", 0)
+
         if topology == "hierarchical":
-            await _run_hierarchical(nodes, network_config, experiment_config, workflow_name, r, e)
+            await _run_hierarchical(
+                nodes, network_config, experiment_config, workflow_name, r, e,
+                run_dir=run_dir, save_samples_every=save_samples_every,
+            )
         else:
             actual_exp_name = await _run_flat(nodes, network_config, experiment_config, workflow_name, r, e, n)
 
@@ -296,10 +313,8 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
             messages = logger.get_messages()
 
         # Per-node CSV export (used by tiny_diffusion examples). Skipped when the experiment failed.
-        results_config = config.get("results")
-        if results_config is not None and not experiment_failed:
-            results_dir = results_config.get("output_dir", "results")
-            export_experiment_csv(nodes, output_dir=results_dir)
+        if results_config is not None and not experiment_failed and run_dir is not None:
+            export_experiment_csv(nodes, run_dir=run_dir)
 
         # Stop Nodes
         for node in nodes:
@@ -375,6 +390,8 @@ async def _run_hierarchical(
     workflow_name: str,
     r: int,
     e: int,
+    run_dir: str | None = None,
+    save_samples_every: int = 0,
 ) -> None:
     """
     Run a hierarchical topology.
@@ -431,7 +448,7 @@ async def _run_hierarchical(
     # Start learning on each node directly (no gossip) with role-specific params.
     exp_name = f"hfl-{time.time()}"
 
-    # Start root
+    # Start root (gets run_dir + save_samples_every for per-round artifacts)
     root_exp = Experiment.create(
         exp_name=exp_name,
         total_rounds=r,
@@ -440,6 +457,8 @@ async def _run_hierarchical(
         is_initiator=True,
         role="root",
         child_edge_addrs=all_edge_addrs,
+        run_dir=run_dir,
+        save_samples_every=save_samples_every,
     )
     await root_node._start_learning_workflow(workflow_name, root_exp)
 

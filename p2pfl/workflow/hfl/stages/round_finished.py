@@ -30,7 +30,7 @@ class HFLRoundFinishedStage(Stage[HFLContext]):
     name = "round_finished"
 
     async def run(self) -> str | None:
-        """Reset peers, advance round, and branch or finish."""
+        """Reset peers, advance round, optionally save root samples/metrics, and branch or finish."""
         ctx = self.ctx
         address = ctx.address
 
@@ -40,7 +40,12 @@ class HFLRoundFinishedStage(Stage[HFLContext]):
 
         # Advance round
         ctx.experiment.round += 1
-        logger.info(address, f"Round {ctx.experiment.round} finished.")
+        current_round = ctx.experiment.round
+        logger.info(address, f"Round {current_round} finished.")
+
+        # Root-only: every K rounds, generate samples and log distribution metrics if the model supports it
+        if ctx.role == "root":
+            self._maybe_save_round_artifacts(ctx, current_round)
 
         # Check if more rounds remain
         if not ctx.experiment.is_complete():
@@ -55,3 +60,28 @@ class HFLRoundFinishedStage(Stage[HFLContext]):
         # Final evaluation
         await evaluate_and_broadcast(ctx)
         return None
+
+    def _maybe_save_round_artifacts(self, ctx: HFLContext, current_round: int) -> None:
+        """If the model exposes diffusion hooks, save per-class samples and log W2/MMD metrics."""
+        every = getattr(ctx.experiment, "save_samples_every", 0) or 0
+        run_dir = getattr(ctx.experiment, "run_dir", None)
+        if every <= 0 or run_dir is None or current_round % every != 0:
+            return
+
+        underlying = getattr(ctx.learner.get_model(), "model", None)
+        if underlying is None:
+            return
+
+        if hasattr(underlying, "evaluate_distribution_metrics"):
+            try:
+                metrics = underlying.evaluate_distribution_metrics()
+                for name, value in metrics.items():
+                    logger.log_metric(ctx.address, name, float(value), round=current_round)
+            except Exception as exc:
+                logger.warning(ctx.address, f"Could not compute distribution metrics: {exc}")
+
+        if hasattr(underlying, "save_round_samples"):
+            try:
+                underlying.save_round_samples(current_round, run_dir)
+            except Exception as exc:
+                logger.warning(ctx.address, f"Could not save round samples: {exc}")
