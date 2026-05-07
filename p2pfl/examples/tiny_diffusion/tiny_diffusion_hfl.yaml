@@ -1,4 +1,4 @@
-description: "HFL with Tiny Diffusion on 2D distributions: 1 root, 4 edges, 1 worker each (9 nodes). Each cluster learns a different shape (moons, circles, spiral, cross)."
+description: "HFL with Tiny Diffusion on 2D distributions: 1 root, 4 edges, 2 workers each (13 nodes). Each cluster handles one shape (moons, circles, spiral, cross) and edges actually aggregate multiple workers."
 
 # Network setup
 network:
@@ -8,10 +8,10 @@ network:
   hierarchy:
     edge_trains: false
     clusters:
-      - workers: 1       # Cluster 0 (moons)
-      - workers: 1       # Cluster 1 (circles)
-      - workers: 1       # Cluster 2 (spiral)
-      - workers: 1       # Cluster 3 (cross)
+      - workers: 2       # Cluster 0 (moons)
+      - workers: 2       # Cluster 1 (circles)
+      - workers: 2       # Cluster 2 (spiral)
+      - workers: 2       # Cluster 3 (cross)
 
 # Experiment settings
 experiment:
