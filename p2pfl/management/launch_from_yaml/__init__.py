@@ -273,6 +273,8 @@ async def run_from_yaml(yaml_path: str, debug: bool = False) -> None:
         results_dir = results_config.get("output_dir", "results")
         run_dir = os.path.join(results_dir, _datetime.now().strftime("%Y%m%d_%H%M%S"))
         os.makedirs(run_dir, exist_ok=True)
+        # Wire the logger so log_image() persists into <run_dir>/images/
+        logger.set_run_dir(run_dir)
 
     try:
         # Start Learning

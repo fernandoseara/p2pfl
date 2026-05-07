@@ -178,10 +178,8 @@ class TinyDiffusion(L.LightningModule):
         return results
 
     @torch.no_grad()
-    def save_round_samples(self, round_num: int, run_dir: str, n_samples_per_class: int = 500) -> None:
-        """Save per-class samples (PNG + raw .npz) reusing a persistent figure across rounds."""
-        import os
-
+    def render_round_samples(self, round_num: int, n_samples_per_class: int = 500):
+        """Update the persistent figure with per-class samples and return it (no disk IO)."""
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
@@ -189,13 +187,9 @@ class TinyDiffusion(L.LightningModule):
 
         from p2pfl.examples.tiny_diffusion.dataset import DISTRIBUTIONS, _normalize
 
-        out_dir = os.path.join(run_dir, "samples")
-        os.makedirs(out_dir, exist_ok=True)
-
         colors = {0: "#e74c3c", 1: "#3498db", 2: "#2ecc71", 3: "#f39c12"}
         n_classes = self.num_classes
 
-        # 1. Compute real (constant) and generated (per round) point clouds
         rng = np.random.RandomState(42)
         real_arrays: dict[int, np.ndarray] = {}
         gen_arrays: dict[int, np.ndarray] = {}
@@ -205,13 +199,7 @@ class TinyDiffusion(L.LightningModule):
             gen_arrays[label] = self.sample(n_samples=n_samples_per_class, label=label).cpu().numpy()
             names[label] = name
 
-        # 2. Persist raw arrays so plots can be re-rendered later
-        np.savez(
-            os.path.join(out_dir, f"round_{round_num:04d}.npz"),
-            **{f"gen_{names[label]}": gen_arrays[label] for label in range(n_classes)},
-        )
-
-        # 3. Build the figure once, then update only the generated row each call
+        # Build the figure once, then update only the generated row each call
         fig = getattr(self, "_sample_fig", None)
         if fig is None:
             fig, axes = plt.subplots(2, n_classes, figsize=(4 * n_classes, 8))
@@ -233,13 +221,32 @@ class TinyDiffusion(L.LightningModule):
             self._sample_fig = fig
             self._sample_axes = axes
             self._sample_gen_scatters = gen_scatters
+            self._last_gen_arrays = {}
 
-        # 4. Mutate scatter offsets + bottom-row titles for the current round
+        # Mutate scatter offsets + bottom-row titles for the current round
         for label in range(n_classes):
             self._sample_gen_scatters[label].set_offsets(gen_arrays[label])
             self._sample_axes[1, label].set_title(f"Generated — {names[label]} (round {round_num})", fontsize=12)
 
-        self._sample_fig.savefig(os.path.join(out_dir, f"round_{round_num:04d}.png"), dpi=100)
+        # Stash the latest generated arrays so save_round_samples can dump them as .npz
+        self._last_gen_arrays = {names[label]: gen_arrays[label] for label in range(n_classes)}
+        return self._sample_fig
+
+    @torch.no_grad()
+    def save_round_samples(self, round_num: int, run_dir: str, n_samples_per_class: int = 500) -> None:
+        """Render samples + dump raw .npz; backwards-compatible wrapper around render_round_samples."""
+        import os
+
+        import numpy as np
+
+        fig = self.render_round_samples(round_num, n_samples_per_class)
+        out_dir = os.path.join(run_dir, "samples")
+        os.makedirs(out_dir, exist_ok=True)
+        fig.savefig(os.path.join(out_dir, f"round_{round_num:04d}.png"), dpi=100)
+        np.savez(
+            os.path.join(out_dir, f"round_{round_num:04d}.npz"),
+            **{f"gen_{name}": arr for name, arr in self._last_gen_arrays.items()},
+        )
 
 
 def model_build_fn(*args, **kwargs) -> LightningModel:

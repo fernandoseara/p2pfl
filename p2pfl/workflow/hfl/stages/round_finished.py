@@ -62,10 +62,9 @@ class HFLRoundFinishedStage(Stage[HFLContext]):
         return None
 
     def _maybe_save_round_artifacts(self, ctx: HFLContext, current_round: int) -> None:
-        """If the model exposes diffusion hooks, save per-class samples and log W2/MMD metrics."""
+        """If the model exposes diffusion hooks, log per-class samples and W2/MMD metrics."""
         every = getattr(ctx.experiment, "save_samples_every", 0) or 0
-        run_dir = getattr(ctx.experiment, "run_dir", None)
-        if every <= 0 or run_dir is None or current_round % every != 0:
+        if every <= 0 or current_round % every != 0:
             return
 
         underlying = getattr(ctx.learner.get_model(), "model", None)
@@ -80,8 +79,28 @@ class HFLRoundFinishedStage(Stage[HFLContext]):
             except Exception as exc:
                 logger.warning(ctx.address, f"Could not compute distribution metrics: {exc}")
 
-        if hasattr(underlying, "save_round_samples"):
+        # Render the figure once and report it via the logger; persistence of bytes
+        # (file location, remote upload, etc.) is the logger's responsibility.
+        if hasattr(underlying, "render_round_samples"):
             try:
-                underlying.save_round_samples(current_round, run_dir)
+                fig = underlying.render_round_samples(current_round)
+                logger.log_image(ctx.address, "samples", fig, round=current_round)
             except Exception as exc:
-                logger.warning(ctx.address, f"Could not save round samples: {exc}")
+                logger.warning(ctx.address, f"Could not render/log round samples: {exc}")
+
+        # Also dump the raw point clouds as .npz alongside, if the model supports it
+        run_dir = getattr(ctx.experiment, "run_dir", None)
+        if run_dir is not None and hasattr(underlying, "_last_gen_arrays"):
+            try:
+                import os
+
+                import numpy as np
+
+                out_dir = os.path.join(run_dir, "samples")
+                os.makedirs(out_dir, exist_ok=True)
+                np.savez(
+                    os.path.join(out_dir, f"round_{current_round:04d}.npz"),
+                    **{f"gen_{name}": arr for name, arr in underlying._last_gen_arrays.items()},
+                )
+            except Exception as exc:
+                logger.warning(ctx.address, f"Could not dump round npz: {exc}")
