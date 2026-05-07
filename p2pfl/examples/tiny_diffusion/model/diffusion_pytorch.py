@@ -179,7 +179,7 @@ class TinyDiffusion(L.LightningModule):
 
     @torch.no_grad()
     def save_round_samples(self, round_num: int, run_dir: str, n_samples_per_class: int = 500) -> None:
-        """Save a per-class sample plot for the current round under run_dir/samples/."""
+        """Save per-class samples (PNG + raw .npz) reusing a persistent figure across rounds."""
         import os
 
         import matplotlib
@@ -193,27 +193,53 @@ class TinyDiffusion(L.LightningModule):
         os.makedirs(out_dir, exist_ok=True)
 
         colors = {0: "#e74c3c", 1: "#3498db", 2: "#2ecc71", 3: "#f39c12"}
-        rng = np.random.RandomState(42)
         n_classes = self.num_classes
 
-        fig, axes = plt.subplots(2, n_classes, figsize=(4 * n_classes, 8))
+        # 1. Compute real (constant) and generated (per round) point clouds
+        rng = np.random.RandomState(42)
+        real_arrays: dict[int, np.ndarray] = {}
+        gen_arrays: dict[int, np.ndarray] = {}
+        names: dict[int, str] = {}
         for label, (name, gen_fn) in DISTRIBUTIONS.items():
-            real = _normalize(gen_fn(n_samples_per_class, 0.05, rng))
-            generated = self.sample(n_samples=n_samples_per_class, label=label).cpu().numpy()
-            axes[0, label].scatter(real[:, 0], real[:, 1], s=4, alpha=0.5, c=colors.get(label, "#444"))
-            axes[0, label].set_title(f"Real — {name}", fontsize=12)
-            axes[1, label].scatter(generated[:, 0], generated[:, 1], s=4, alpha=0.5, c=colors.get(label, "#444"))
-            axes[1, label].set_title(f"Generated — {name} (round {round_num})", fontsize=12)
+            real_arrays[label] = _normalize(gen_fn(n_samples_per_class, 0.05, rng))
+            gen_arrays[label] = self.sample(n_samples=n_samples_per_class, label=label).cpu().numpy()
+            names[label] = name
 
-        for ax in axes.flat:
-            ax.set_xlim(-1.5, 1.5)
-            ax.set_ylim(-1.5, 1.5)
-            ax.set_aspect("equal")
-            ax.grid(True, alpha=0.3)
+        # 2. Persist raw arrays so plots can be re-rendered later
+        np.savez(
+            os.path.join(out_dir, f"round_{round_num:04d}.npz"),
+            **{f"gen_{names[label]}": gen_arrays[label] for label in range(n_classes)},
+        )
 
-        plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, f"round_{round_num:04d}.png"), dpi=100, bbox_inches="tight")
-        plt.close(fig)
+        # 3. Build the figure once, then update only the generated row each call
+        fig = getattr(self, "_sample_fig", None)
+        if fig is None:
+            fig, axes = plt.subplots(2, n_classes, figsize=(4 * n_classes, 8))
+            gen_scatters: dict[int, "matplotlib.collections.PathCollection"] = {}
+            for label in range(n_classes):
+                ax_real, ax_gen = axes[0, label], axes[1, label]
+                ax_real.scatter(real_arrays[label][:, 0], real_arrays[label][:, 1], s=4, alpha=0.5, c=colors.get(label, "#444"))
+                ax_real.set_title(f"Real — {names[label]}", fontsize=12)
+                gen_scatters[label] = ax_gen.scatter(
+                    gen_arrays[label][:, 0], gen_arrays[label][:, 1],
+                    s=4, alpha=0.5, c=colors.get(label, "#444"),
+                )
+                for ax in (ax_real, ax_gen):
+                    ax.set_xlim(-1.5, 1.5)
+                    ax.set_ylim(-1.5, 1.5)
+                    ax.set_aspect("equal")
+                    ax.grid(True, alpha=0.3)
+            fig.tight_layout()
+            self._sample_fig = fig
+            self._sample_axes = axes
+            self._sample_gen_scatters = gen_scatters
+
+        # 4. Mutate scatter offsets + bottom-row titles for the current round
+        for label in range(n_classes):
+            self._sample_gen_scatters[label].set_offsets(gen_arrays[label])
+            self._sample_axes[1, label].set_title(f"Generated — {names[label]} (round {round_num})", fontsize=12)
+
+        self._sample_fig.savefig(os.path.join(out_dir, f"round_{round_num:04d}.png"), dpi=100)
 
 
 def model_build_fn(*args, **kwargs) -> LightningModel:

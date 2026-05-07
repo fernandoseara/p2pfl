@@ -13,8 +13,8 @@ network:
 
 experiment:
   name: "hfl_tiny_diffusion_smoke"
-  rounds: 2
-  epochs: 2
+  rounds: 4
+  epochs: 1
   seed: 42
   workflow: hfl
   wait_timeout: 5
